@@ -187,9 +187,76 @@
   .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
   .badge-practice { background: rgba(254,188,24,0.15); color: var(--gold); }
   .badge-match { background: rgba(141,0,52,0.3); color: #f08090; }
+
+  /* Auth overlay */
+  #auth-overlay {
+    position: fixed; inset: 0; background: #0f0f0f;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+  }
+  #auth-box {
+    background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+    padding: 40px; width: 340px; text-align: center;
+  }
+  #auth-box svg { margin-bottom: 20px; }
+  #auth-box h2 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  #auth-box p  { font-size: 12px; color: #999; margin-bottom: 24px; }
+  #auth-box input {
+    width: 100%; background: #242424; border: 1px solid #444;
+    color: #f0f0f0; padding: 10px 14px; border-radius: 6px;
+    font-size: 14px; margin-bottom: 12px; text-align: center;
+    letter-spacing: 2px;
+  }
+  #auth-box input:focus { outline: none; border-color: #FEBC18; }
+  #auth-btn {
+    width: 100%; background: #8D0034; color: #fff; border: none;
+    padding: 10px; border-radius: 6px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s;
+  }
+  #auth-btn:hover { background: #b5004a; }
+  #auth-error { color: #f44336; font-size: 12px; margin-top: 10px; display: none; }
 </style>
 </head>
 <body>
+
+<!-- ── Auth overlay ── -->
+<div id="auth-overlay">
+  <div id="auth-box">
+    <svg viewBox="0 0 72 72" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
+      <rect width="72" height="72" rx="8" fill="#FEBC18"/>
+      <text x="36" y="28" font-family="'Arial Black','Arial',sans-serif" font-size="18" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="0.5">LOYOLA</text>
+      <line x1="8" y1="34" x2="64" y2="34" stroke="#8D0034" stroke-width="2"/>
+      <text x="36" y="48" font-family="'Arial Black','Arial',sans-serif" font-size="13" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="1">RAMBLERS</text>
+      <text x="36" y="63" font-family="'Arial',sans-serif" font-size="9" font-weight="600" fill="#8D0034" text-anchor="middle" letter-spacing="0.3">VOLLEYBALL</text>
+    </svg>
+    <h2>LUC Men's Volleyball</h2>
+    <p>Analytics Dashboard — Staff Access Only</p>
+    <input type="password" id="auth-input" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkAuth()"/>
+    <button id="auth-btn" onclick="checkAuth()">Access Dashboard</button>
+    <div id="auth-error">Incorrect password. Try again.</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const PASSWORD = 'ramblers2026';  // ← change this to whatever you want
+  const SESSION_KEY = 'luc_auth';
+  if (sessionStorage.getItem(SESSION_KEY) === 'ok') {
+    document.getElementById('auth-overlay').style.display = 'none';
+  }
+  window.checkAuth = function() {
+    const val = document.getElementById('auth-input').value;
+    if (val === PASSWORD) {
+      sessionStorage.setItem(SESSION_KEY, 'ok');
+      document.getElementById('auth-overlay').style.display = 'none';
+    } else {
+      document.getElementById('auth-error').style.display = 'block';
+      document.getElementById('auth-input').value = '';
+      document.getElementById('auth-input').focus();
+    }
+  };
+})();
+</script>
 
 <header>
   <div class="logo">
