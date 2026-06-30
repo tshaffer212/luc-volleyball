@@ -1,0 +1,2260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LUC Volleyball Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --maroon: #8D0034;
+    --maroon-dark: #5c0023;
+    --maroon-light: #b5004a;
+    --gold: #FEBC18;
+    --gold-light: #FED056;
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --surface3: #2e2e2e;
+    --border: #333;
+    --text: #f0f0f0;
+    --text-muted: #999;
+    --text-dim: #666;
+    --green: #4caf50;
+    --red: #f44336;
+    --blue: #2196f3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  /* Header */
+  header {
+    background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 60%, var(--maroon-light) 100%);
+    border-bottom: 3px solid var(--gold);
+    padding: 16px 24px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .logo { width: 56px; height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .logo svg { width: 56px; height: 56px; }
+  header h1 { font-size: 20px; font-weight: 700; color: #fff; }
+  header p  { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+  .header-stats { margin-left: auto; display: flex; gap: 24px; }
+  .hstat { text-align: center; }
+  .hstat-val { font-size: 22px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Tabs */
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; padding: 0 24px; gap: 0; }
+  .tab-btn { padding: 14px 20px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 3px solid transparent; margin-bottom: -1px; transition: all 0.15s; white-space: nowrap; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+  /* Layout */
+  .tab-panel { display: none; padding: 24px; }
+  .tab-panel.active { display: block; }
+
+  /* Filter bar */
+  .filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .filter-bar label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .filter-bar select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 5px; font-size: 13px; cursor: pointer; min-width: 130px; }
+  .filter-bar select:focus { outline: none; border-color: var(--gold); }
+  .filter-sep { width: 1px; height: 28px; background: var(--border); }
+
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  .card-sm { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .card h3 { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; font-weight: 600; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+
+  /* Stat blocks */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  .stat-box { background: var(--surface2); border-radius: 7px; padding: 12px; text-align: center; }
+  .stat-box.highlight { border: 1px solid var(--gold); }
+  .stat-val { font-size: 26px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .stat-val.big { font-size: 32px; }
+  .stat-val.green { color: var(--green); }
+  .stat-val.red { color: var(--red); }
+  .stat-lbl { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+
+  /* Skill bar rows */
+  .skill-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .skill-row:last-child { border-bottom: none; }
+  .skill-icon { width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+  .skill-name { width: 80px; font-size: 12px; color: var(--text-muted); }
+  .skill-bar-wrap { flex: 1; height: 6px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+  .skill-bar { height: 100%; border-radius: 3px; background: var(--gold); transition: width 0.4s; }
+  .skill-bar.green { background: var(--green); }
+  .skill-bar.red { background: var(--red); }
+  .skill-count { font-size: 12px; color: var(--text-muted); width: 45px; text-align: right; }
+  .skill-pct { font-size: 12px; font-weight: 600; width: 42px; text-align: right; }
+
+  /* Player cards */
+  .player-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; cursor: pointer; transition: all 0.15s; }
+  .player-card:hover, .player-card.selected { border-color: var(--gold); background: var(--surface2); }
+  .player-num { font-size: 28px; font-weight: 900; color: var(--gold); line-height: 1; }
+  .player-name { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 4px; }
+  .player-pos { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .player-mini-stats { display: flex; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .player-mini-stat { text-align: center; }
+  .player-mini-val { font-size: 15px; font-weight: 700; color: var(--text); }
+  .player-mini-lbl { font-size: 10px; color: var(--text-dim); }
+  .libero-badge { display: inline-block; background: var(--maroon); color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; text-transform: uppercase; margin-left: 4px; }
+
+  /* Eval pills */
+  .eval-grid { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .eval-pill { background: var(--surface3); border-radius: 5px; padding: 4px 10px; text-align: center; min-width: 50px; }
+  .eval-pill-val { font-size: 15px; font-weight: 700; }
+  .eval-pill-lbl { font-size: 9px; color: var(--text-dim); margin-top: 1px; }
+  .eval-kill { color: var(--green); }
+  .eval-err  { color: var(--red); }
+  .eval-pos  { color: var(--blue); }
+  .eval-neg  { color: #ff9800; }
+
+  /* Chart containers */
+  .chart-wrap { position: relative; }
+  .chart-wrap canvas { max-height: 280px; }
+  .chart-wrap.tall canvas { max-height: 360px; }
+
+  /* Table */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th { background: var(--surface2); padding: 8px 12px; text-align: left; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+  .data-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .data-table tr:hover td { background: var(--surface2); }
+  .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .data-table .gold { color: var(--gold); font-weight: 600; }
+  .data-table .green { color: var(--green); }
+  .data-table .red { color: var(--red); }
+  .table-scroll { max-height: 420px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+  /* Detail panel */
+  .detail-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+  .detail-num { font-size: 52px; font-weight: 900; color: var(--gold); line-height: 1; }
+  .detail-info h2 { font-size: 22px; font-weight: 700; }
+  .detail-info p { color: var(--text-muted); margin-top: 4px; }
+
+  /* Season comparison dots */
+  .season-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .season-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .season-label { font-size: 12px; width: 90px; }
+
+  /* Player picker */
+  .player-picker { display: flex; flex-direction: column; gap: 8px; }
+  .player-search-wrap { position: relative; }
+  .player-search { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 7px 10px 7px 32px; border-radius: 5px; font-size: 13px; }
+  .player-search:focus { outline: none; border-color: var(--gold); }
+  .player-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-dim); font-size: 13px; pointer-events: none; }
+  .player-chips { display: flex; flex-wrap: wrap; gap: 5px; min-height: 0; }
+  .player-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--maroon); color: #fff; border: none; padding: 3px 8px 3px 10px; border-radius: 14px; font-size: 12px; cursor: pointer; }
+  .player-chip span { opacity: 0.7; font-size: 14px; line-height: 1; }
+  .player-chip:hover span { opacity: 1; }
+  .picker-clear { font-size: 11px; color: var(--text-dim); cursor: pointer; background: none; border: none; text-decoration: underline; padding: 0; }
+  .picker-clear:hover { color: var(--gold); }
+  .player-suggest { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; max-height: 200px; overflow-y: auto; display: none; position: absolute; z-index: 100; width: 100%; top: calc(100% + 4px); left: 0; }
+  .player-suggest-item { padding: 8px 12px; cursor: pointer; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .player-suggest-item:hover { background: var(--surface3); }
+  .player-suggest-item.dimmed { opacity: 0.4; }
+  .suggest-num { color: var(--gold); font-weight: 700; width: 30px; }
+  .suggest-pos { font-size: 11px; color: var(--text-dim); }
+
+  /* Scout section */
+  .opp-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; cursor: pointer; transition: all 0.15s; }
+  .opp-card:hover, .opp-card.selected { border-color: var(--gold); }
+  .opp-name { font-size: 16px; font-weight: 700; }
+  .opp-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .header-stats { display: none; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Util */
+  .mt-16 { margin-top: 16px; }
+  .mt-20 { margin-top: 20px; }
+  .section-title { font-size: 14px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; margin-top: 22px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .empty { text-align: center; padding: 40px; color: var(--text-dim); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-practice { background: rgba(254,188,24,0.15); color: var(--gold); }
+  .badge-match { background: rgba(141,0,52,0.3); color: #f08090; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <!-- LUC Ramblers wordmark SVG -->
+    <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <rect width="56" height="56" rx="6" fill="#FEBC18"/>
+      <text x="28" y="22" font-family="'Arial Black','Arial',sans-serif" font-size="14" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="0.5">LOYOLA</text>
+      <line x1="6" y1="26" x2="50" y2="26" stroke="#8D0034" stroke-width="1.5"/>
+      <text x="28" y="38" font-family="'Arial Black','Arial',sans-serif" font-size="10" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="1">RAMBLERS</text>
+      <text x="28" y="51" font-family="'Arial',sans-serif" font-size="7" font-weight="600" fill="#8D0034" text-anchor="middle" letter-spacing="0.3">VOLLEYBALL</text>
+    </svg>
+  </div>
+  <div>
+    <h1>Loyola University Chicago — Men's Volleyball</h1>
+    <p id="header-subtitle">Analytics Dashboard</p>
+  </div>
+  <div class="header-stats">
+    <div class="hstat"><div class="hstat-val" id="hs-sessions">—</div><div class="hstat-lbl">Sessions</div></div>
+    <div class="hstat"><div class="hstat-val" id="hs-actions">—</div><div class="hstat-lbl">Actions Coded</div></div>
+    <div class="hstat"><div class="hstat-val" id="hs-players">—</div><div class="hstat-lbl">Players</div></div>
+    <div class="hstat"><div class="hstat-val" id="hs-seasons">—</div><div class="hstat-lbl">Seasons</div></div>
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" onclick="showTab('team')">Team</button>
+  <button class="tab-btn" onclick="showTab('season')">Season</button>
+  <button class="tab-btn" onclick="showTab('attack')">Attack</button>
+  <button class="tab-btn" onclick="showTab('servrcv')">Serve &amp; Receive</button>
+  <button class="tab-btn" onclick="showTab('setter')">Setter</button>
+  <button class="tab-btn" onclick="showTab('fbso')">FBSO</button>
+  <button class="tab-btn" onclick="showTab('player')">Player</button>
+  <button class="tab-btn" onclick="showTab('scout')">Scouting</button>
+</nav>
+
+<!-- ═══════════════════════════ TEAM TAB ═══════════════════════════ -->
+<div id="tab-team" class="tab-panel active">
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="team-season-filter" onchange="renderTeam()">
+      <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Session Type</label><br><select id="team-type-filter" onchange="renderTeam()">
+      <option value="all">All</option>
+      <option value="practice">Practice Only</option>
+      <option value="match">Match Only</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Skill</label><br><select id="team-skill-filter" onchange="renderTeam()">
+      <option value="all">All Skills</option>
+      <option value="S">Serve</option>
+      <option value="R">Reception</option>
+      <option value="E">Set</option>
+      <option value="A">Attack</option>
+      <option value="B">Block</option>
+      <option value="D">Dig</option>
+    </select></div>
+  </div>
+
+  <div class="grid-4" id="team-kpi-row"></div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>Actions by Season</h3>
+      <div class="chart-wrap"><canvas id="chart-team-seasons"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Skill Distribution</h3>
+      <div class="chart-wrap"><canvas id="chart-team-skills"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>Season Comparison — Kill %</h3>
+      <div class="chart-wrap"><canvas id="chart-season-compare-kill"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Season Comparison — Error %</h3>
+      <div class="chart-wrap"><canvas id="chart-season-compare-err"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>Skill Summary by Season</h3>
+    <div class="table-scroll">
+      <table class="data-table" id="team-skill-table">
+        <thead><tr>
+          <th>Season</th><th>Sessions</th><th>Actions</th>
+          <th class="num">Serves</th><th class="num">Ace%</th><th class="num">Srv Err%</th>
+          <th class="num">Attacks</th><th class="num">Kill%</th><th class="num">Atk Err%</th><th class="num">Eff%</th>
+          <th class="num">Receptions</th><th class="num">Perfect%</th>
+          <th class="num">Blocks</th>
+        </tr></thead>
+        <tbody id="team-skill-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SEASON TAB ═══════════════════════════ -->
+<div id="tab-season" class="tab-panel">
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="season-select" onchange="renderSeason()">
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>View</label><br><select id="season-view" onchange="renderSeason()">
+      <option value="overview">Overview</option>
+      <option value="sessions">Session Log</option>
+    </select></div>
+  </div>
+
+  <div id="season-overview-content"></div>
+  <div id="season-sessions-content" style="display:none"></div>
+</div>
+
+<!-- ═══════════════════════════ ATTACK TAB ═══════════════════════════ -->
+<div id="tab-attack" class="tab-panel">
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="atk-season" onchange="renderAttack()">
+      <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Group</label><br><select id="atk-group" onchange="renderAttack()">
+      <option value="all">All Hitters</option>
+      <option value="pins">Pins (Outside / Opposite)</option>
+      <option value="middles">Middles</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Metric</label><br><select id="atk-metric" onchange="renderAttack()">
+      <option value="attempts">Attempts</option>
+      <option value="kill_pct">Kill %</option>
+      <option value="efficiency">Efficiency</option>
+      <option value="error_pct">Error %</option>
+    </select></div>
+  </div>
+
+  <div class="grid-4" id="atk-kpi-row"></div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>Set Distribution — Attempts by Call</h3>
+      <div class="chart-wrap tall"><canvas id="chart-atk-dist"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Efficiency by Call Type</h3>
+      <div class="chart-wrap tall"><canvas id="chart-atk-eff"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>Player Breakdown by Set Type</h3>
+    <div class="table-scroll" id="atk-player-table-wrap">
+      <table class="data-table" id="atk-player-table">
+        <thead id="atk-player-thead"></thead>
+        <tbody id="atk-player-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>Kill % by Call Type — Season Comparison</h3>
+    <div class="chart-wrap"><canvas id="chart-atk-season"></canvas></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SERVE & RECEIVE TAB ═══════════════════════════ -->
+<div id="tab-servrcv" class="tab-panel">
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="sr-season" onchange="renderServRcv()">
+      <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Group</label><br><select id="sr-group" onchange="renderServRcv()">
+      <option value="all">All Players</option>
+      <option value="pins">Outsides / Opposites</option>
+      <option value="liberos">Liberos</option>
+      <option value="middles">Middles</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>View</label><br><select id="sr-view" onchange="renderServRcv()">
+      <option value="both">Serve + Receive</option>
+      <option value="serve">Serve Only</option>
+      <option value="receive">Receive Only</option>
+    </select></div>
+  </div>
+
+  <div class="grid-4" id="sr-kpi-row"></div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>Serve Stats by Player</h3>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>#</th><th>Name</th>
+            <th class="num">Att</th>
+            <th class="num">Ace %</th>
+            <th class="num">Err %</th>
+            <th class="num">OGP %</th>
+            <th class="num">OoS %</th>
+          </tr></thead>
+          <tbody id="serve-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Reception Stats by Player</h3>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>#</th><th>Name</th>
+            <th class="num">Att</th>
+            <th class="num">AVG</th>
+            <th class="num">Perfect %</th>
+            <th class="num">GP %</th>
+            <th class="num">OoS %</th>
+            <th class="num">Err %</th>
+          </tr></thead>
+          <tbody id="rcv-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>Serve Breakdown — Team</h3>
+      <div class="chart-wrap"><canvas id="chart-serve-evals"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Reception Breakdown — Team</h3>
+      <div class="chart-wrap"><canvas id="chart-rcv-evals"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>Reception AVG by Season</h3>
+    <div class="chart-wrap"><canvas id="chart-rcv-trend"></canvas></div>
+  </div>
+
+  <!-- Receive Zone Breakdown -->
+  <div class="section-title mt-20">Receive Zone Breakdown</div>
+  <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;margin-top:-10px">
+    Zone 1 = back right · Zone 5 = back left · Zone 6 = back middle. Data available from Fall 2026 onwards.
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Zone AVG &amp; GP% — Team</h3>
+      <div id="rcv-zone-team" style="margin-top:4px"></div>
+    </div>
+    <div class="card">
+      <h3>Zone Breakdown — by Player</h3>
+      <div class="table-scroll">
+        <table class="data-table" id="rcv-zone-player-table">
+          <thead><tr>
+            <th>#</th><th>Name</th>
+            <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
+            <th class="num">Z5 Att</th><th class="num">Z5 AVG</th>
+            <th class="num">Z6 Att</th><th class="num">Z6 AVG</th>
+          </tr></thead>
+          <tbody id="rcv-zone-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>Zone AVG Trend by Season</h3>
+    <div class="chart-wrap"><canvas id="chart-zone-trend"></canvas></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SETTER TAB ═══════════════════════════ -->
+<div id="tab-setter" class="tab-panel">
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="set-season" onchange="renderSetter()">
+      <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Situation</label><br><select id="set-situation" onchange="renderSetter()">
+      <option value="all">All Attacks</option>
+    </select></div>
+  </div>
+
+  <div class="grid-4" id="set-kpi-row"></div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>Overall Set Distribution</h3>
+      <div class="chart-wrap"><canvas id="chart-set-dist"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Distribution by Group</h3>
+      <div class="chart-wrap"><canvas id="chart-set-group"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>Set Distribution Trend by Season</h3>
+    <div class="chart-wrap"><canvas id="chart-set-trend"></canvas></div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>Call Efficiency Comparison</h3>
+    <div class="table-scroll">
+      <table class="data-table" id="set-eff-table">
+        <thead><tr>
+          <th>Call</th><th>Type</th>
+          <th class="num">Att</th><th class="num">Dist %</th>
+          <th class="num">Kills</th><th class="num">Kill %</th>
+          <th class="num">Errors</th><th class="num">Err %</th>
+          <th class="num">Efficiency</th>
+        </tr></thead>
+        <tbody id="set-eff-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ FBSO TAB ═══════════════════════════ -->
+<div id="tab-fbso" class="tab-panel">
+  <div style="background:rgba(200,168,75,0.08);border:1px solid rgba(200,168,75,0.3);border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
+    <span style="font-size:20px">⏳</span>
+    <div>
+      <div style="font-weight:600;color:var(--gold);font-size:13px">Rotation Coding In Progress</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">FBSO by rotation will populate automatically once rotation data is added to DVW coding. The structure below shows what will display.</div>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="card-sm"><div class="card-title">FBSO %</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">First Ball Side Out</div></div>
+    <div class="card-sm"><div class="card-title">Sideout %</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">Overall Sideout</div></div>
+    <div class="card-sm"><div class="card-title">S/R Efficiency</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">Serve Receive</div></div>
+    <div class="card-sm"><div class="card-title">In-Sys Rcv %</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">In System Reception</div></div>
+  </div>
+
+  <div class="section-title mt-20">FBSO by Rotation</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="fbso-rotation-grid">
+  </div>
+
+  <div class="card mt-16">
+    <h3>What will show here</h3>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding:8px 0">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--gold);margin-bottom:8px">Per Rotation</div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.8">FBSO %<br>Earned SO %<br>Set Distribution<br>Attack Efficiency<br>Serve Receive Zone</div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--gold);margin-bottom:8px">By Set Type</div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.8">X5 / V5 FBSO %<br>X6 / V6 FBSO %<br>XP / BIC FBSO %<br>Quick (X1/X2/X7) %<br>D-Ball FBSO %</div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--gold);margin-bottom:8px">Trend Over Time</div>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.8">FBSO % by week<br>Sideout % by week<br>Rotation strengths<br>Opponent comparison<br>Practice vs Match</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ PLAYER TAB ═══════════════════════════ -->
+<div id="tab-player" class="tab-panel">
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="player-season-filter" onchange="onPlayerSeasonChange()">
+      <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Position</label><br><select id="player-pos-filter" onchange="renderPlayerList()">
+      <option value="all">All Positions</option>
+      <option value="2">Outside Hitter</option>
+      <option value="3">Setter</option>
+      <option value="4">Middle Blocker</option>
+      <option value="5">Opposite</option>
+      <option value="1">Libero</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Sort By</label><br><select id="player-sort" onchange="renderPlayerList()">
+      <option value="attacks">Most Attacks</option>
+      <option value="kills">Kill %</option>
+      <option value="serves">Most Serves</option>
+      <option value="actions">Total Actions</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div style="flex:1;min-width:200px">
+      <label>Search / Filter Players</label>
+      <div class="player-picker">
+        <div class="player-search-wrap" style="position:relative">
+          <span class="player-search-icon">⌕</span>
+          <input class="player-search" id="player-search" type="text" placeholder="Type a name..." autocomplete="off"
+            oninput="onPlayerSearch()" onfocus="showSuggestions()" onblur="hideSuggestions()">
+          <div class="player-suggest" id="player-suggest"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="player-chips" id="player-chips"></div>
+          <button class="picker-clear" id="picker-clear" onclick="clearPlayerFilter()" style="display:none">Clear all</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div>
+      <div id="player-list" class="grid-auto"></div>
+    </div>
+    <div id="player-detail">
+      <div class="empty" style="margin-top:40px">Select a player to view details</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SCOUT TAB ═══════════════════════════ -->
+<div id="tab-scout" class="tab-panel">
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="scout-season-filter" onchange="renderScout()">
+      <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Opponent</label><br><select id="scout-opp-filter" onchange="renderScout()">
+      <option value="all">All Opponents</option>
+    </select></div>
+  </div>
+
+  <div class="grid-2">
+    <div>
+      <div class="section-title" style="margin-top:0">Scouted Opponents</div>
+      <div id="scout-opp-list" class="grid-auto"></div>
+    </div>
+    <div id="scout-detail">
+      <div class="empty" style="margin-top:40px">Select an opponent to view scout data</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ────────────────────────────────────────────────────────────────────
+const DATA = __DASHBOARD_DATA__;
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const MAROON = '#8D0034';
+const GOLD   = '#FEBC18';
+const GOLD_LIGHT = '#FED056';
+const GREEN  = '#4caf50';
+const RED    = '#f44336';
+const BLUE   = '#64b5f6';
+const ORANGE = '#ff9800';
+
+const SKILL_NAMES = {S:'Serve', R:'Reception', E:'Set', A:'Attack', B:'Block', D:'Dig', F:'Freeball'};
+const SKILL_COLORS = {S: '#9c27b0', R: BLUE, E: '#ff9800', A: MAROON, B: '#4caf50', D: '#00bcd4', F: '#607d8b'};
+
+// Set/combo type definitions
+const COMBO_NAMES = {
+  X5:'IS Outside', V5:'High Outside', X6:'IS Right Side', V6:'High Right Side',
+  XP:'BIC / Pipe', X8:'D-Ball', PP:'Pipe (Back Set)', V8:'High Back Row', VP:'High Pipe',
+  X1:'Front Quick', X2:'Back Quick', X7:'Gap / 31',
+};
+const PIN_COMBOS    = ['X5','V5','X6','V6','XP','X8','PP','V8','VP'];
+const MIDDLE_COMBOS = ['X1','X2','X7'];
+const COMBO_COLORS  = {
+  X5:'#8D0034', V5:'#c0004f', X6:'#FEBC18', V6:'#FED056',
+  XP:'#4caf50', X8:'#2e7d32', PP:'#2196f3', V8:'#64b5f6', VP:'#90a4ae',
+  X1:'#9c27b0', X2:'#ce93d8', X7:'#6a1b9a',
+};
+
+// Position group helpers
+const PIN_POS      = new Set(['2','5']);   // outside + opposite
+const MIDDLE_POS   = new Set(['4']);
+const LIBERO_POS   = new Set(['1']);
+
+function playerInGroup(pnum, season, group) {
+  if (group === 'all') return true;
+  const p = getPlayerInfo(pnum, season);
+  const pc = String(p?.position_code || '');
+  if (group === 'pins')    return PIN_POS.has(pc);
+  if (group === 'middles') return MIDDLE_POS.has(pc);
+  if (group === 'liberos') return LIBERO_POS.has(pc);
+  return true;
+}
+
+// Derive serve stats from eval counts
+function serveMetrics(evals, attempts) {
+  if (!evals || !attempts) return null;
+  return {
+    attempts,
+    ace_pct:  +((evals['#']||0)/attempts*100).toFixed(1),
+    err_pct:  +((evals['=']||0)/attempts*100).toFixed(1),
+    ogp_pct:  +((evals['+']||0)/attempts*100).toFixed(1),
+    oos_pct:  +((evals['-']||0)/attempts*100).toFixed(1),
+  };
+}
+
+// Derive reception stats from eval counts (weight system: #=3, +=2, -=1, /=0.5)
+function rcvMetrics(evals, attempts) {
+  if (!evals || !attempts) return null;
+  const perf  = evals['#']||0;
+  const good  = evals['+'||0]||evals['+']||0;
+  const poor  = evals['-']||0;
+  const half  = evals['/']||0;
+  const err   = evals['=']||0;
+  const avg   = (3*perf + 2*good + 1*poor + 0.5*half) / attempts;
+  return {
+    attempts,
+    avg:      +avg.toFixed(3),
+    perf_pct: +(perf/attempts*100).toFixed(1),
+    gp_pct:   +((perf+good)/attempts*100).toFixed(1),
+    oos_pct:  +(poor/attempts*100).toFixed(1),
+    err_pct:  +(err/attempts*100).toFixed(1),
+  };
+}
+const EVAL_NAMES = {'#':'Kill/Ace/Perfect', '+':'Positive', '/':'Half-Positive', '-':'Negative', '=':'Error', '!':'Overpass'};
+const POS_NAMES  = {'1':'Libero', '2':'Outside', '3':'Setter', '4':'Middle', '5':'Opposite', '6':'Def. Spec'};
+const SEASONS_SORTED = ['Fall 2025','Spring 2025','Fall 2026','Spring 2026'];
+
+const CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: true,
+  plugins: {
+    legend: { labels: { color: '#999', font: { size: 11 } } },
+    tooltip: { backgroundColor: '#1a1a1a', borderColor: '#333', borderWidth: 1,
+                titleColor: '#f0f0f0', bodyColor: '#ccc' }
+  },
+  scales: {
+    x: { grid: { color: '#2a2a2a' }, ticks: { color: '#999', font: { size: 11 } } },
+    y: { grid: { color: '#2a2a2a' }, ticks: { color: '#999', font: { size: 11 } } }
+  }
+};
+
+// Chart registry to destroy before re-render
+const _charts = {};
+function destroyChart(id) { if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; } }
+function makeChart(id, type, data, options) {
+  destroyChart(id);
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  _charts[id] = new Chart(ctx, { type, data, options: mergeDeep({}, CHART_DEFAULTS, options || {}) });
+  return _charts[id];
+}
+
+function mergeDeep(target, ...sources) {
+  for (const src of sources) {
+    for (const k in src) {
+      if (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])) {
+        target[k] = target[k] || {};
+        mergeDeep(target[k], src[k]);
+      } else {
+        target[k] = src[k];
+      }
+    }
+  }
+  return target;
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function pct(v, d=1) { return v == null ? '—' : v.toFixed(d) + '%'; }
+function fmt(v)  { return v == null ? '—' : v.toLocaleString(); }
+function safeSkill(skillMap, code) { return skillMap && skillMap[code] ? skillMap[code] : null; }
+
+// Season-aware name lookup — same number can be a different person each season
+function getPlayerInfo(num, season) {
+  const s = String(num);
+  if (season && season !== 'all') {
+    const p = DATA.players_by_season?.[season]?.[s];
+    if (p) return p;
+  }
+  // Fallback: global roster (last-seen name)
+  return DATA.players[s] || null;
+}
+function getPlayerName(num, season) {
+  const p = getPlayerInfo(num, season);
+  return p ? p.name : `#${num}`;
+}
+function getPlayerPos(num, season) {
+  const p = getPlayerInfo(num, season);
+  return p ? (POS_NAMES[p.position_code] || 'Unknown') : '';
+}
+function getPlayerIsLibero(num, season) {
+  const p = getPlayerInfo(num, season);
+  return p ? p.is_libero : false;
+}
+
+// Aggregate player_season across multiple seasons
+function getPlayerAggSeason(pnum, seasons) {
+  const result = { actions: 0, sessions: 0, skills: {} };
+  for (const s of seasons) {
+    const key = `${pnum}|${s}`;
+    const ps = DATA.player_season[key];
+    if (!ps) continue;
+    result.actions += ps.actions || 0;
+    result.sessions += ps.sessions || 0;
+    for (const [sk, sv] of Object.entries(ps.skills || {})) {
+      if (!result.skills[sk]) result.skills[sk] = { attempts:0, kill_pct:0, error_pct:0, pos_pct:0, efficiency:0, evals:{} };
+      result.skills[sk].attempts += sv.attempts || 0;
+      for (const [e, n] of Object.entries(sv.evals || {})) {
+        result.skills[sk].evals[e] = (result.skills[sk].evals[e] || 0) + n;
+      }
+    }
+  }
+  // Derive aggregated pcts
+  const EV = (sk) => result.skills[sk] ? result.skills[sk].evals : {};
+  for (const sk of Object.keys(result.skills)) {
+    const att = result.skills[sk].attempts;
+    const ev = EV(sk);
+    if (att > 0) {
+      result.skills[sk].kill_pct  = +((ev['#']||0) / att * 100).toFixed(1);
+      result.skills[sk].error_pct = +((ev['='||0] || ev['=']||0) / att * 100).toFixed(1);
+      result.skills[sk].pos_pct   = +((( ev['#']||0) + (ev['+'||0]||ev['+']||0) + (ev['/'||0]||ev['/']||0)) / att * 100).toFixed(1);
+      result.skills[sk].efficiency= +(((ev['#']||0) - (ev['=']||0)) / att * 100).toFixed(1);
+    }
+  }
+  return result;
+}
+
+// Get seasons for a filter value
+function resolveSeasons(val) {
+  if (val === 'all') return DATA.meta.seasons;
+  return [val];
+}
+
+// ─── TAB SWITCHING ────────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+function init() {
+  const m = DATA.meta;
+  document.getElementById('hs-sessions').textContent = m.total_sessions;
+  document.getElementById('hs-actions').textContent  = (m.total_actions / 1000).toFixed(1) + 'k';
+  document.getElementById('hs-players').textContent  = m.total_players;
+  document.getElementById('hs-seasons').textContent  = m.seasons.length;
+  document.getElementById('header-subtitle').textContent =
+    `${m.seasons.length} Seasons • ${m.total_sessions} Sessions • ${m.total_actions.toLocaleString()} Coded Actions`;
+
+  // Populate season dropdowns
+  const allSeasons = DATA.meta.seasons;
+  ['team-season-filter','player-season-filter','atk-season','sr-season','set-season'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    allSeasons.forEach(s => el.add(new Option(s, s)));
+  });
+  const seasonSelect = document.getElementById('season-select');
+  allSeasons.forEach(s => seasonSelect.add(new Option(s, s)));
+  seasonSelect.value = allSeasons[allSeasons.length - 1] || allSeasons[0];
+
+  // Scout season filter
+  const scoutSeasons = [...new Set(DATA.scout_index.map(s => s.season).filter(Boolean))].sort();
+  const scoutSeasonEl = document.getElementById('scout-season-filter');
+  scoutSeasons.forEach(s => scoutSeasonEl.add(new Option(s, s)));
+
+  // Scout opponent filter
+  const scoutOpps = [...new Set(DATA.scout_index.map(s => s.opponent).filter(o => o && o !== 'Unknown'))].sort();
+  const scoutOppEl = document.getElementById('scout-opp-filter');
+  scoutOpps.forEach(o => scoutOppEl.add(new Option(o, o)));
+
+  renderTeam();
+  renderSeason();
+  renderAttack();
+  renderServRcv();
+  renderSetter();
+  renderFbso();
+  renderPlayerList();
+  renderScout();
+}
+
+// ═══════════════════════════ TEAM TAB ════════════════════════════════════════
+function getTeamStats() {
+  const seasons = resolveSeasons(document.getElementById('team-season-filter').value);
+  const typeFilter = document.getElementById('team-type-filter').value;
+
+  // Aggregate from player_season (only includes Loyola-side actions)
+  const agg = { sessions:0, practice_sessions:0, match_sessions:0, actions:0, skills:{} };
+
+  for (const s of seasons) {
+    const ss = DATA.season_stats[s];
+    if (!ss) continue;
+
+    // Count sessions by type
+    if (typeFilter === 'all') {
+      agg.sessions += ss.sessions || 0;
+      agg.practice_sessions += ss.practice_sessions || 0;
+      agg.match_sessions += ss.match_sessions || 0;
+    } else if (typeFilter === 'practice') {
+      agg.sessions += ss.practice_sessions || 0;
+      agg.practice_sessions += ss.practice_sessions || 0;
+    } else {
+      agg.sessions += ss.match_sessions || 0;
+      agg.match_sessions += ss.match_sessions || 0;
+    }
+
+    // For "all" type we use season_stats directly (already aggregated)
+    // For type-filtered we need to go through player_session
+    if (typeFilter === 'all') {
+      for (const [sk, sv] of Object.entries(ss.skills || {})) {
+        if (!agg.skills[sk]) agg.skills[sk] = {attempts:0, evals:{}};
+        agg.skills[sk].attempts += sv.attempts || 0;
+        agg.actions += sv.attempts || 0;
+        for (const [e, n] of Object.entries(sv.evals || {}))
+          agg.skills[sk].evals[e] = (agg.skills[sk].evals[e] || 0) + n;
+      }
+    }
+  }
+
+  // If type-filtered, go through sessions
+  if (typeFilter !== 'all') {
+    for (const sess of DATA.sessions) {
+      if (!seasons.includes(sess.season)) continue;
+      if (typeFilter !== 'all' && sess.type !== typeFilter) continue;
+      // Aggregate player_session for this session
+      for (const [key, ps] of Object.entries(DATA.player_session)) {
+        if (!key.endsWith('|' + sess.id.split('|').slice(1).join('|'))) continue;
+        if (!key.startsWith(key.split('|')[0])) continue;
+        // Match by session_id
+        if (ps.session_id !== sess.id) continue;
+        agg.actions += ps.actions || 0;
+        for (const [sk, sv] of Object.entries(ps.skills || {})) {
+          if (!agg.skills[sk]) agg.skills[sk] = {attempts:0, evals:{}};
+          agg.skills[sk].attempts += sv.attempts || 0;
+          for (const [e, n] of Object.entries(sv.evals || {}))
+            agg.skills[sk].evals[e] = (agg.skills[sk].evals[e] || 0) + n;
+        }
+      }
+    }
+    // Derive pcts
+    for (const sv of Object.values(agg.skills)) {
+      const att = sv.attempts;
+      if (att > 0) {
+        sv.kill_pct   = +((sv.evals['#']||0)/att*100).toFixed(1);
+        sv.error_pct  = +((sv.evals['=']||0)/att*100).toFixed(1);
+        sv.pos_pct    = +(((sv.evals['#']||0)+(sv.evals['+']||0)+(sv.evals['/']||0))/att*100).toFixed(1);
+        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0))/att*100).toFixed(1);
+      }
+    }
+  } else {
+    // Re-derive from accumulated evals
+    for (const sv of Object.values(agg.skills)) {
+      const att = sv.attempts;
+      if (att > 0) {
+        sv.kill_pct   = +((sv.evals['#']||0)/att*100).toFixed(1);
+        sv.error_pct  = +((sv.evals['=']||0)/att*100).toFixed(1);
+        sv.pos_pct    = +(((sv.evals['#']||0)+(sv.evals['+']||0)+(sv.evals['/']||0))/att*100).toFixed(1);
+        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0))/att*100).toFixed(1);
+      }
+    }
+    agg.actions = Object.values(agg.skills).reduce((s,v)=>s+v.attempts,0);
+  }
+
+  return agg;
+}
+
+function renderTeam() {
+  const agg = getTeamStats();
+  const skillFilter = document.getElementById('team-skill-filter').value;
+  const A = safeSkill(agg.skills, 'A');
+  const S = safeSkill(agg.skills, 'S');
+  const R = safeSkill(agg.skills, 'R');
+  const B = safeSkill(agg.skills, 'B');
+
+  // KPI row
+  document.getElementById('team-kpi-row').innerHTML = `
+    <div class="card-sm">
+      <div class="card-title">Attack</div>
+      <div class="stat-val big">${A ? pct(A.kill_pct) : '—'}</div>
+      <div class="stat-lbl">Kill %</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">${A ? fmt(A.attempts) : '—'} attempts · ${A ? pct(A.error_pct) : '—'} err · ${A ? pct(A.efficiency) : '—'} eff</div>
+    </div>
+    <div class="card-sm">
+      <div class="card-title">Serve</div>
+      <div class="stat-val big">${S ? pct(S.kill_pct) : '—'}</div>
+      <div class="stat-lbl">Ace %</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">${S ? fmt(S.attempts) : '—'} serves · ${S ? pct(S.error_pct) : '—'} err</div>
+    </div>
+    <div class="card-sm">
+      <div class="card-title">Reception</div>
+      <div class="stat-val big">${R ? pct(R.kill_pct) : '—'}</div>
+      <div class="stat-lbl">Perfect %</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">${R ? fmt(R.attempts) : '—'} receptions · ${R ? pct(R.pos_pct) : '—'} pos</div>
+    </div>
+    <div class="card-sm">
+      <div class="card-title">Block</div>
+      <div class="stat-val big">${B ? fmt(B.evals['#'] || 0) : '—'}</div>
+      <div class="stat-lbl">Kills</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">${B ? fmt(B.attempts) : '—'} attempts · ${B ? pct(B.error_pct) : '—'} err</div>
+    </div>
+  `;
+
+  // Chart: actions by season
+  const seasons = DATA.meta.seasons;
+  makeChart('chart-team-seasons', 'bar', {
+    labels: seasons,
+    datasets: [{
+      label: 'Total Actions',
+      data: seasons.map(s => DATA.season_stats[s] ? DATA.season_stats[s].actions : 0),
+      backgroundColor: GOLD,
+      borderRadius: 4,
+    }]
+  }, { plugins: { legend: { display: false } } });
+
+  // Chart: skill distribution (filtered season)
+  const skills = agg.skills;
+  const skillKeys = Object.keys(skills).filter(k => skills[k].attempts > 0);
+  makeChart('chart-team-skills', 'doughnut', {
+    labels: skillKeys.map(k => SKILL_NAMES[k] || k),
+    datasets: [{
+      data: skillKeys.map(k => skills[k].attempts),
+      backgroundColor: skillKeys.map(k => SKILL_COLORS[k] || '#888'),
+      borderColor: '#1a1a1a',
+      borderWidth: 2,
+    }]
+  }, {
+    scales: { x: { display: false }, y: { display: false } },
+    plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
+  });
+
+  // Season comparison charts
+  const sAll = DATA.meta.seasons;
+  const skillsToCompare = ['A','S','R','B'];
+  const killData = skillsToCompare.map(sk => ({
+    label: SKILL_NAMES[sk],
+    data: sAll.map(s => DATA.season_stats[s]?.skills?.[sk]?.kill_pct || 0),
+    backgroundColor: SKILL_COLORS[sk],
+    borderColor: SKILL_COLORS[sk],
+    borderRadius: 3,
+  }));
+  makeChart('chart-season-compare-kill', 'bar', {
+    labels: sAll,
+    datasets: killData,
+  }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+
+  const errData = skillsToCompare.map(sk => ({
+    label: SKILL_NAMES[sk],
+    data: sAll.map(s => DATA.season_stats[s]?.skills?.[sk]?.error_pct || 0),
+    backgroundColor: SKILL_COLORS[sk],
+    borderColor: SKILL_COLORS[sk],
+    borderRadius: 3,
+  }));
+  makeChart('chart-season-compare-err', 'bar', {
+    labels: sAll,
+    datasets: errData,
+  }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+
+  // Summary table
+  const tbody = document.getElementById('team-skill-tbody');
+  tbody.innerHTML = '';
+  for (const s of seasons) {
+    const ss = DATA.season_stats[s];
+    if (!ss) continue;
+    const A = ss.skills?.A, S = ss.skills?.S, R = ss.skills?.R, B = ss.skills?.B;
+    tbody.innerHTML += `<tr>
+      <td>${s}</td>
+      <td>${ss.sessions}</td>
+      <td>${fmt(ss.actions)}</td>
+      <td class="num">${S ? fmt(S.attempts) : '—'}</td>
+      <td class="num green">${S ? pct(S.kill_pct) : '—'}</td>
+      <td class="num red">${S ? pct(S.error_pct) : '—'}</td>
+      <td class="num">${A ? fmt(A.attempts) : '—'}</td>
+      <td class="num green">${A ? pct(A.kill_pct) : '—'}</td>
+      <td class="num red">${A ? pct(A.error_pct) : '—'}</td>
+      <td class="num gold">${A ? pct(A.efficiency) : '—'}</td>
+      <td class="num">${R ? fmt(R.attempts) : '—'}</td>
+      <td class="num green">${R ? pct(R.kill_pct) : '—'}</td>
+      <td class="num">${B ? fmt(B.attempts) : '—'}</td>
+    </tr>`;
+  }
+}
+
+// ═══════════════════════════ SEASON TAB ══════════════════════════════════════
+function renderSeason() {
+  const season = document.getElementById('season-select').value;
+  const view   = document.getElementById('season-view').value;
+  const overviewEl  = document.getElementById('season-overview-content');
+  const sessionsEl  = document.getElementById('season-sessions-content');
+
+  overviewEl.style.display  = view === 'overview'  ? '' : 'none';
+  sessionsEl.style.display  = view === 'sessions'  ? '' : 'none';
+
+  if (view === 'overview') renderSeasonOverview(season, overviewEl);
+  else renderSeasonLog(season, sessionsEl);
+}
+
+function renderSeasonOverview(season, container) {
+  const ss = DATA.season_stats[season];
+  if (!ss) { container.innerHTML = '<div class="empty">No data for this season</div>'; return; }
+  const A = ss.skills?.A, S = ss.skills?.S, R = ss.skills?.R, B = ss.skills?.B, D = ss.skills?.D, E = ss.skills?.E;
+
+  // Top players this season
+  const topPlayers = Object.entries(DATA.player_season)
+    .filter(([k]) => k.endsWith('|' + season))
+    .map(([k, v]) => ({ pnum: k.split('|')[0], ...v }))
+    .filter(p => p.actions > 0)
+    .sort((a,b) => (b.skills?.A?.attempts||0) - (a.skills?.A?.attempts||0))
+    .slice(0, 6);
+
+  const topAttackers = [...topPlayers].sort((a,b) => (b.skills?.A?.attempts||0)-(a.skills?.A?.attempts||0)).slice(0,5);
+  const topServers   = [...topPlayers].sort((a,b) => (b.skills?.S?.attempts||0)-(a.skills?.S?.attempts||0)).slice(0,5);
+
+  container.innerHTML = `
+    <div class="grid-4">
+      <div class="card-sm">
+        <div class="card-title">Sessions</div>
+        <div class="stat-val big">${ss.sessions}</div>
+        <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">${ss.practice_sessions||0} practice · ${ss.match_sessions||0} match</div>
+      </div>
+      <div class="card-sm">
+        <div class="card-title">Kill %</div>
+        <div class="stat-val big green">${A ? pct(A.kill_pct) : '—'}</div>
+        <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">${A ? fmt(A.attempts) : '—'} attacks · ${A ? pct(A.efficiency) : '—'} eff</div>
+      </div>
+      <div class="card-sm">
+        <div class="card-title">Serve Ace %</div>
+        <div class="stat-val big" style="color:var(--blue)">${S ? pct(S.kill_pct) : '—'}</div>
+        <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">${S ? fmt(S.attempts) : '—'} serves · ${S ? pct(S.error_pct) : '—'} err</div>
+      </div>
+      <div class="card-sm">
+        <div class="card-title">Reception Perfect</div>
+        <div class="stat-val big" style="color:#ff9800">${R ? pct(R.kill_pct) : '—'}</div>
+        <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">${R ? fmt(R.attempts) : '—'} receptions · ${R ? pct(R.pos_pct) : '—'} pos</div>
+      </div>
+    </div>
+
+    <div class="grid-2 mt-16">
+      <div class="card">
+        <h3>Skill Breakdown</h3>
+        ${buildSkillBars(ss.skills)}
+      </div>
+      <div class="card">
+        <h3>Attack Distribution</h3>
+        <div class="chart-wrap"><canvas id="chart-season-attack-dist"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid-2 mt-16">
+      <div class="card">
+        <h3>Top Attackers</h3>
+        ${buildPlayerMiniTable(topAttackers, 'A')}
+      </div>
+      <div class="card">
+        <h3>Top Servers</h3>
+        ${buildPlayerMiniTable(topServers, 'S')}
+      </div>
+    </div>
+  `;
+
+  // Attack combo chart
+  const combos = A?.combos || {};
+  const comboEntries = Object.entries(combos).sort((a,b) => b[1].attempts - a[1].attempts).slice(0, 8);
+  if (comboEntries.length > 0) {
+    makeChart('chart-season-attack-dist', 'bar', {
+      labels: comboEntries.map(([k,v]) => v.name || k),
+      datasets: [
+        { label: 'Attempts', data: comboEntries.map(([,v]) => v.attempts), backgroundColor: GOLD, borderRadius: 3 },
+        { label: 'Kills',    data: comboEntries.map(([,v]) => v.evals?.['#']||0), backgroundColor: GREEN, borderRadius: 3 },
+      ]
+    }, { scales: { x: { ticks: { maxRotation: 30 } } } });
+  } else {
+    document.getElementById('chart-season-attack-dist').parentElement.innerHTML = '<div class="empty">No attack combo data</div>';
+  }
+}
+
+function buildSkillBars(skills) {
+  if (!skills) return '<div class="empty">No data</div>';
+  const maxAtt = Math.max(...Object.values(skills).map(s => s.attempts), 1);
+  const rows = Object.entries(skills)
+    .filter(([,v]) => v.attempts > 0)
+    .sort((a,b) => b[1].attempts - a[1].attempts)
+    .map(([k, v]) => {
+      const color = SKILL_COLORS[k] || GOLD;
+      return `<div class="skill-row">
+        <div class="skill-icon" style="background:${color}22;color:${color}">${k}</div>
+        <div class="skill-name">${SKILL_NAMES[k]||k}</div>
+        <div class="skill-bar-wrap"><div class="skill-bar" style="width:${v.attempts/maxAtt*100}%;background:${color}"></div></div>
+        <div class="skill-count">${fmt(v.attempts)}</div>
+        <div class="skill-pct" style="color:${color}">${pct(v.kill_pct||v.efficiency)}</div>
+      </div>`;
+    }).join('');
+  return rows || '<div class="empty">No skill data</div>';
+}
+
+function buildPlayerMiniTable(players, skillCode) {
+  if (!players.length) return '<div class="empty">No data</div>';
+  const label = skillCode === 'A' ? ['Kill%','Eff%'] : ['Ace%','Err%'];
+  return `<table class="data-table">
+    <thead><tr><th>#</th><th>Name</th><th class="num">Att</th><th class="num">${label[0]}</th><th class="num">${label[1]}</th></tr></thead>
+    <tbody>${players.filter(p => p.skills?.[skillCode]?.attempts > 0).slice(0,5).map(p => {
+      const sk = p.skills?.[skillCode];
+      return `<tr>
+        <td class="gold">#${p.pnum}</td>
+        <td>${getPlayerName(p.pnum)}</td>
+        <td class="num">${fmt(sk?.attempts)}</td>
+        <td class="num green">${pct(sk?.kill_pct)}</td>
+        <td class="num" style="color:${skillCode==='A'?'var(--gold)':'var(--red)'}">${pct(skillCode==='A'?sk?.efficiency:sk?.error_pct)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderSeasonLog(season, container) {
+  const sessions = DATA.sessions.filter(s => s.season === season)
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+  container.innerHTML = `
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>File</th><th>Type</th><th>Opponent</th><th class="num">Actions</th><th>Coding</th></tr></thead>
+        <tbody>${sessions.map(s => `<tr>
+          <td>${s.date || '—'}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${s.file}</td>
+          <td><span class="badge badge-${s.type}">${s.type}</span></td>
+          <td>${s.opponent || '—'}</td>
+          <td class="num">${fmt(s.action_count)}</td>
+          <td style="font-size:11px;color:var(--text-dim)">${s.coding_version||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+// ═══════════════════════════ PLAYER TAB ══════════════════════════════════════
+let selectedPlayer   = null;
+let pinnedPlayers    = new Set();   // player keys "num|season" pinned via picker
+let _suggestTimeout  = null;
+
+// When season changes, clear picks that don't belong to the new season
+function onPlayerSeasonChange() {
+  const season = document.getElementById('player-season-filter').value;
+  // If a specific season is chosen, drop any pinned players not in that season's roster
+  if (season !== 'all') {
+    const roster = DATA.players_by_season?.[season] || {};
+    pinnedPlayers = new Set([...pinnedPlayers].filter(key => {
+      const num = key.split('|')[0];
+      return num in roster;
+    }));
+    renderPickerChips(season);
+  }
+  renderPlayerList();
+}
+
+// Build the list of players available for the current season filter
+function getAvailablePlayers(season) {
+  if (season === 'all') {
+    // All players who have any data
+    return Object.entries(DATA.players).map(([num, p]) => ({ num, ...p, season: 'all' }));
+  }
+  const roster = DATA.players_by_season?.[season] || {};
+  return Object.entries(roster).map(([num, p]) => ({ num, ...p, season }));
+}
+
+// Player picker key: "num|season" (so same number in different seasons = different pick)
+function pickerKey(num, season) {
+  return season === 'all' ? String(num) : `${num}|${season}`;
+}
+function pickerKeyNum(key)    { return key.split('|')[0]; }
+function pickerKeySeason(key) { return key.includes('|') ? key.split('|')[1] : 'all'; }
+
+function onPlayerSearch() {
+  clearTimeout(_suggestTimeout);
+  _suggestTimeout = setTimeout(showSuggestions, 80);
+}
+
+function showSuggestions() {
+  const season  = document.getElementById('player-season-filter').value;
+  const query   = document.getElementById('player-search').value.toLowerCase().trim();
+  const suggest = document.getElementById('player-suggest');
+  const available = getAvailablePlayers(season);
+
+  let matches = available;
+  if (query) {
+    matches = available.filter(p =>
+      p.name.toLowerCase().includes(query) || String(p.number).includes(query)
+    );
+  }
+  matches = matches.slice(0, 12);
+
+  if (!matches.length) { suggest.style.display = 'none'; return; }
+
+  suggest.innerHTML = matches.map(p => {
+    const key     = pickerKey(p.num, season);
+    const isPinned = pinnedPlayers.has(key);
+    return `<div class="player-suggest-item${isPinned?' dimmed':''}"
+      onmousedown="event.preventDefault();togglePlayerPin('${p.num}','${season}')">
+      <span class="suggest-num">#${p.num}</span>
+      <span>${p.name}</span>
+      <span class="suggest-pos">${POS_NAMES[p.position_code]||''}</span>
+      ${isPinned ? '<span style="margin-left:auto;color:var(--gold);font-size:11px">✓ selected</span>' : ''}
+    </div>`;
+  }).join('');
+  suggest.style.display = 'block';
+}
+
+function hideSuggestions() {
+  setTimeout(() => {
+    document.getElementById('player-suggest').style.display = 'none';
+  }, 150);
+}
+
+function togglePlayerPin(num, season) {
+  const key = pickerKey(num, season);
+  if (pinnedPlayers.has(key)) {
+    pinnedPlayers.delete(key);
+  } else {
+    pinnedPlayers.add(key);
+  }
+  document.getElementById('player-search').value = '';
+  document.getElementById('player-suggest').style.display = 'none';
+  const currentSeason = document.getElementById('player-season-filter').value;
+  renderPickerChips(currentSeason);
+  renderPlayerList();
+}
+
+function renderPickerChips(season) {
+  const chipsEl = document.getElementById('player-chips');
+  const clearEl = document.getElementById('picker-clear');
+  if (!pinnedPlayers.size) {
+    chipsEl.innerHTML = '';
+    clearEl.style.display = 'none';
+    return;
+  }
+  chipsEl.innerHTML = [...pinnedPlayers].map(key => {
+    const num  = pickerKeyNum(key);
+    const s    = pickerKeySeason(key);
+    const name = getPlayerName(num, s === 'all' ? season : s);
+    const label = s === 'all' ? `#${num} ${name}` : `#${num} ${name} (${s})`;
+    return `<button class="player-chip" onclick="togglePlayerPin('${num}','${s}')">
+      ${label} <span>×</span>
+    </button>`;
+  }).join('');
+  clearEl.style.display = 'inline';
+}
+
+function clearPlayerFilter() {
+  pinnedPlayers.clear();
+  const season = document.getElementById('player-season-filter').value;
+  renderPickerChips(season);
+  renderPlayerList();
+}
+
+function renderPlayerList() {
+  const seasonFilter = document.getElementById('player-season-filter').value;
+  const posFilter    = document.getElementById('player-pos-filter').value;
+  const sortBy       = document.getElementById('player-sort').value;
+  const seasons      = resolveSeasons(seasonFilter);
+
+  // Build player list from season-aware roster (not global players dict)
+  let players;
+  if (seasonFilter === 'all') {
+    // Union of all season rosters, deduplicated by "num|season"
+    const seen = new Set();
+    players = [];
+    for (const season of seasons) {
+      const roster = DATA.players_by_season?.[season] || {};
+      for (const [num, p] of Object.entries(roster)) {
+        const key = `${num}|${season}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          players.push({ num, season, ...p });
+        }
+      }
+    }
+  } else {
+    const roster = DATA.players_by_season?.[seasonFilter] || {};
+    players = Object.entries(roster).map(([num, p]) => ({ num, season: seasonFilter, ...p }));
+  }
+
+  // Aggregate stats per player entry (num+season combo)
+  players = players.map(p => {
+    const agg = getPlayerAggSeason(p.num, p.season === 'all' ? seasons : [p.season]);
+    return { ...p, agg };
+  });
+
+  // Filter by position
+  if (posFilter !== 'all') {
+    players = players.filter(p => String(p.position_code) === posFilter);
+  }
+
+  // Only show players who have actual data
+  players = players.filter(p => p.agg.actions > 0);
+
+  // Apply picker filter if any players are pinned
+  if (pinnedPlayers.size > 0) {
+    players = players.filter(p => {
+      const key = pickerKey(p.num, p.season);
+      const globalKey = String(p.num);
+      return pinnedPlayers.has(key) || pinnedPlayers.has(globalKey);
+    });
+  }
+
+  // Sort
+  players.sort((a,b) => {
+    if (sortBy === 'attacks') return (b.agg.skills?.A?.attempts||0) - (a.agg.skills?.A?.attempts||0);
+    if (sortBy === 'kills')   return (b.agg.skills?.A?.kill_pct||0) - (a.agg.skills?.A?.kill_pct||0);
+    if (sortBy === 'serves')  return (b.agg.skills?.S?.attempts||0) - (a.agg.skills?.S?.attempts||0);
+    return b.agg.actions - a.agg.actions;
+  });
+
+  const container = document.getElementById('player-list');
+  container.innerHTML = players.map(p => {
+    const A = p.agg.skills?.A;
+    const S = p.agg.skills?.S;
+    const isSelected = selectedPlayer === p.num && selectedPlayerSeason === p.season;
+    const seasonLabel = p.season !== 'all' ? `<span style="font-size:10px;color:var(--text-dim);margin-left:4px">${p.season}</span>` : '';
+    return `<div class="player-card ${isSelected?'selected':''}" onclick="selectPlayer('${p.num}','${p.season}')">
+      <div class="player-num">#${p.num}</div>
+      <div class="player-name">${p.name} ${p.is_libero ? '<span class="libero-badge">L</span>' : ''} ${seasonLabel}</div>
+      <div class="player-pos">${POS_NAMES[p.position_code]||'Unknown'}</div>
+      <div class="player-mini-stats">
+        <div class="player-mini-stat">
+          <div class="player-mini-val">${fmt(p.agg.actions)}</div>
+          <div class="player-mini-lbl">Actions</div>
+        </div>
+        ${A ? `<div class="player-mini-stat">
+          <div class="player-mini-val">${A.attempts}</div>
+          <div class="player-mini-lbl">Attacks</div>
+        </div>
+        <div class="player-mini-stat">
+          <div class="player-mini-val">${pct(A.kill_pct,0)}</div>
+          <div class="player-mini-lbl">Kill%</div>
+        </div>` : ''}
+        ${S && !A ? `<div class="player-mini-stat">
+          <div class="player-mini-val">${S.attempts}</div>
+          <div class="player-mini-lbl">Serves</div>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">No players match these filters</div>';
+
+  if (selectedPlayer) renderPlayerDetail(selectedPlayer, selectedPlayerSeason);
+}
+
+let selectedPlayerSeason = null;
+
+function selectPlayer(num, season) {
+  selectedPlayer       = num;
+  selectedPlayerSeason = season;
+  document.querySelectorAll('.player-card').forEach(c => c.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  renderPlayerDetail(num, season);
+}
+
+function renderPlayerDetail(num, detailSeason) {
+  detailSeason = detailSeason || 'all';
+  const seasons = detailSeason === 'all' ? DATA.meta.seasons : [detailSeason];
+  const p = getPlayerInfo(num, detailSeason === 'all' ? null : detailSeason);
+  if (!p) return;
+  const agg = getPlayerAggSeason(num, seasons);
+  const container = document.getElementById('player-detail');
+
+  // Find all seasons this player-number has data in
+  const careerSeasons = DATA.meta.seasons.filter(s => {
+    const k = `${num}|${s}`;
+    // Only count seasons where this number maps to the same person
+    const seasonName = DATA.players_by_season?.[s]?.[num]?.name;
+    return DATA.player_season[k]?.actions > 0 && seasonName === p.name;
+  });
+
+  const A = agg.skills?.A;
+  const S = agg.skills?.S;
+  const R = agg.skills?.R;
+  const B = agg.skills?.B;
+  const D = agg.skills?.D;
+  const E = agg.skills?.E;
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="detail-header">
+        <div class="detail-num">#${num}</div>
+        <div class="detail-info">
+          <h2>${p.name} ${p.is_libero ? '<span class="libero-badge">Libero</span>' : ''}</h2>
+          <p>${POS_NAMES[p.position_code]||'Unknown'} &nbsp;·&nbsp; ${agg.sessions} sessions &nbsp;·&nbsp; ${fmt(agg.actions)} actions</p>
+          <p style="margin-top:4px;font-size:11px;color:var(--text-dim)">Seasons as #${num}: ${careerSeasons.length ? careerSeasons.join(', ') : '—'}</p>
+        </div>
+      </div>
+
+      ${A ? `
+      <div class="section-title" style="margin-top:0">Attack</div>
+      <div class="stat-grid">
+        <div class="stat-box highlight"><div class="stat-val">${pct(A.kill_pct)}</div><div class="stat-lbl">Kill %</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(A.error_pct)}</div><div class="stat-lbl">Error %</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(A.efficiency)}</div><div class="stat-lbl">Efficiency</div></div>
+        <div class="stat-box"><div class="stat-val">${fmt(A.attempts)}</div><div class="stat-lbl">Attempts</div></div>
+      </div>
+      ${buildEvalPills(A.evals, A.attempts)}` : ''}
+
+      ${S ? `
+      <div class="section-title">Serve</div>
+      <div class="stat-grid">
+        <div class="stat-box highlight"><div class="stat-val" style="color:var(--blue)">${pct(S.kill_pct)}</div><div class="stat-lbl">Ace %</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(S.error_pct)}</div><div class="stat-lbl">Error %</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(S.pos_pct)}</div><div class="stat-lbl">Pos %</div></div>
+        <div class="stat-box"><div class="stat-val">${fmt(S.attempts)}</div><div class="stat-lbl">Serves</div></div>
+      </div>
+      ${buildEvalPills(S.evals, S.attempts)}` : ''}
+
+      ${R ? `
+      <div class="section-title">Reception</div>
+      <div class="stat-grid">
+        <div class="stat-box highlight"><div class="stat-val" style="color:#ff9800">${pct(R.kill_pct)}</div><div class="stat-lbl">Perfect %</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(R.pos_pct)}</div><div class="stat-lbl">Positive %</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(R.error_pct)}</div><div class="stat-lbl">Error %</div></div>
+        <div class="stat-box"><div class="stat-val">${fmt(R.attempts)}</div><div class="stat-lbl">Receptions</div></div>
+      </div>` : ''}
+
+      ${B ? `
+      <div class="section-title">Block</div>
+      <div class="stat-grid">
+        <div class="stat-box highlight"><div class="stat-val green">${B.evals?.['#']||0}</div><div class="stat-lbl">Block Kills</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(B.error_pct)}</div><div class="stat-lbl">Error %</div></div>
+        <div class="stat-box"><div class="stat-val">${fmt(B.attempts)}</div><div class="stat-lbl">Attempts</div></div>
+      </div>` : ''}
+
+      ${D ? `
+      <div class="section-title">Dig</div>
+      <div class="stat-grid">
+        <div class="stat-box highlight"><div class="stat-val" style="color:var(--blue)">${pct(D.kill_pct)}</div><div class="stat-lbl">Dig Perfect</div></div>
+        <div class="stat-box"><div class="stat-val">${pct(D.pos_pct)}</div><div class="stat-lbl">Positive %</div></div>
+        <div class="stat-box"><div class="stat-val">${fmt(D.attempts)}</div><div class="stat-lbl">Digs</div></div>
+      </div>` : ''}
+
+      ${careerSeasons.length > 1 ? `
+      <div class="section-title">Career Progression</div>
+      <div class="chart-wrap" style="margin-top:8px"><canvas id="chart-player-career"></canvas></div>` : ''}
+    </div>
+  `;
+
+  // Career chart
+  if (careerSeasons.length > 1) {
+    const skillsToShow = ['A','S','R'].filter(sk => careerSeasons.some(s => DATA.player_season[`${num}|${s}`]?.skills?.[sk]?.attempts > 0));
+    makeChart('chart-player-career', 'line', {
+      labels: careerSeasons,
+      datasets: skillsToShow.map(sk => ({
+        label: SKILL_NAMES[sk] + ' Kill%',
+        data: careerSeasons.map(s => DATA.player_season[`${num}|${s}`]?.skills?.[sk]?.kill_pct || null),
+        borderColor: SKILL_COLORS[sk],
+        backgroundColor: SKILL_COLORS[sk] + '33',
+        tension: 0.3,
+        fill: true,
+        pointRadius: 5,
+        spanGaps: false,
+      }))
+    }, {
+      scales: {
+        y: { min: 0, max: 100, ticks: { callback: v => v+'%' } }
+      }
+    });
+  }
+}
+
+function buildEvalPills(evals, total) {
+  if (!evals || !total) return '';
+  const items = [
+    { key:'#', label:'Kill/Ace', cls:'eval-kill' },
+    { key:'+', label:'Positive', cls:'eval-pos' },
+    { key:'/', label:'Half', cls:'' },
+    { key:'-', label:'Negative', cls:'eval-neg' },
+    { key:'=', label:'Error', cls:'eval-err' },
+  ];
+  const pills = items.filter(i => (evals[i.key]||0) > 0).map(i => {
+    const n = evals[i.key] || 0;
+    return `<div class="eval-pill">
+      <div class="eval-pill-val ${i.cls}">${n}</div>
+      <div class="eval-pill-lbl">${i.label}</div>
+    </div>`;
+  }).join('');
+  return `<div class="eval-grid">${pills}</div>`;
+}
+
+// ═══════════════════════════ SCOUT TAB ═══════════════════════════════════════
+let selectedOpp = null;
+
+function renderScout() {
+  const seasonFilter = document.getElementById('scout-season-filter').value;
+  const oppFilter    = document.getElementById('scout-opp-filter').value;
+
+  // Build opponent list from opponent_stats + scout_index
+  let opps = Object.entries(DATA.opponent_stats)
+    .filter(([k]) => k !== 'Unknown')
+    .map(([name, stats]) => {
+      const files = DATA.scout_index.filter(s => s.opponent === name);
+      const seasons = [...new Set(files.map(f => f.season).filter(Boolean))];
+      return { name, stats, files, seasons };
+    });
+
+  if (seasonFilter !== 'all') opps = opps.filter(o => o.seasons.includes(seasonFilter));
+  if (oppFilter !== 'all')    opps = opps.filter(o => o.name === oppFilter);
+
+  opps.sort((a,b) => b.stats.actions - a.stats.actions);
+
+  const listEl = document.getElementById('scout-opp-list');
+  listEl.innerHTML = opps.map(o => `
+    <div class="opp-card ${selectedOpp===o.name?'selected':''}" onclick="selectOpp('${o.name}')">
+      <div class="opp-name">${o.name}</div>
+      <div class="opp-meta">${o.stats.files} file${o.stats.files!==1?'s':''} · ${fmt(o.stats.actions)} actions</div>
+      <div class="opp-meta" style="margin-top:4px">${o.seasons.join(', ')}</div>
+    </div>
+  `).join('') || '<div class="empty">No scout data for these filters</div>';
+
+  // Also show Unknown summary
+  const unknownStats = DATA.opponent_stats['Unknown'];
+  if (unknownStats && seasonFilter === 'all' && oppFilter === 'all') {
+    listEl.innerHTML += `<div class="card-sm" style="opacity:0.5;margin-top:8px">
+      <div style="font-size:11px;color:var(--text-muted)">⚠ ${unknownStats.files} file(s) with unidentified opponents — ${fmt(unknownStats.actions)} actions</div>
+    </div>`;
+  }
+
+  if (selectedOpp) renderScoutDetail(selectedOpp);
+}
+
+function selectOpp(name) {
+  selectedOpp = name;
+  document.querySelectorAll('.opp-card').forEach(c => c.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  renderScoutDetail(name);
+}
+
+function renderScoutDetail(name) {
+  const os = DATA.opponent_stats[name];
+  const files = DATA.scout_index.filter(s => s.opponent === name);
+  const container = document.getElementById('scout-detail');
+  if (!os) { container.innerHTML = '<div class="empty">No data</div>'; return; }
+
+  const A = os.skills?.A, S = os.skills?.S, R = os.skills?.R;
+
+  container.innerHTML = `
+    <div class="card">
+      <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">${name}</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">${os.files} scouted file${os.files!==1?'s':''} · ${fmt(os.actions)} total actions</p>
+
+      <div class="grid-3">
+        ${A ? `<div class="stat-box highlight">
+          <div class="stat-val green">${pct(A.kill_pct)}</div>
+          <div class="stat-lbl">Attack Kill%</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(A.attempts)} attacks · ${pct(A.error_pct)} err</div>
+        </div>` : '<div class="stat-box"><div class="stat-lbl">No attack data</div></div>'}
+        ${S ? `<div class="stat-box">
+          <div class="stat-val" style="color:var(--blue)">${pct(S.kill_pct)}</div>
+          <div class="stat-lbl">Serve Ace%</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(S.attempts)} serves · ${pct(S.error_pct)} err</div>
+        </div>` : ''}
+        ${R ? `<div class="stat-box">
+          <div class="stat-val" style="color:#ff9800">${pct(R.kill_pct)}</div>
+          <div class="stat-lbl">Rcv Perfect%</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(R.attempts)} receptions</div>
+        </div>` : ''}
+      </div>
+
+      <div class="section-title">Skill Breakdown</div>
+      ${buildSkillBars(os.skills)}
+
+      ${A?.combos && Object.keys(A.combos).length > 0 ? `
+      <div class="section-title">Attack Combinations</div>
+      <div class="chart-wrap" style="margin-top:8px"><canvas id="chart-scout-combos"></canvas></div>` : ''}
+
+      <div class="section-title">Scouted Files</div>
+      <table class="data-table" style="font-size:12px">
+        <thead><tr><th>File</th><th>Date</th><th>Season</th><th class="num">Actions</th></tr></thead>
+        <tbody>${files.map(f => `<tr>
+          <td style="color:var(--text-muted)">${f.file}</td>
+          <td>${f.date||'—'}</td>
+          <td>${f.season||'—'}</td>
+          <td class="num">${fmt(f.action_count)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `;
+
+  if (A?.combos && Object.keys(A.combos).length > 0) {
+    const comboEntries = Object.entries(A.combos).sort((a,b)=>b[1].attempts-a[1].attempts).slice(0,8);
+    makeChart('chart-scout-combos', 'bar', {
+      labels: comboEntries.map(([k,v]) => v.name||k),
+      datasets: [
+        { label: 'Attempts', data: comboEntries.map(([,v]) => v.attempts), backgroundColor: '#822433aa', borderRadius: 3 },
+        { label: 'Kills',    data: comboEntries.map(([,v]) => v.evals?.['#']||0), backgroundColor: GREEN, borderRadius: 3 },
+      ]
+    }, { scales: { x: { ticks: { maxRotation: 30 } } } });
+  }
+}
+
+// ═══════════════════════════ ATTACK TAB ══════════════════════════════════════
+function getComboStats(seasons, group) {
+  // Aggregate combo breakdown from player_season entries
+  const combos = {};
+  for (const [key, ps] of Object.entries(DATA.player_season)) {
+    const [pnum, season] = key.split('|');
+    if (!seasons.includes(season)) continue;
+    if (!playerInGroup(pnum, season, group)) continue;
+    for (const [cc, cv] of Object.entries(ps.skills?.A?.combos || {})) {
+      if (!combos[cc]) combos[cc] = {attempts:0, evals:{}, kill_pct:0, error_pct:0, efficiency:0};
+      combos[cc].attempts += cv.attempts || 0;
+      for (const [e,n] of Object.entries(cv.evals||{}))
+        combos[cc].evals[e] = (combos[cc].evals[e]||0) + n;
+    }
+  }
+  // Derive metrics
+  for (const cv of Object.values(combos)) {
+    const att = cv.attempts;
+    const ev  = cv.evals;
+    if (att > 0) {
+      cv.kills      = ev['#']||0;
+      cv.errors     = ev['=']||0;
+      cv.kill_pct   = +((ev['#']||0)/att*100).toFixed(1);
+      cv.error_pct  = +((ev['=']||0)/att*100).toFixed(1);
+      cv.efficiency = +(((ev['#']||0)-(ev['=']||0))/att*100).toFixed(1);
+    }
+  }
+  return combos;
+}
+
+function renderAttack() {
+  const seasonVal = document.getElementById('atk-season').value;
+  const group     = document.getElementById('atk-group').value;
+  const metric    = document.getElementById('atk-metric').value;
+  const seasons   = resolveSeasons(seasonVal);
+
+  const combos = getComboStats(seasons, group);
+  const allCodes = [...PIN_COMBOS, ...MIDDLE_COMBOS]
+    .filter(cc => combos[cc]?.attempts > 0);
+
+  // KPI row
+  const totalAtt  = allCodes.reduce((s,cc) => s+(combos[cc]?.attempts||0), 0);
+  const totalKill = allCodes.reduce((s,cc) => s+(combos[cc]?.kills||0), 0);
+  const totalErr  = allCodes.reduce((s,cc) => s+(combos[cc]?.errors||0), 0);
+  const topCombo  = allCodes.sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0))[0];
+
+  document.getElementById('atk-kpi-row').innerHTML = `
+    <div class="card-sm"><div class="card-title">Total Attacks</div>
+      <div class="stat-val big">${fmt(totalAtt)}</div></div>
+    <div class="card-sm"><div class="card-title">Kill %</div>
+      <div class="stat-val big green">${totalAtt ? pct(totalKill/totalAtt*100) : '—'}</div></div>
+    <div class="card-sm"><div class="card-title">Efficiency</div>
+      <div class="stat-val big" style="color:var(--gold)">${totalAtt ? pct((totalKill-totalErr)/totalAtt*100) : '—'}</div></div>
+    <div class="card-sm"><div class="card-title">Top Call</div>
+      <div class="stat-val big" style="font-size:22px">${topCombo||'—'}</div>
+      <div class="stat-lbl">${COMBO_NAMES[topCombo]||''}</div></div>
+  `;
+
+  // Sort codes by attempts for charts
+  const sortedCodes = [...allCodes].sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0));
+
+  // Distribution bar chart
+  const metricLabel = {attempts:'Attempts',kill_pct:'Kill %',efficiency:'Efficiency %',error_pct:'Error %'}[metric];
+  makeChart('chart-atk-dist', 'bar', {
+    labels: sortedCodes.map(cc => `${cc}\n${COMBO_NAMES[cc]||cc}`),
+    datasets: [{
+      label: metricLabel,
+      data: sortedCodes.map(cc => combos[cc]?.[metric] || 0),
+      backgroundColor: sortedCodes.map(cc => COMBO_COLORS[cc] || '#888'),
+      borderRadius: 4,
+    }]
+  }, {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { callback: v => metric !== 'attempts' ? v+'%' : v } },
+      y: { ticks: { font: { size: 10 } } }
+    }
+  });
+
+  // Efficiency grouped bar chart
+  makeChart('chart-atk-eff', 'bar', {
+    labels: sortedCodes,
+    datasets: [
+      { label: 'Kill %',  data: sortedCodes.map(cc => combos[cc]?.kill_pct||0),  backgroundColor: GREEN, borderRadius: 3 },
+      { label: 'Eff %',   data: sortedCodes.map(cc => combos[cc]?.efficiency||0), backgroundColor: GOLD,  borderRadius: 3 },
+      { label: 'Error %', data: sortedCodes.map(cc => combos[cc]?.error_pct||0), backgroundColor: RED,   borderRadius: 3 },
+    ]
+  }, {
+    scales: { y: { ticks: { callback: v => v+'%' } } }
+  });
+
+  // Player breakdown table
+  const playerData = [];
+  const activeSeason = seasonVal === 'all' ? null : seasonVal;
+  for (const [key, ps] of Object.entries(DATA.player_season)) {
+    const [pnum, season] = key.split('|');
+    if (!seasons.includes(season)) continue;
+    if (!playerInGroup(pnum, season, group)) continue;
+    if (!ps.skills?.A?.attempts) continue;
+    const name = getPlayerName(pnum, season);
+    const existing = playerData.find(p => p.name === name && p.pnum === pnum);
+    if (existing) {
+      // merge same player across seasons
+      for (const cc of allCodes) {
+        const cv = ps.skills?.A?.combos?.[cc];
+        if (!cv) continue;
+        if (!existing.combos[cc]) existing.combos[cc] = {attempts:0,kills:0,errors:0};
+        existing.combos[cc].attempts += cv.attempts||0;
+        existing.combos[cc].kills    += cv.evals?.['#']||0;
+        existing.combos[cc].errors   += cv.evals?.['=']||0;
+      }
+      existing.totalAtt += ps.skills.A.attempts||0;
+    } else {
+      const entry = { pnum, name, season, totalAtt: ps.skills?.A?.attempts||0, combos: {} };
+      for (const cc of allCodes) {
+        const cv = ps.skills?.A?.combos?.[cc];
+        if (cv) entry.combos[cc] = {
+          attempts: cv.attempts||0,
+          kills:    cv.evals?.['#']||0,
+          errors:   cv.evals?.['=']||0,
+        };
+      }
+      playerData.push(entry);
+    }
+  }
+  playerData.sort((a,b) => b.totalAtt - a.totalAtt);
+
+  const topCodes = sortedCodes.slice(0, 8);
+  document.getElementById('atk-player-thead').innerHTML = `<tr>
+    <th>#</th><th>Player</th><th class="num">Total</th>
+    ${topCodes.map(cc => `<th class="num" title="${COMBO_NAMES[cc]||cc}">${cc}</th>`).join('')}
+  </tr>`;
+  document.getElementById('atk-player-tbody').innerHTML = playerData.map(p => `<tr>
+    <td class="gold">#${p.pnum}</td>
+    <td>${p.name}</td>
+    <td class="num">${p.totalAtt}</td>
+    ${topCodes.map(cc => {
+      const cv = p.combos[cc];
+      if (!cv || !cv.attempts) return '<td class="num" style="color:var(--text-dim)">—</td>';
+      const kp = cv.attempts ? (cv.kills/cv.attempts*100).toFixed(0) : 0;
+      return `<td class="num" title="${cv.attempts} att">${kp}%<span style="font-size:10px;color:var(--text-dim);margin-left:3px">${cv.attempts}</span></td>`;
+    }).join('')}
+  </tr>`).join('') || '<tr><td colspan="20" class="empty">No data</td></tr>';
+
+  // Season trend
+  const trendCodes = ['X5','X6','XP','X1'].filter(cc => allCodes.includes(cc));
+  makeChart('chart-atk-season', 'line', {
+    labels: DATA.meta.seasons,
+    datasets: trendCodes.map(cc => ({
+      label: `${cc} Kill%`,
+      data: DATA.meta.seasons.map(s => {
+        const sc = getComboStats([s], group);
+        return sc[cc]?.kill_pct || null;
+      }),
+      borderColor: COMBO_COLORS[cc],
+      backgroundColor: COMBO_COLORS[cc]+'33',
+      tension: 0.3, pointRadius: 5, fill: false, spanGaps: false,
+    }))
+  }, { scales: { y: { min:0, ticks:{ callback: v=>v+'%' } } } });
+}
+
+// ═══════════════════════════ SERVE & RECEIVE TAB ══════════════════════════════
+function renderServRcv() {
+  const seasonVal = document.getElementById('sr-season').value;
+  const group     = document.getElementById('sr-group').value;
+  const view      = document.getElementById('sr-view').value;
+  const seasons   = resolveSeasons(seasonVal);
+
+  // Build per-player serve/receive aggregates
+  const playerStats = {};
+  for (const [key, ps] of Object.entries(DATA.player_season)) {
+    const [pnum, season] = key.split('|');
+    if (!seasons.includes(season)) continue;
+    if (!playerInGroup(pnum, season, group)) continue;
+    const name = getPlayerName(pnum, season);
+    const pid  = `${pnum}|${name}`;
+
+    if (!playerStats[pid]) playerStats[pid] = { pnum, name, season, serve_ev:{}, serve_att:0, rcv_ev:{}, rcv_att:0 };
+    const entry = playerStats[pid];
+
+    const S = ps.skills?.S;
+    if (S) {
+      entry.serve_att += S.attempts||0;
+      for (const [e,n] of Object.entries(S.evals||{}))
+        entry.serve_ev[e] = (entry.serve_ev[e]||0) + n;
+    }
+    const R = ps.skills?.R;
+    if (R) {
+      entry.rcv_att += R.attempts||0;
+      for (const [e,n] of Object.entries(R.evals||{}))
+        entry.rcv_ev[e] = (entry.rcv_ev[e]||0) + n;
+    }
+  }
+
+  const players = Object.values(playerStats)
+    .filter(p => p.serve_att > 0 || p.rcv_att > 0)
+    .sort((a,b) => (b.serve_att + b.rcv_att) - (a.serve_att + a.rcv_att));
+
+  // Team-level evals
+  const teamServeEv = {}, teamRcvEv = {};
+  let teamServeAtt = 0, teamRcvAtt = 0;
+  for (const p of players) {
+    teamServeAtt += p.serve_att;
+    teamRcvAtt   += p.rcv_att;
+    for (const [e,n] of Object.entries(p.serve_ev)) teamServeEv[e] = (teamServeEv[e]||0)+n;
+    for (const [e,n] of Object.entries(p.rcv_ev))   teamRcvEv[e]   = (teamRcvEv[e]||0)+n;
+  }
+
+  const tmS = serveMetrics(teamServeEv, teamServeAtt);
+  const tmR = rcvMetrics(teamRcvEv, teamRcvAtt);
+
+  // KPI row
+  document.getElementById('sr-kpi-row').innerHTML = `
+    <div class="card-sm"><div class="card-title">Serve Ace %</div>
+      <div class="stat-val big" style="color:var(--blue)">${tmS ? pct(tmS.ace_pct) : '—'}</div>
+      <div class="stat-lbl">${fmt(teamServeAtt)} serves</div></div>
+    <div class="card-sm"><div class="card-title">Serve Err %</div>
+      <div class="stat-val big red">${tmS ? pct(tmS.err_pct) : '—'}</div>
+      <div class="stat-lbl">OoS ${tmS ? pct(tmS.oos_pct) : '—'}</div></div>
+    <div class="card-sm"><div class="card-title">Reception AVG</div>
+      <div class="stat-val big" style="color:var(--gold)">${tmR ? tmR.avg.toFixed(2) : '—'}</div>
+      <div class="stat-lbl">${fmt(teamRcvAtt)} receptions</div></div>
+    <div class="card-sm"><div class="card-title">GP %</div>
+      <div class="stat-val big green">${tmR ? pct(tmR.gp_pct) : '—'}</div>
+      <div class="stat-lbl">Perfect ${tmR ? pct(tmR.perf_pct) : '—'}</div></div>
+  `;
+
+  // Serve table
+  const serveTbody = document.getElementById('serve-tbody');
+  serveTbody.innerHTML = players.filter(p => p.serve_att > 0).map(p => {
+    const sm = serveMetrics(p.serve_ev, p.serve_att);
+    return `<tr>
+      <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+      <td class="num">${p.serve_att}</td>
+      <td class="num green">${pct(sm?.ace_pct)}</td>
+      <td class="num red">${pct(sm?.err_pct)}</td>
+      <td class="num">${pct(sm?.ogp_pct)}</td>
+      <td class="num" style="color:var(--gold)">${pct(sm?.oos_pct)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="empty">No serve data</td></tr>';
+
+  // Reception table
+  const rcvTbody = document.getElementById('rcv-tbody');
+  rcvTbody.innerHTML = players.filter(p => p.rcv_att > 0).sort((a,b)=>b.rcv_att-a.rcv_att).map(p => {
+    const rm = rcvMetrics(p.rcv_ev, p.rcv_att);
+    return `<tr>
+      <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+      <td class="num">${p.rcv_att}</td>
+      <td class="num gold">${rm?.avg.toFixed(2) || '—'}</td>
+      <td class="num green">${pct(rm?.perf_pct)}</td>
+      <td class="num">${pct(rm?.gp_pct)}</td>
+      <td class="num" style="color:#ff9800">${pct(rm?.oos_pct)}</td>
+      <td class="num red">${pct(rm?.err_pct)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="empty">No reception data</td></tr>';
+
+  // Serve breakdown chart
+  const serveLabels = ['Ace (#)', 'Good Press (+)', 'Half (/)', 'Weak (-)', 'Error (=)'];
+  const serveVals   = ['#','+','/','–','='].map(e => teamServeEv[e] || teamServeEv[e==='–'?'-':e] || 0);
+  serveVals[3] = teamServeEv['-']||0;
+  makeChart('chart-serve-evals', 'doughnut', {
+    labels: serveLabels,
+    datasets: [{ data: serveVals,
+      backgroundColor:[GREEN,'#64b5f6','#ff9800','#ff7043',RED],
+      borderColor:'#1a1a1a', borderWidth:2 }]
+  }, {
+    scales:{x:{display:false},y:{display:false}},
+    plugins:{legend:{position:'right', labels:{boxWidth:12,font:{size:11}}}}
+  });
+
+  // Reception breakdown chart
+  const rcvLabels = ['Perfect (#)', 'Good (+)', 'Half (/)', 'Poor (-)', 'Error (=)'];
+  const rcvVals   = ['#','+','/','-','='].map(e => teamRcvEv[e]||0);
+  makeChart('chart-rcv-evals', 'doughnut', {
+    labels: rcvLabels,
+    datasets: [{ data: rcvVals,
+      backgroundColor:[GREEN,'#64b5f6','#ff9800','#ff7043',RED],
+      borderColor:'#1a1a1a', borderWidth:2 }]
+  }, {
+    scales:{x:{display:false},y:{display:false}},
+    plugins:{legend:{position:'right', labels:{boxWidth:12,font:{size:11}}}}
+  });
+
+  // Reception AVG trend across seasons
+  makeChart('chart-rcv-trend', 'line', {
+    labels: DATA.meta.seasons,
+    datasets: [{
+      label: 'Reception AVG',
+      data: DATA.meta.seasons.map(s => {
+        const ss = DATA.season_stats[s];
+        const R  = ss?.skills?.R;
+        if (!R?.attempts) return null;
+        const ev = R.evals||{};
+        return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0))/R.attempts).toFixed(3);
+      }),
+      borderColor: GOLD, backgroundColor: GOLD+'33',
+      tension:0.3, fill:true, pointRadius:6, spanGaps:false,
+    }]
+  }, {
+    scales:{y:{min:1.5, max:3, ticks:{callback:v=>v.toFixed(2)}}}
+  });
+
+  // ── Receive Zone Breakdown ────────────────────────────────────────────────
+  // Aggregate zone data across selected seasons
+  const ZONE_LABELS = { '1':'Zone 1 (Back Right)', '5':'Zone 5 (Back Left)', '6':'Zone 6 (Back Middle)' };
+  const ZONE_COLORS = { '1': MAROON, '5': '#2196f3', '6': GOLD };
+  const teamZones = {};
+  for (const s of seasons) {
+    const sz = DATA.season_stats[s]?.rcv_zones || {};
+    for (const [z, zd] of Object.entries(sz)) {
+      if (!teamZones[z]) teamZones[z] = { attempts:0, evals:{} };
+      teamZones[z].attempts += zd.attempts||0;
+      for (const [e,n] of Object.entries(zd.evals||{}))
+        teamZones[z].evals[e] = (teamZones[z].evals[e]||0) + n;
+    }
+  }
+  // Derive team zone metrics
+  function zoneAvg(zd) {
+    const att = zd?.attempts||0;
+    if (!att) return null;
+    const ev = zd.evals||{};
+    return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0))/att;
+  }
+  function zoneGP(zd) {
+    const att = zd?.attempts||0;
+    if (!att) return null;
+    const ev = zd.evals||{};
+    return (ev['#']||0+ev['+']+ev['/']||0)/att*100;
+  }
+
+  // Team zone display
+  const zoneTeamEl = document.getElementById('rcv-zone-team');
+  const hasZones = Object.keys(teamZones).length > 0;
+  if (!hasZones) {
+    zoneTeamEl.innerHTML = '<div class="empty">No zone data for selected season(s). Zone data starts Fall 2026.</div>';
+  } else {
+    zoneTeamEl.innerHTML = ['1','5','6'].map(z => {
+      const zd = teamZones[z];
+      if (!zd || !zd.attempts) return '';
+      const ev = zd.evals||{};
+      const att = zd.attempts;
+      const avg = zoneAvg(zd);
+      const gp  = att ? (((ev['#']||0)+(ev['+'||0]||ev['+']||0)+(ev['/'||0]||ev['/']||0))/att*100) : 0;
+      const err = att ? ((ev['='||0]||ev['=']||0)/att*100) : 0;
+      const bar = avg ? Math.min(100, (avg/3)*100) : 0;
+      return `<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px;font-weight:700;color:${ZONE_COLORS[z]}">${ZONE_LABELS[z]||'Zone '+z}</span>
+          <span style="font-size:11px;color:var(--text-muted)">${fmt(att)} rcv</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="flex:1;height:8px;background:var(--surface3);border-radius:4px;overflow:hidden">
+            <div style="width:${bar.toFixed(1)}%;height:100%;background:${ZONE_COLORS[z]};border-radius:4px"></div>
+          </div>
+          <span style="font-size:16px;font-weight:700;color:${ZONE_COLORS[z]};width:36px">${avg?avg.toFixed(2):'—'}</span>
+        </div>
+        <div style="display:flex;gap:16px">
+          <span style="font-size:11px;color:var(--green)">GP ${gp.toFixed(1)}%</span>
+          <span style="font-size:11px;color:var(--text-muted)">Err ${err.toFixed(1)}%</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Per-player zone table
+  const playerZones = {};
+  for (const [key, ps] of Object.entries(DATA.player_season)) {
+    const [pnum, season] = key.split('|');
+    if (!seasons.includes(season)) continue;
+    if (!playerInGroup(pnum, season, group)) continue;
+    const name = getPlayerName(pnum, season);
+    const pid  = `${pnum}|${name}`;
+    if (!playerZones[pid]) playerZones[pid] = { pnum, name, zones:{} };
+    const zs = ps.rcv_zones||{};
+    for (const [z, zd] of Object.entries(zs)) {
+      if (!playerZones[pid].zones[z]) playerZones[pid].zones[z] = { attempts:0, avg:null };
+      playerZones[pid].zones[z].attempts += zd.attempts||0;
+      // Recompute avg inline
+      const ev = zd.evals||{};
+      const att = zd.attempts||0;
+      if (att) {
+        const a = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0))/att;
+        // weighted merge
+        const cur = playerZones[pid].zones[z];
+        const prevAtt = cur.attempts - att;
+        if (cur._sum === undefined) cur._sum = 0;
+        cur._sum += a * att;
+      }
+    }
+  }
+  const zoneTbody = document.getElementById('rcv-zone-tbody');
+  const pzList = Object.values(playerZones).filter(p =>
+    Object.values(p.zones).some(z => z.attempts > 0)
+  ).sort((a,b) => {
+    const ta = Object.values(a.zones).reduce((s,z)=>s+z.attempts,0);
+    const tb = Object.values(b.zones).reduce((s,z)=>s+z.attempts,0);
+    return tb-ta;
+  });
+  // Rebuild zone averages from player_season directly for accuracy
+  const pzDisplay = {};
+  for (const [key, ps] of Object.entries(DATA.player_season)) {
+    const [pnum, season] = key.split('|');
+    if (!seasons.includes(season)) continue;
+    if (!playerInGroup(pnum, season, group)) continue;
+    const name = getPlayerName(pnum, season);
+    const pid  = `${pnum}|${name}`;
+    if (!pzDisplay[pid]) pzDisplay[pid] = { pnum, name, z1a:0,z1s:0, z5a:0,z5s:0, z6a:0,z6s:0 };
+    const p = pzDisplay[pid];
+    for (const [z, zd] of Object.entries(ps.rcv_zones||{})) {
+      const att = zd.attempts||0;
+      const ev  = zd.evals||{};
+      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0));
+      if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
+      if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
+      if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
+    }
+  }
+  const pzRows = Object.values(pzDisplay)
+    .filter(p => p.z1a+p.z5a+p.z6a > 0)
+    .sort((a,b) => (b.z1a+b.z5a+b.z6a)-(a.z1a+a.z5a+a.z6a));
+  zoneTbody.innerHTML = pzRows.map(p => `<tr>
+    <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+    <td class="num">${p.z1a||'—'}</td>
+    <td class="num gold">${p.z1a?(p.z1s/p.z1a).toFixed(2):'—'}</td>
+    <td class="num">${p.z5a||'—'}</td>
+    <td class="num gold">${p.z5a?(p.z5s/p.z5a).toFixed(2):'—'}</td>
+    <td class="num">${p.z6a||'—'}</td>
+    <td class="num gold">${p.z6a?(p.z6s/p.z6a).toFixed(2):'—'}</td>
+  </tr>`).join('') || '<tr><td colspan="8" class="empty">No zone data</td></tr>';
+
+  // Zone AVG trend chart
+  const zoneSeasonData = {};
+  for (const s of DATA.meta.seasons) {
+    const zs = DATA.season_stats[s]?.rcv_zones||{};
+    ['1','5','6'].forEach(z => {
+      if (!zoneSeasonData[z]) zoneSeasonData[z] = [];
+      const zd = zs[z];
+      if (zd?.attempts) {
+        const ev = zd.evals||{};
+        const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0))/zd.attempts;
+        zoneSeasonData[z].push(+avg.toFixed(3));
+      } else {
+        zoneSeasonData[z].push(null);
+      }
+    });
+  }
+  makeChart('chart-zone-trend', 'line', {
+    labels: DATA.meta.seasons,
+    datasets: ['1','5','6'].map(z => ({
+      label: ZONE_LABELS[z]||'Zone '+z,
+      data: zoneSeasonData[z],
+      borderColor: ZONE_COLORS[z], backgroundColor: ZONE_COLORS[z]+'33',
+      tension:0.3, fill:false, pointRadius:5, spanGaps:false,
+    }))
+  }, {
+    scales:{y:{min:1.5, max:3, ticks:{callback:v=>v.toFixed(2)}}}
+  });
+}
+
+// ═══════════════════════════ SETTER TAB ═══════════════════════════════════════
+function renderSetter() {
+  const seasonVal = document.getElementById('set-season').value;
+  const seasons   = resolveSeasons(seasonVal);
+
+  // Aggregate combos from all hitters
+  const pinCombos  = getComboStats(seasons, 'pins');
+  const midCombos  = getComboStats(seasons, 'middles');
+  const allCombos  = getComboStats(seasons, 'all');
+
+  const pinAtt  = PIN_COMBOS.reduce((s,cc)=>s+(pinCombos[cc]?.attempts||0),0);
+  const midAtt  = MIDDLE_COMBOS.reduce((s,cc)=>s+(midCombos[cc]?.attempts||0),0);
+  const totalAtt = pinAtt + midAtt;
+
+  // BIC / back-row as separate category
+  const bicAtt  = (allCombos['XP']?.attempts||0) + (allCombos['PP']?.attempts||0) + (allCombos['X8']?.attempts||0);
+
+  // KPI
+  document.getElementById('set-kpi-row').innerHTML = `
+    <div class="card-sm"><div class="card-title">Total Sets</div>
+      <div class="stat-val big">${fmt(totalAtt)}</div></div>
+    <div class="card-sm"><div class="card-title">Pin %</div>
+      <div class="stat-val big" style="color:var(--maroon)">${totalAtt ? pct(pinAtt/totalAtt*100) : '—'}</div>
+      <div class="stat-lbl">${fmt(pinAtt)} sets</div></div>
+    <div class="card-sm"><div class="card-title">Quick %</div>
+      <div class="stat-val big" style="color:#9c27b0">${totalAtt ? pct(midAtt/totalAtt*100) : '—'}</div>
+      <div class="stat-lbl">${fmt(midAtt)} sets</div></div>
+    <div class="card-sm"><div class="card-title">BIC / Back Row %</div>
+      <div class="stat-val big green">${totalAtt ? pct(bicAtt/totalAtt*100) : '—'}</div>
+      <div class="stat-lbl">${fmt(bicAtt)} sets</div></div>
+  `;
+
+  // Overall distribution doughnut
+  const distCodes = [...PIN_COMBOS,...MIDDLE_COMBOS].filter(cc=>allCombos[cc]?.attempts>0);
+  makeChart('chart-set-dist', 'doughnut', {
+    labels: distCodes.map(cc => `${cc} — ${COMBO_NAMES[cc]||cc}`),
+    datasets: [{
+      data: distCodes.map(cc => allCombos[cc]?.attempts||0),
+      backgroundColor: distCodes.map(cc => COMBO_COLORS[cc]||'#888'),
+      borderColor:'#1a1a1a', borderWidth:2,
+    }]
+  }, {
+    scales:{x:{display:false},y:{display:false}},
+    plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}}}
+  });
+
+  // Pin vs Middle vs BIC grouped bar
+  const groupLabels = ['Pin Calls', 'Quick Calls', 'BIC/Back Row'];
+  const groupAtts   = [pinAtt - bicAtt, midAtt, bicAtt].map(v=>Math.max(0,v));
+  makeChart('chart-set-group', 'bar', {
+    labels: groupLabels,
+    datasets: [
+      { label:'Attempts', data:groupAtts, backgroundColor:[MAROON,'#9c27b0',GREEN], borderRadius:4 }
+    ]
+  }, { plugins:{legend:{display:false}} });
+
+  // Season trend
+  const trendCodes = ['X5','X6','XP','X1','X7'].filter(cc=>distCodes.includes(cc));
+  makeChart('chart-set-trend', 'line', {
+    labels: DATA.meta.seasons,
+    datasets: trendCodes.map(cc => {
+      const totalByS = DATA.meta.seasons.map(s => {
+        const sc = getComboStats([s],'all');
+        return sc[cc]?.attempts||0;
+      });
+      const attByS = DATA.meta.seasons.map(s => {
+        const sc = getComboStats([s],'all');
+        const tot = [...PIN_COMBOS,...MIDDLE_COMBOS].reduce((sum,c)=>sum+(sc[c]?.attempts||0),0);
+        const a = sc[cc]?.attempts||0;
+        return tot>0 ? +(a/tot*100).toFixed(1) : 0;
+      });
+      return {
+        label:`${cc} %`, data:attByS,
+        borderColor:COMBO_COLORS[cc]||'#888', backgroundColor:(COMBO_COLORS[cc]||'#888')+'33',
+        tension:0.3, fill:false, pointRadius:5, spanGaps:false,
+      };
+    })
+  }, { scales:{y:{min:0,max:50,ticks:{callback:v=>v+'%'}}} });
+
+  // Efficiency table
+  const allCodes = [...new Set([...PIN_COMBOS,...MIDDLE_COMBOS])].filter(cc=>allCombos[cc]?.attempts>0);
+  const totalAll = allCodes.reduce((s,cc)=>s+(allCombos[cc]?.attempts||0),0);
+  allCodes.sort((a,b)=>(allCombos[b]?.attempts||0)-(allCombos[a]?.attempts||0));
+  document.getElementById('set-eff-tbody').innerHTML = allCodes.map(cc => {
+    const cv = allCombos[cc];
+    const grp = MIDDLE_COMBOS.includes(cc)?'Quick':PIN_COMBOS.slice(4).includes(cc)?'Back Row':'Pin';
+    return `<tr>
+      <td><span style="color:${COMBO_COLORS[cc]||'#888'};font-weight:700">${cc}</span></td>
+      <td style="color:var(--text-muted)">${COMBO_NAMES[cc]||cc}</td>
+      <td class="num">${cv.attempts}</td>
+      <td class="num">${totalAll ? pct(cv.attempts/totalAll*100) : '—'}</td>
+      <td class="num">${cv.kills||0}</td>
+      <td class="num green">${pct(cv.kill_pct)}</td>
+      <td class="num">${cv.errors||0}</td>
+      <td class="num red">${pct(cv.error_pct)}</td>
+      <td class="num gold">${pct(cv.efficiency)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════ FBSO TAB ════════════════════════════════════════
+function renderFbso() {
+  const grid = document.getElementById('fbso-rotation-grid');
+  grid.innerHTML = [1,2,3,4,5,6].map(r => `
+    <div class="card">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">Rotation ${r}</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-val" style="color:var(--text-dim)">—</div><div class="stat-lbl">FBSO %</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--text-dim)">—</div><div class="stat-lbl">SO %</div></div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text-dim)">
+        Rcv Zone: — &nbsp;|&nbsp; In-Sys: —
+      </div>
+      <div style="margin-top:8px">
+        ${['X5','X6','XP','X1'].map(cc=>`
+          <div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span style="color:${COMBO_COLORS[cc]};font-weight:700;font-size:11px;width:24px">${cc}</span>
+            <div style="flex:1;height:4px;background:var(--surface3);border-radius:2px">
+              <div style="width:0%;height:100%;background:${COMBO_COLORS[cc]};border-radius:2px"></div>
+            </div>
+            <span style="font-size:11px;color:var(--text-dim)">—</span>
+          </div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── START ────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Large data files — never commit these
+volleyball_data.json
+dashboard_data.json
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Misc
+*.log
