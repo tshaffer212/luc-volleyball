@@ -35,7 +35,7 @@ from pathlib import Path
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # Absolute path to the DVW source folders
-DVW_ROOT = Path(__file__).parent.parent.parent / "Volleyball DVW Files"
+DVW_ROOT = Path(__file__).resolve().parent.parent.parent / "Volleyball DVW Files"
 
 # Folder name → (season label, session type, is_scout)
 FOLDER_MAP = {
