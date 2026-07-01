@@ -897,6 +897,14 @@ const EVAL_NAMES = {'#':'Kill/Ace/Perfect', '+':'Positive', '/':'Half-Positive',
 const POS_NAMES  = {'1':'Libero', '2':'Outside', '3':'Opposite', '4':'Middle', '5':'Setter', '6':'Def. Spec'};
 const SEASONS_SORTED = ['Fall 2025','Spring 2025','Fall 2026','Spring 2026'];
 
+// Returns seasons in the defined order; any season not listed above is appended at the end.
+function orderedSeasons() {
+  const present = new Set(DATA.meta.seasons);
+  const known   = SEASONS_SORTED.filter(s => present.has(s));
+  const extra   = DATA.meta.seasons.filter(s => !SEASONS_SORTED.includes(s));
+  return [...known, ...extra];
+}
+
 const CHART_DEFAULTS = {
   responsive: true,
   maintainAspectRatio: true,
@@ -998,7 +1006,7 @@ function getPlayerAggSeason(pnum, seasons) {
 
 // Get seasons for a filter value
 function resolveSeasons(val) {
-  if (val === 'all') return DATA.meta.seasons;
+  if (val === 'all') return orderedSeasons();
   return [val];
 }
 
@@ -1021,7 +1029,7 @@ function init() {
     `${m.seasons.length} Seasons • ${m.total_sessions} Sessions • ${m.total_actions.toLocaleString()} Coded Actions`;
 
   // Populate season dropdowns
-  const allSeasons = DATA.meta.seasons;
+  const allSeasons = orderedSeasons();
   ['team-season-filter','player-season-filter','atk-season','sr-season','set-season','rpt-season'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1107,7 +1115,7 @@ function aggregateSessionStats(sessionIds) {
 // seasonFilter: array of season strings to include (omit/null for all).
 // Returns { monthKeys, shortLabels, sessionIdsByMonth }
 function getMonthBuckets(seasonFilter) {
-  const use = (seasonFilter && seasonFilter.length) ? seasonFilter : DATA.meta.seasons;
+  const use = (seasonFilter && seasonFilter.length) ? seasonFilter : orderedSeasons();
   const byMonth = {};
   for (const sess of DATA.sessions) {
     if (!sess.date || !use.includes(sess.season) || sess.type === 'scout') continue;
@@ -2177,7 +2185,7 @@ function renderTeam() {
   `;
 
   // Chart: actions by season
-  const seasons = DATA.meta.seasons;
+  const seasons = orderedSeasons();
   makeChart('chart-team-seasons', 'bar', {
     labels: seasons,
     datasets: [{
@@ -2205,7 +2213,7 @@ function renderTeam() {
   });
 
   // Season comparison charts
-  const sAll = DATA.meta.seasons;
+  const sAll = orderedSeasons();
   const skillsToCompare = ['A','S','R','B'];
   const killData = skillsToCompare.map(sk => ({
     label: SKILL_NAMES[sk],
@@ -2666,14 +2674,14 @@ function selectPlayer(num, season) {
 
 function renderPlayerDetail(num, detailSeason) {
   detailSeason = detailSeason || 'all';
-  const seasons = detailSeason === 'all' ? DATA.meta.seasons : [detailSeason];
+  const seasons = detailSeason === 'all' ? orderedSeasons() : [detailSeason];
   const p = getPlayerInfo(num, detailSeason === 'all' ? null : detailSeason);
   if (!p) return;
   const agg = getPlayerAggSeason(num, seasons);
   const container = document.getElementById('player-detail');
 
   // Find all seasons this player-number has data in
-  const careerSeasons = DATA.meta.seasons.filter(s => {
+  const careerSeasons = orderedSeasons().filter(s => {
     const k = `${num}|${s}`;
     // Only count seasons where this number maps to the same person
     const seasonName = DATA.players_by_season?.[s]?.[num]?.name;
@@ -3066,10 +3074,10 @@ function renderAttack() {
   // Season trend
   const trendCodes = ['X5','X6','XP','X1'].filter(cc => allCodes.includes(cc));
   makeChart('chart-atk-season', 'line', {
-    labels: DATA.meta.seasons,
+    labels: orderedSeasons(),
     datasets: trendCodes.map(cc => ({
       label: `${cc} Kill%`,
-      data: DATA.meta.seasons.map(s => {
+      data: orderedSeasons().map(s => {
         const sc = getComboStats([s], group);
         return sc[cc]?.kill_pct || null;
       }),
