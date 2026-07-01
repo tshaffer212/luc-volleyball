@@ -188,6 +188,27 @@
   .badge-practice { background: rgba(254,188,24,0.15); color: var(--gold); }
   .badge-match { background: rgba(141,0,52,0.3); color: #f08090; }
 
+  /* Xlsx-style report tables */
+  .xlsx-wrap { overflow-x: auto; }
+  .xlsx-tbl { border-collapse: collapse; min-width: 100%; font-size: 12px; white-space: nowrap; }
+  .xlsx-tbl th, .xlsx-tbl td { padding: 4px 10px; border: 1px solid #2a2a2a; }
+  .xlsx-tbl th { font-weight: 600; }
+  .xlsx-sec-hdr td { background: var(--maroon-dark); color: #fff; font-size: 13px; font-weight: 700; text-align: center; padding: 7px; letter-spacing: 0.5px; }
+  .xlsx-grp-hdr td { background: var(--maroon); color: #fff; font-weight: 700; font-size: 12px; padding: 5px 10px; }
+  .xlsx-col-hdr th { background: #1e1e1e; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .xlsx-sub-hdr th { background: #181818; color: var(--text-dim); font-size: 10px; }
+  .xlsx-tot-row td { background: #2a2020; font-weight: 700; border-top: 2px solid var(--maroon); }
+  .xlsx-team-tot td { background: var(--maroon); color: #fff; font-weight: 700; }
+  .xlsx-r { text-align: right; font-variant-numeric: tabular-nums; }
+  .xlsx-gold { color: var(--gold); font-weight: 600; }
+  .xlsx-green { color: var(--green); }
+  .xlsx-red { color: var(--red); }
+  .xlsx-dim { color: var(--text-dim); }
+  /* Sub-tabs */
+  .rpt-sub-tab { padding: 8px 18px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; border-radius: 6px; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+  .rpt-sub-tab:hover { color: var(--text); border-color: var(--gold); }
+  .rpt-sub-tab.active { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+
   /* Auth overlay */
   #auth-overlay {
     position: fixed; inset: 0; background: #0f0f0f;
@@ -284,6 +305,7 @@
 <nav>
   <button class="tab-btn active" onclick="showTab('team')">Team</button>
   <button class="tab-btn" onclick="showTab('season')">Season</button>
+  <button class="tab-btn" onclick="showTab('reports')">Reports</button>
   <button class="tab-btn" onclick="showTab('attack')">Attack</button>
   <button class="tab-btn" onclick="showTab('servrcv')">Serve &amp; Receive</button>
   <button class="tab-btn" onclick="showTab('setter')">Setter</button>
@@ -371,6 +393,83 @@
 
   <div id="season-overview-content"></div>
   <div id="season-sessions-content" style="display:none"></div>
+</div>
+
+<!-- ═══════════════════════════ REPORTS TAB ══════════════════════════ -->
+<div id="tab-reports" class="tab-panel">
+  <div class="filter-bar">
+    <div><label>Season</label><br>
+      <select id="rpt-season" onchange="renderReports()">
+        <option value="all">All Seasons</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Weekly Trend Section -->
+  <div class="section-title">Week-by-Week Trends</div>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Attack Efficiency % by Week</h3>
+      <div class="chart-wrap"><canvas id="chart-wk-atk"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Reception AVG by Week</h3>
+      <div class="chart-wrap"><canvas id="chart-wk-rcv"></canvas></div>
+    </div>
+  </div>
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>Serve Ace % &amp; Error % by Week</h3>
+      <div class="chart-wrap"><canvas id="chart-wk-srv"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Actions Coded by Week</h3>
+      <div class="chart-wrap"><canvas id="chart-wk-vol"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Session Browser -->
+  <div class="section-title mt-20">Session Browser</div>
+  <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;margin-top:-10px">
+    Click sessions to select them. Selected sessions aggregate together in the report below.
+  </div>
+  <div id="rpt-session-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+
+  <div id="rpt-selected-label" style="font-size:12px;color:var(--text-muted);margin-bottom:14px;display:none">
+    Showing stats for <span id="rpt-selected-count" style="color:var(--gold);font-weight:700"></span> session(s)
+    — <button onclick="clearRptSelection()" style="background:none;border:none;color:var(--text-dim);text-decoration:underline;cursor:pointer;font-size:12px">clear</button>
+  </div>
+
+  <!-- KPI row for selected sessions -->
+  <div class="grid-4" id="rpt-kpi-row" style="display:none"></div>
+
+  <div id="rpt-empty" class="empty mt-20">Select one or more sessions above to see a detailed report.</div>
+
+  <div id="rpt-xlsx-area" style="display:none">
+    <div style="display:flex;gap:6px;margin-top:16px;margin-bottom:16px;flex-wrap:wrap">
+      <button id="rpt-subtab-servrcv"  class="rpt-sub-tab active" onclick="showRptTab('servrcv')">Serve &amp; Receive</button>
+      <button id="rpt-subtab-attack"   class="rpt-sub-tab"        onclick="showRptTab('attack')">Attack by Set Type</button>
+      <button id="rpt-subtab-overview" class="rpt-sub-tab"        onclick="showRptTab('overview')">Overview</button>
+    </div>
+    <div id="rpt-panel-servrcv"  class="card" style="padding:12px;overflow-x:auto"></div>
+    <div id="rpt-panel-attack"   class="card" style="padding:12px;overflow-x:auto;display:none"></div>
+    <div id="rpt-panel-overview" class="card" style="padding:16px;display:none">
+      <div class="grid-2">
+        <div><h3>Skill Breakdown</h3><div id="rpt-skill-breakdown"></div></div>
+        <div><h3>Top Performers</h3>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr>
+                <th>#</th><th>Name</th><th>Skill</th>
+                <th class="num">Att</th><th class="num">K/A/P%</th><th class="num">Err%</th>
+              </tr></thead>
+              <tbody id="rpt-top-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════ ATTACK TAB ═══════════════════════════ -->
@@ -894,7 +993,7 @@ function init() {
 
   // Populate season dropdowns
   const allSeasons = DATA.meta.seasons;
-  ['team-season-filter','player-season-filter','atk-season','sr-season','set-season'].forEach(id => {
+  ['team-season-filter','player-season-filter','atk-season','sr-season','set-season','rpt-season'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     allSeasons.forEach(s => el.add(new Option(s, s)));
@@ -915,12 +1014,681 @@ function init() {
 
   renderTeam();
   renderSeason();
+  renderReports();
   renderAttack();
   renderServRcv();
   renderSetter();
   renderFbso();
   renderPlayerList();
   renderScout();
+}
+
+// ═══════════════════════════ REPORTS TAB ═════════════════════════════════════
+let rptSelected = new Set(); // selected session IDs
+
+function getISOWeek(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+}
+
+function aggregateSessionStats(sessionIds) {
+  // Gather all player_session entries for these sessions
+  const skills = {};
+  const EVALS = ['#','+','/','-','=','!'];
+  function ensureSkill(s) {
+    if (!skills[s]) skills[s] = { attempts:0, evals:{} };
+  }
+  let totalActions = 0;
+  for (const [key, ps] of Object.entries(DATA.player_session)) {
+    if (!sessionIds.has(ps.session_id)) continue;
+    totalActions += ps.actions || 0;
+    for (const [sk, sv] of Object.entries(ps.skills || {})) {
+      ensureSkill(sk);
+      skills[sk].attempts += sv.attempts || 0;
+      for (const [e,n] of Object.entries(sv.evals || {}))
+        skills[sk].evals[e] = (skills[sk].evals[e]||0) + n;
+      // carry combos for A
+      if (sk === 'A' && sv.combos) {
+        if (!skills['A'].combos) skills['A'].combos = {};
+        for (const [cc, cv] of Object.entries(sv.combos)) {
+          if (!skills['A'].combos[cc]) skills['A'].combos[cc] = { name:cv.name, attempts:0, evals:{} };
+          skills['A'].combos[cc].attempts += cv.attempts||0;
+          for (const [e,n] of Object.entries(cv.evals||{}))
+            skills['A'].combos[cc].evals[e] = (skills['A'].combos[cc].evals[e]||0)+n;
+        }
+      }
+    }
+  }
+  return { skills, totalActions };
+}
+
+function renderReports() {
+  const seasonVal = document.getElementById('rpt-season').value;
+  const seasons   = resolveSeasons(seasonVal);
+
+  // Filter sessions
+  const sessions = DATA.sessions
+    .filter(s => seasons.includes(s.season) && s.type !== 'scout')
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+  // ── Weekly trend ─────────────────────────────────────────────────────────
+  // Group sessions by "Season + ISO week" label
+  const weekMap = {};
+  for (const s of sessions) {
+    if (!s.date) continue;
+    const wk = getISOWeek(s.date);
+    if (!wk) continue;
+    const label = s.date.slice(0,7) + ' W' + String(wk).padStart(2,'0'); // YYYY-MM Wnn for sort
+    if (!weekMap[label]) weekMap[label] = [];
+    weekMap[label].push(s.id);
+  }
+  const weekLabels = Object.keys(weekMap).sort();
+  const shortLabels = weekLabels.map(l => {
+    // Turn "2025-10 W42" → "Oct W42"
+    const [ym, w] = l.split(' ');
+    const mo = new Date(ym + '-01').toLocaleString('default',{month:'short'});
+    return mo + ' ' + w;
+  });
+
+  function weekMetric(fn) {
+    return weekLabels.map(lbl => {
+      const sids = new Set(weekMap[lbl]);
+      const { skills } = aggregateSessionStats(sids);
+      return fn(skills);
+    });
+  }
+
+  const atkEff = weekMetric(sk => {
+    const A = sk['A']; if (!A?.attempts) return null;
+    return +((((A.evals['#']||0)-(A.evals['='||0]||A.evals['=']||0))/A.attempts)*100).toFixed(1);
+  });
+  const rcvAvg = weekMetric(sk => {
+    const R = sk['R']; if (!R?.attempts) return null;
+    const ev = R.evals||{};
+    return +((3*(ev['#']||0)+2*(ev['+'||0]||ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0))/R.attempts).toFixed(3);
+  });
+  const srvAce = weekMetric(sk => {
+    const S = sk['S']; if (!S?.attempts) return null;
+    return +((S.evals['#']||0)/S.attempts*100).toFixed(1);
+  });
+  const srvErr = weekMetric(sk => {
+    const S = sk['S']; if (!S?.attempts) return null;
+    return +((S.evals['='||0]||S.evals['=']||0)/S.attempts*100).toFixed(1);
+  });
+  const volAct = weekMetric(sk => Object.values(sk).reduce((s,v)=>s+(v.attempts||0),0)||null);
+
+  makeChart('chart-wk-atk','line',{
+    labels: shortLabels,
+    datasets:[{ label:'Efficiency %', data:atkEff,
+      borderColor:GOLD, backgroundColor:GOLD+'33',
+      tension:0.3, fill:true, pointRadius:4, spanGaps:false }]
+  },{ scales:{ y:{ ticks:{ callback:v=>v+'%' } } } });
+
+  makeChart('chart-wk-rcv','line',{
+    labels: shortLabels,
+    datasets:[{ label:'Reception AVG', data:rcvAvg,
+      borderColor:'#2196f3', backgroundColor:'#2196f333',
+      tension:0.3, fill:true, pointRadius:4, spanGaps:false }]
+  },{ scales:{ y:{ min:1.5, max:3, ticks:{ callback:v=>v.toFixed(2) } } } });
+
+  makeChart('chart-wk-srv','line',{
+    labels: shortLabels,
+    datasets:[
+      { label:'Ace %',   data:srvAce, borderColor:GREEN, backgroundColor:GREEN+'22',
+        tension:0.3, fill:false, pointRadius:4, spanGaps:false },
+      { label:'Error %', data:srvErr, borderColor:RED,   backgroundColor:RED+'22',
+        tension:0.3, fill:false, pointRadius:4, spanGaps:false },
+    ]
+  },{ scales:{ y:{ ticks:{ callback:v=>v+'%' } } } });
+
+  makeChart('chart-wk-vol','bar',{
+    labels: shortLabels,
+    datasets:[{ label:'Actions', data:volAct,
+      backgroundColor:MAROON+'cc', borderRadius:4 }]
+  },{});
+
+  // ── Session browser ───────────────────────────────────────────────────────
+  const listEl = document.getElementById('rpt-session-list');
+  listEl.innerHTML = sessions.map(s => {
+    const sel = rptSelected.has(s.id);
+    const d   = s.date ? new Date(s.date+' 12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Unknown';
+    return `<div onclick="toggleRptSession('${s.id}')" style="
+      cursor:pointer; padding:8px 14px; border-radius:8px; border:1px solid ${sel?GOLD:'var(--border)'};
+      background:${sel?'rgba(254,188,24,0.1)':'var(--surface)'}; user-select:none;
+      display:flex; flex-direction:column; gap:2px; min-width:130px; transition:all 0.15s;">
+      <span style="font-size:13px;font-weight:${sel?'700':'500'};color:${sel?GOLD:'var(--text)'}">${d}</span>
+      <span style="font-size:10px;color:var(--text-muted)">${s.season}</span>
+      <span style="font-size:10px;color:var(--text-dim)">${(s.action_count||0).toLocaleString()} actions</span>
+    </div>`;
+  }).join('');
+
+  renderRptDetail();
+}
+
+function toggleRptSession(id) {
+  if (rptSelected.has(id)) rptSelected.delete(id);
+  else rptSelected.add(id);
+  renderReports();
+}
+
+function clearRptSelection() {
+  rptSelected.clear();
+  renderReports();
+}
+
+// ═══════════════════════════ XLSX-STYLE REPORT ════════════════════════════════
+
+const POS_GROUP_ORDER  = ['OUTSIDES','LIBEROS','MIDDLES','OPPOSITES','SETTERS'];
+let rptActiveSubTab = 'servrcv';
+
+function showRptTab(tab) {
+  rptActiveSubTab = tab;
+  document.querySelectorAll('.rpt-sub-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[id^="rpt-panel-"]').forEach(p => p.style.display = 'none');
+  document.getElementById(`rpt-subtab-${tab}`).classList.add('active');
+  document.getElementById(`rpt-panel-${tab}`).style.display = 'block';
+}
+
+function getPlayerGroup(pnum, season) {
+  const p = getPlayerInfo(pnum, season);
+  if (!p) return 'OUTSIDES';
+  if (p.is_libero) return 'LIBEROS';
+  const pos = (p.position_code || '').toUpperCase().trim();
+  if (['S','SET','SE'].includes(pos))                return 'SETTERS';
+  if (['MB','MH','M','MID','MI'].includes(pos))      return 'MIDDLES';
+  if (['OP','RS','OPP','RH','OS'].includes(pos))     return 'OPPOSITES';
+  if (['L','LB','LIB'].includes(pos))                return 'LIBEROS';
+  return 'OUTSIDES';
+}
+
+function buildPlayerGroups() {
+  const players = {};
+  for (const ps of Object.values(DATA.player_session)) {
+    if (!rptSelected.has(ps.session_id)) continue;
+    const pnum   = ps.player_num;
+    const sess   = DATA.sessions.find(s => s.id === ps.session_id);
+    const season = sess?.season;
+    if (!season) continue;
+
+    if (!players[pnum]) {
+      players[pnum] = {
+        pnum, season,
+        name:  getPlayerName(pnum, season),
+        group: getPlayerGroup(pnum, season),
+        sEv:{}, sAtt:0,   // serve
+        rEv:{}, rAtt:0,   // receive
+        aEv:{}, aAtt:0,   // attack (total)
+        aC:{},             // attack combos
+        bEv:{}, bAtt:0,   // block
+        dEv:{}, dAtt:0,   // dig
+        rZones:{},         // receive zones
+      };
+    }
+    const pl = players[pnum];
+
+    const addEv = (tgt, src) => {
+      for (const [e,n] of Object.entries(src||{})) tgt[e] = (tgt[e]||0) + n;
+    };
+
+    const sk = ps.skills || {};
+    if (sk.S) { pl.sAtt += sk.S.attempts||0; addEv(pl.sEv, sk.S.evals); }
+    if (sk.R) {
+      pl.rAtt += sk.R.attempts||0; addEv(pl.rEv, sk.R.evals);
+      for (const [zk, zv] of Object.entries(ps.rcv_zones||{})) {
+        if (!pl.rZones[zk]) pl.rZones[zk] = { attempts:0, evals:{} };
+        pl.rZones[zk].attempts += zv.attempts||0;
+        addEv(pl.rZones[zk].evals, zv.evals);
+      }
+    }
+    if (sk.A) {
+      pl.aAtt += sk.A.attempts||0; addEv(pl.aEv, sk.A.evals);
+      for (const [cc, cv] of Object.entries(sk.A.combos||{})) {
+        if (!pl.aC[cc]) pl.aC[cc] = { name:cv.name||cc, att:0, ev:{} };
+        pl.aC[cc].att += cv.attempts||0;
+        addEv(pl.aC[cc].ev, cv.evals);
+      }
+    }
+    if (sk.B) { pl.bAtt += sk.B.attempts||0; addEv(pl.bEv, sk.B.evals); }
+    if (sk.D) { pl.dAtt += sk.D.attempts||0; addEv(pl.dEv, sk.D.evals); }
+  }
+
+  const groups = {};
+  for (const g of POS_GROUP_ORDER) groups[g] = [];
+  for (const pl of Object.values(players)) {
+    (groups[pl.group] || groups['OUTSIDES']).push(pl);
+  }
+  for (const g of Object.values(groups)) {
+    g.sort((a,b) => (b.sAtt+b.rAtt+b.aAtt) - (a.sAtt+a.rAtt+a.aAtt));
+  }
+  return groups;
+}
+
+// ── Number formatting ─────────────────────────────────────────────────────────
+function xf(n, dec=1, zero='—') {
+  if (n === null || n === undefined || isNaN(n)) return zero;
+  if (n === 0 && zero === '—') return '—';
+  return n.toFixed(dec);
+}
+function xfn(n, dec=1) { // never hide 0
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return n.toFixed(dec);
+}
+function xpct(n, dec=1) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return (n*100).toFixed(dec)+'%';
+}
+function xint(n) {
+  if (!n) return '—';
+  return String(n);
+}
+function rcvAvg(ev, att) {
+  if (!att) return null;
+  return (3*(ev['#']||0) + 2*(ev['+'||0]||ev['+'||0]||ev['+']||0) + 1*(ev['/']||0)) / att;
+}
+function srvAvg(ev, att) {
+  if (!att) return null;
+  return (2*(ev['+']||0) + 1*(ev['/']||0)) / att;
+}
+function atkEff(ev, att) {
+  if (!att) return null;
+  return ((ev['#']||0) - (ev['='||0]||ev['=']||0)) / att;
+}
+function effColor(v) {
+  if (v === null || v === undefined) return 'var(--text)';
+  if (v > 0.300) return 'var(--green)';
+  if (v > 0.000) return 'var(--text)';
+  return 'var(--red)';
+}
+
+// ── Sheet 1: Serve & Receive ──────────────────────────────────────────────────
+function buildServeRcvSheet(groups) {
+  const GH = `background:var(--maroon);color:#fff;font-weight:700;font-size:12px;padding:6px 10px`;
+  const SH = `background:#1a0010;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;letter-spacing:.4px`;
+  const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
+
+  function totalize(players, sk) {
+    const ev = {}, pl = { pnum:'*', name:'GROUP TOTAL', sEv:{}, sAtt:0, rEv:{}, rAtt:0 };
+    for (const p of players) {
+      pl.sAtt += p.sAtt; pl.rAtt += p.rAtt;
+      for (const [e,n] of Object.entries(p.sEv)) pl.sEv[e] = (pl.sEv[e]||0)+n;
+      for (const [e,n] of Object.entries(p.rEv)) pl.rEv[e] = (pl.rEv[e]||0)+n;
+    }
+    return pl;
+  }
+
+  function sRow(p, bold=false) {
+    const ev = p.sEv, att = p.sAtt;
+    const ace=ev['#']||0, err=ev['='||0]||ev['=']||0, tp=ev['+'||0]||ev['+'||0]||ev['+']||0, op=ev['/']||0, oos=ev['-']||0;
+    const avg = srvAvg(ev, att);
+    const B = bold ? 'font-weight:700;' : '';
+    const ns  = `style="${B}text-align:right;font-variant-numeric:tabular-nums"`;
+    const gns = `style="${B}text-align:right;color:var(--green)"`;
+    const rns = `style="${B}text-align:right;color:var(--red)"`;
+    const ans = `style="${B}text-align:right;color:var(--gold)"`;
+    if (!att) return `<td colspan="11" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
+    return `
+      <td ${ns}>${att}</td>
+      <td ${ans}>${avg!==null?avg.toFixed(2):'—'}</td>
+      <td ${gns}>${ace||'—'}</td>
+      <td ${rns}>${err||'—'}</td>
+      <td ${ns}>${tp||'—'}</td>
+      <td ${ns}>${op||'—'}</td>
+      <td ${ns}>${oos||'—'}</td>
+      <td ${gns}>${att?xpct(ace/att):'—'}</td>
+      <td ${rns}>${att?xpct(err/att):'—'}</td>
+      <td ${ns}>${att?xpct(tp/att):'—'}</td>
+      <td ${ns}>${att?xpct(oos/att):'—'}</td>`;
+  }
+
+  function rRow(p, bold=false) {
+    const ev = p.rEv, att = p.rAtt;
+    const perf=ev['#']||0, tp=ev['+'||0]||ev['+']||0, op=ev['/']||0, poor=ev['-']||0, err=ev['='||0]||ev['=']||0;
+    const avg = rcvAvg(ev, att);
+    const B = bold ? 'font-weight:700;' : '';
+    const ns  = `style="${B}text-align:right;font-variant-numeric:tabular-nums"`;
+    const gns = `style="${B}text-align:right;color:var(--green)"`;
+    const rns = `style="${B}text-align:right;color:var(--red)"`;
+    const ans = `style="${B}text-align:right;color:var(--gold)"`;
+    if (!att) return `<td colspan="12" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
+    return `
+      <td ${ns}>${att}</td>
+      <td ${ans}>${avg!==null?avg.toFixed(2):'—'}</td>
+      <td ${gns}>${perf||'—'}</td>
+      <td ${ns}>${tp||'—'}</td>
+      <td ${ns}>${op||'—'}</td>
+      <td ${ns}>${poor||'—'}</td>
+      <td ${rns}>${err||'—'}</td>
+      <td ${gns}>${att?xpct(perf/att):'—'}</td>
+      <td ${ns}>${att?xpct(tp/att):'—'}</td>
+      <td ${ns}>${att?xpct(op/att):'—'}</td>
+      <td ${ns}>${att?xpct(poor/att):'—'}</td>
+      <td ${rns}>${att?xpct(err/att):'—'}</td>`;
+  }
+
+  const allPlayers = POS_GROUP_ORDER.flatMap(g => groups[g]||[]);
+  const teamTot = totalize(allPlayers);
+  teamTot.pnum = '*'; teamTot.name = 'TEAM TOTAL';
+
+  function buildTable(cols, secLabel, rowFn, colSpan, totStyle='background:var(--maroon);color:#fff;font-weight:700') {
+    let rows = '';
+    let hasData = false;
+    for (const gName of POS_GROUP_ORDER) {
+      const grp = (groups[gName]||[]).filter(p => gName === 'LIBEROS' ? p.rAtt > 0 : true);
+      const relevant = grp.filter(p => secLabel==='SERVING' ? p.sAtt>0 : p.rAtt>0);
+      if (!relevant.length) continue;
+      hasData = true;
+      rows += `<tr><td colspan="${colSpan+2}" style="${GH}">${gName}</td></tr>`;
+      for (const p of relevant) {
+        rows += `<tr>
+          <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
+          <td style="white-space:nowrap">${p.name}</td>
+          ${rowFn(p)}
+        </tr>`;
+      }
+      const gt = totalize(grp);
+      rows += `<tr style="background:var(--surface3)">
+        <td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>
+        ${rowFn(gt, true)}
+      </tr>`;
+    }
+    rows += `<tr style="${totStyle}">
+      <td colspan="2" style="font-weight:700">TEAM TOTAL</td>
+      ${rowFn(teamTot, true)}
+    </tr>`;
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead>
+        <tr><td colspan="${colSpan+2}" style="${SH}">${secLabel}</td></tr>
+        <tr style="${CH}">
+          <th>#</th><th>Player</th>${cols}
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  const sCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Ace</th><th class="num">Err</th><th class="num">2P</th><th class="num">1P</th><th class="num">OP</th><th class="num">Ace%</th><th class="num">Err%</th><th class="num">OGP%</th><th class="num">OoS%</th>`;
+  const rCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Perf</th><th class="num">2P</th><th class="num">1P</th><th class="num">OP</th><th class="num">Err</th><th class="num">Perf%</th><th class="num">2P%</th><th class="num">1P%</th><th class="num">OP%</th><th class="num">Err%</th>`;
+
+  return `<div style="display:flex;flex-direction:column;gap:20px">
+    <div style="font-size:11px;color:var(--text-dim);padding:4px 0">
+      Serve: AVG = (2P×2 + 1P×1) / Att &nbsp;|&nbsp; Receive: Perf=#, 2P=+, 1P=/, OP=−, AVG=(3×Perf+2×2P+1P)/Att
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      ${buildTable(sCols, 'SERVING',   p=>sRow(p), 11)}
+      ${buildTable(rCols, 'RECEIVING', p=>rRow(p), 12)}
+    </div>
+  </div>`;
+}
+
+// ── Receive Zone Breakdown ────────────────────────────────────────────────────
+function buildZoneSheet(groups) {
+  const GH = `background:var(--maroon);color:#fff;font-weight:700;font-size:12px;padding:6px 10px`;
+  const SH = `background:#1a0010;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;letter-spacing:.4px`;
+  const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
+  const ZONES = [{ k:'1',label:'Zone 1' }, { k:'6',label:'Zone 6' }, { k:'5',label:'Zone 5' }];
+
+  function zoneAvg(ev, att) {
+    if (!att) return null;
+    return (3*(ev['#']||0) + 2*(ev['+']||0) + 1*(ev['/']||0)) / att;
+  }
+
+  function buildTable(players) {
+    let rows = '';
+    for (const gName of POS_GROUP_ORDER) {
+      const grp = (groups[gName]||[]).filter(p => p.rAtt > 0);
+      const relevant = grp.filter(p => Object.keys(p.rZones).length > 0);
+      if (!relevant.length) continue;
+      rows += `<tr><td colspan="${2+ZONES.length*2+2}" style="${GH}">${gName}</td></tr>`;
+      for (const p of relevant) {
+        let totalAtt=0, totalEv={};
+        for (const z of ZONES) {
+          const zd = p.rZones[z.k] || {};
+          totalAtt += zd.attempts||0;
+          for (const [e,n] of Object.entries(zd.evals||{})) totalEv[e]=(totalEv[e]||0)+n;
+        }
+        const totAvg = zoneAvg(totalEv, totalAtt);
+        rows += `<tr>
+          <td style="color:var(--gold);font-weight:700;font-size:11px">#${p.pnum}</td>
+          <td style="white-space:nowrap">${p.name}</td>
+          ${ZONES.map(z => {
+            const zd = p.rZones[z.k] || {};
+            const za = zd.attempts||0;
+            const zavg = zoneAvg(zd.evals||{}, za);
+            return `<td class="num">${za||'—'}</td><td class="num" style="color:${zavg!==null?zavg>2?'var(--green)':zavg<1?'var(--red)':'var(--text)':'var(--text-dim)'}">${zavg!==null?zavg.toFixed(2):'—'}</td>`;
+          }).join('')}
+          <td class="num"><strong>${totalAtt||'—'}</strong></td>
+          <td class="num" style="color:${totAvg!==null?totAvg>2?'var(--green)':totAvg<1?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
+        </tr>`;
+      }
+    }
+    if (!rows) return '<div class="empty">No zone data — zone tracking requires 2026+ seasons</div>';
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead>
+        <tr><td colspan="${2+ZONES.length*2+2}" style="${SH}">RECEIVE BY ZONE</td></tr>
+        <tr style="${CH}">
+          <th>#</th><th>Player</th>
+          ${ZONES.map(z=>`<th class="num" colspan="2">${z.label}</th>`).join('')}
+          <th class="num" colspan="2">Overall</th>
+        </tr>
+        <tr style="${CH}">
+          <th></th><th></th>
+          ${ZONES.map(()=>`<th class="num">Att</th><th class="num">AVG</th>`).join('')}
+          <th class="num">Att</th><th class="num">AVG</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  return buildTable(POS_GROUP_ORDER.flatMap(g => groups[g]||[]));
+}
+
+// ── Attack by Set Type ────────────────────────────────────────────────────────
+function buildAttackSheet(groups) {
+  const GH = `background:var(--maroon);color:#fff;font-weight:700;font-size:12px;padding:6px 10px`;
+  const SH = `background:#1a0010;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;letter-spacing:.4px`;
+  const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
+
+  function buildTable(comboCodes, title) {
+    const NC = comboCodes.length;
+    let rows = '';
+    const teamTotC = {};
+
+    for (const gName of POS_GROUP_ORDER) {
+      const grp = (groups[gName]||[]).filter(p => comboCodes.some(cc => (p.aC[cc]?.att||0)>0));
+      if (!grp.length) continue;
+
+      const grpTotC = {};
+      rows += `<tr><td colspan="${2+NC*4+4}" style="${GH}">${gName}</td></tr>`;
+
+      for (const p of grp) {
+        let totK=0,totE=0,totA=0;
+        rows += `<tr>
+          <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
+          <td style="white-space:nowrap">${p.name}</td>`;
+        for (const cc of comboCodes) {
+          const c = p.aC[cc];
+          const a=c?.att||0, k=c?.ev['#']||0, e=c?.ev['='||0]||c?.ev['=']||0;
+          const eff = a ? (k-e)/a : null;
+          if (a) {
+            totK+=k; totE+=e; totA+=a;
+            if (!grpTotC[cc]) grpTotC[cc]={k:0,e:0,a:0};
+            grpTotC[cc].k+=k; grpTotC[cc].e+=e; grpTotC[cc].a+=a;
+            if (!teamTotC[cc]) teamTotC[cc]={k:0,e:0,a:0};
+            teamTotC[cc].k+=k; teamTotC[cc].e+=e; teamTotC[cc].a+=a;
+            const ec = effColor(eff);
+            rows += `<td class="num" style="color:var(--green)">${k}</td><td class="num" style="color:var(--red)">${e}</td><td class="num">${a}</td><td class="num" style="color:${ec};font-weight:600">${eff!==null?(eff>=0?'+':'')+Math.round(eff*100)+'%':'—'}</td>`;
+          } else {
+            rows += `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
+          }
+        }
+        const rEff = totA?(totK-totE)/totA:null;
+        rows += `<td class="num" style="color:var(--gold);font-weight:700">${totK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${totE||'—'}</td><td class="num" style="font-weight:700">${totA||'—'}</td><td class="num" style="color:${effColor(rEff)};font-weight:700">${rEff!==null?(rEff>=0?'+':'')+Math.round(rEff*100)+'%':'—'}</td>`;
+        rows += `</tr>`;
+      }
+
+      // Group total
+      let gK=0,gE=0,gA=0;
+      rows += `<tr style="background:var(--surface3)"><td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>`;
+      for (const cc of comboCodes) {
+        const g = grpTotC[cc]||{k:0,e:0,a:0};
+        gK+=g.k; gE+=g.e; gA+=g.a;
+        const ge = g.a?(g.k-g.e)/g.a:null;
+        if (g.a) rows += `<td class="num">${g.k}</td><td class="num">${g.e}</td><td class="num">${g.a}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
+        else     rows += `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
+      }
+      const ge = gA?(gK-gE)/gA:null;
+      rows += `<td class="num" style="color:var(--gold);font-weight:700">${gK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
+      rows += `</tr>`;
+    }
+
+    // Team total
+    let tK=0,tE=0,tA=0;
+    rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2">TEAM TOTAL</td>`;
+    for (const cc of comboCodes) {
+      const t = teamTotC[cc]||{k:0,e:0,a:0};
+      tK+=t.k; tE+=t.e; tA+=t.a;
+      const te = t.a?(t.k-t.e)/t.a:null;
+      if (t.a) rows += `<td class="num">${t.k}</td><td class="num">${t.e}</td><td class="num">${t.a}</td><td class="num">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
+      else     rows += `<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>`;
+    }
+    const te = tA?(tK-tE)/tA:null;
+    rows += `<td class="num" style="color:var(--gold)">${tK||'—'}</td><td class="num" style="color:#ff8a80">${tE||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:${effColor(te)}">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
+    rows += `</tr>`;
+
+    if (!rows.includes('<td style="color:var(--gold)')) return '';
+
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead>
+        <tr><td colspan="${2+NC*4+4}" style="${SH}">${title}</td></tr>
+        <tr style="${CH}">
+          <th>#</th><th>Player</th>
+          ${comboCodes.map(cc=>`<th colspan="4" class="num" style="color:${COMBO_COLORS[cc]||'#888'}">${cc} — ${COMBO_NAMES[cc]||cc}</th>`).join('')}
+          <th colspan="4" class="num" style="color:var(--gold)">TOTAL</th>
+        </tr>
+        <tr style="${CH}">
+          <th></th><th></th>
+          ${comboCodes.map(()=>`<th class="num">K</th><th class="num">E</th><th class="num">Att</th><th class="num">Eff%</th>`).join('')}
+          <th class="num">K</th><th class="num">E</th><th class="num">Att</th><th class="num">Eff%</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  const PIN_COMBOS = ['X5','V5','X6','V6','XP','X8'];
+  const MID_COMBOS = ['X1','X2','X7'];
+
+  const pinHtml = buildTable(PIN_COMBOS, 'ATTACK BY SET TYPE — PINS & BACKROW');
+  const midHtml = buildTable(MID_COMBOS, 'ATTACK BY SET TYPE — MIDDLES');
+
+  return `<div style="display:flex;flex-direction:column;gap:24px">
+    ${pinHtml || '<div class="empty">No pin/backrow attack data for selected sessions</div>'}
+    ${midHtml || '<div class="empty">No middle attack data for selected sessions</div>'}
+    ${buildZoneSheet(groups)}
+  </div>`;
+}
+
+// ── Overview (Skill Breakdown + Top Performers) ───────────────────────────────
+function buildOverviewPanel(skills) {
+  const SKILL_NAMES = { S:'Serve', R:'Reception', E:'Set', A:'Attack', B:'Block', D:'Dig' };
+  document.getElementById('rpt-skill-breakdown').innerHTML = Object.entries(skills)
+    .filter(([sk]) => SKILL_NAMES[sk])
+    .sort((a,b) => b[1].attempts - a[1].attempts)
+    .map(([sk, sv]) => {
+      const att = sv.attempts||0, kills = sv.evals['#']||0;
+      const bar = att ? Math.min(100, kills/att*100) : 0;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="width:80px;font-size:12px;color:var(--text-muted)">${SKILL_NAMES[sk]}</span>
+        <span style="width:40px;font-size:13px;font-weight:700;text-align:right">${fmt(att)}</span>
+        <div style="flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
+          <div style="width:${bar.toFixed(1)}%;height:100%;background:${sk==='A'?GOLD:sk==='S'?GREEN:sk==='R'?'#2196f3':MAROON};border-radius:3px"></div>
+        </div>
+        <span style="width:40px;font-size:12px;font-weight:600;color:${sk==='A'?GOLD:'var(--text)'};text-align:right">${att?(kills/att*100).toFixed(1)+'%':'0%'}</span>
+      </div>`;
+    }).join('');
+
+  const playerSummary = {};
+  for (const ps of Object.values(DATA.player_session)) {
+    if (!rptSelected.has(ps.session_id)) continue;
+    const pnum = ps.player_num;
+    const sess = DATA.sessions.find(s => s.id === ps.session_id);
+    const name = getPlayerName(pnum, sess?.season);
+    for (const [sk, sv] of Object.entries(ps.skills||{})) {
+      if (!SKILL_NAMES[sk]) continue;
+      const pid = `${pnum}|${sk}`;
+      if (!playerSummary[pid]) playerSummary[pid] = { pnum, name, sk, att:0, kills:0, errs:0 };
+      playerSummary[pid].att   += sv.attempts||0;
+      playerSummary[pid].kills += sv.evals['#']||0;
+      playerSummary[pid].errs  += sv.evals['='||0]||sv.evals['=']||0;
+    }
+  }
+  document.getElementById('rpt-top-tbody').innerHTML = Object.values(playerSummary)
+    .filter(p => p.att >= 3)
+    .sort((a,b) => b.att - a.att)
+    .slice(0, 25)
+    .map(p => `<tr>
+      <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+      <td style="color:var(--text-muted)">${SKILL_NAMES[p.sk]}</td>
+      <td class="num">${p.att}</td>
+      <td class="num green">${p.att?(p.kills/p.att*100).toFixed(1)+'%':'—'}</td>
+      <td class="num red">${p.att?(p.errs/p.att*100).toFixed(1)+'%':'—'}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">No data</td></tr>';
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────────
+function renderRptDetail() {
+  const kpiEl   = document.getElementById('rpt-kpi-row');
+  const xlsxEl  = document.getElementById('rpt-xlsx-area');
+  const emptyEl = document.getElementById('rpt-empty');
+  const labelEl = document.getElementById('rpt-selected-label');
+  const countEl = document.getElementById('rpt-selected-count');
+
+  if (rptSelected.size === 0) {
+    kpiEl.style.display = 'none';
+    xlsxEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    if (labelEl) labelEl.style.display = 'none';
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  kpiEl.style.display = 'grid';
+  xlsxEl.style.display = 'block';
+  if (labelEl) { labelEl.style.display = 'block'; countEl.textContent = rptSelected.size; }
+
+  // KPI row
+  const { skills } = aggregateSessionStats(rptSelected);
+  const A=skills['A']||{}, R=skills['R']||{}, S=skills['S']||{};
+  const Aatt=A.attempts||0, Ratt=R.attempts||0, Satt=S.attempts||0;
+  const atkEffVal = Aatt ? ((((A.evals||{})['#']||0)-((A.evals||{})['=']||0))/Aatt*100).toFixed(1)+'%' : '—';
+  const rcvAvgVal = Ratt ? rcvAvg(R.evals||{}, Ratt).toFixed(2) : '—';
+  const aceVal    = Satt ? (((S.evals||{})['#']||0)/Satt*100).toFixed(1)+'%' : '—';
+  const errVal    = Satt ? (((S.evals||{})['=']||0)/Satt*100).toFixed(1)+'%' : '—';
+  kpiEl.innerHTML = `
+    <div class="card-sm"><div class="card-title">Attack Efficiency</div>
+      <div class="stat-val big" style="color:var(--gold)">${atkEffVal}</div>
+      <div class="stat-lbl">${fmt(Aatt)} attacks</div></div>
+    <div class="card-sm"><div class="card-title">Reception AVG</div>
+      <div class="stat-val big" style="color:#2196f3">${rcvAvgVal}</div>
+      <div class="stat-lbl">${fmt(Ratt)} receptions</div></div>
+    <div class="card-sm"><div class="card-title">Serve Ace %</div>
+      <div class="stat-val big green">${aceVal}</div>
+      <div class="stat-lbl">${fmt(Satt)} serves</div></div>
+    <div class="card-sm"><div class="card-title">Serve Err %</div>
+      <div class="stat-val big red">${errVal}</div>
+      <div class="stat-lbl">&nbsp;</div></div>`;
+
+  // Build the spreadsheet tables
+  const groups = buildPlayerGroups();
+  document.getElementById('rpt-panel-servrcv').innerHTML  = buildServeRcvSheet(groups);
+  document.getElementById('rpt-panel-attack').innerHTML   = buildAttackSheet(groups);
+  buildOverviewPanel(skills);
+
+  // Show the active sub-tab
+  showRptTab(rptActiveSubTab);
 }
 
 // ═══════════════════════════ TEAM TAB ════════════════════════════════════════
