@@ -887,7 +887,7 @@ function serveMetrics(evals, attempts) {
   };
 }
 
-// Derive reception stats from eval counts (weight system: #=3P, +=2P, -=1P, /=0P overpass, ==0P error)
+// Derive reception stats from eval counts (weight system: #=3P, +=2P, -=1P, /=0.5P overpass, ==0P error)
 function rcvMetrics(evals, attempts) {
   if (!evals || !attempts) return null;
   const perf  = evals['#']||0;
@@ -895,7 +895,7 @@ function rcvMetrics(evals, attempts) {
   const poor  = evals['-']||0;
   const over  = evals['/']||0;
   const err   = evals['=']||0;
-  const avg   = (3*perf + 2*good + 1*poor) / attempts;  // overpass = 0P
+  const avg   = (3*perf + 2*good + 1*poor + 0.5*over) / attempts;  // overpass = 0.5P
   return {
     attempts,
     avg:      +avg.toFixed(3),
@@ -1166,7 +1166,7 @@ function renderReports() {
   const rcvAvg = monthMetric(sk => {
     const R = sk['R']; if (!R?.attempts) return null;
     const ev = R.evals||{};
-    return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/R.attempts).toFixed(3);
+    return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
   });
   const srvAce = monthMetric(sk => {
     const S = sk['S']; if (!S?.attempts) return null;
@@ -1358,10 +1358,10 @@ function xint(n) {
   if (!n) return '—';
   return String(n);
 }
-// Reception AVG: #=3P, +=2P, -=1P, /=0P (overpass), ==0P
+// Reception AVG: #=3P, +=2P, -=1P, /=0.5P (overpass), ==0P
 function rcvAvg(ev, att) {
   if (!att) return null;
-  return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0)) / att;
+  return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
 }
 // Serve AVG: #=3P (ace), +=2P, /=2P (overpass good for server), -=1P, ==0P
 function srvAvg(ev, att) {
@@ -1508,7 +1508,7 @@ function buildZoneSheet(groups) {
 
   function zoneAvg(ev, att) {
     if (!att) return null;
-    return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0)) / att;  // /=0P overpass
+    return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
   }
 
   function buildTable(players) {
@@ -3124,7 +3124,7 @@ function renderServRcv() {
         const { skills } = aggregateSessionStats(rcvMoSess[mo]);
         const R = skills['R']; if (!R?.attempts) return null;
         const ev = R.evals||{};
-        return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/R.attempts).toFixed(3);
+        return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
       }),
       borderColor: GOLD, backgroundColor: GOLD+'33',
       tension:0.3, fill:true, pointRadius:5, spanGaps:false,
@@ -3152,7 +3152,7 @@ function renderServRcv() {
     const att = zd?.attempts||0;
     if (!att) return null;
     const ev = zd.evals||{};
-    return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/att;
+    return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
   }
   function zoneGP(zd) {
     const att = zd?.attempts||0;
@@ -3212,7 +3212,7 @@ function renderServRcv() {
       const ev = zd.evals||{};
       const att = zd.attempts||0;
       if (att) {
-        const a = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/att;
+        const a = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
         // weighted merge
         const cur = playerZones[pid].zones[z];
         const prevAtt = cur.attempts - att;
@@ -3242,7 +3242,7 @@ function renderServRcv() {
     for (const [z, zd] of Object.entries(ps.rcv_zones||{})) {
       const att = zd.attempts||0;
       const ev  = zd.evals||{};
-      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0));
+      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0));
       if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
       if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
       if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
@@ -3270,7 +3270,7 @@ function renderServRcv() {
       const zd = rcv_zones[z];
       if (zd?.attempts) {
         const ev = zd.evals||{};
-        const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/zd.attempts;
+        const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/zd.attempts;
         zoneMonthData[z].push(+avg.toFixed(3));
       } else {
         zoneMonthData[z].push(null);
