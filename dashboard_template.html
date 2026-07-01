@@ -1759,12 +1759,13 @@ function buildAttackSheet(groups) {
   const SH = `background:#1a0010;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;letter-spacing:.4px`;
   const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
 
-  function buildTable(comboCodes, title) {
+  function buildTable(comboCodes, title, posFilter) {
     const NC = comboCodes.length;
     let rows = '';
     const teamTotC = {};
+    const groupOrder = posFilter ? POS_GROUP_ORDER.filter(g => posFilter.includes(g)) : POS_GROUP_ORDER;
 
-    for (const gName of POS_GROUP_ORDER) {
+    for (const gName of groupOrder) {
       const grp = (groups[gName]||[]).filter(p => comboCodes.some(cc => (p.aC[cc]?.att||0)>0));
       if (!grp.length) continue;
 
@@ -1849,8 +1850,8 @@ function buildAttackSheet(groups) {
   const PIN_COMBOS = ['X5','V5','X6','V6','XP','X8'];
   const MID_COMBOS = ['X1','X2','X7'];
 
-  const pinHtml = buildTable(PIN_COMBOS, 'ATTACK BY SET TYPE — PINS & BACKROW');
-  const midHtml = buildTable(MID_COMBOS, 'ATTACK BY SET TYPE — MIDDLES');
+  const pinHtml = buildTable(PIN_COMBOS, 'ATTACK BY SET TYPE — PINS & BACKROW', ['OUTSIDES','OPPOSITES']);
+  const midHtml = buildTable(MID_COMBOS, 'ATTACK BY SET TYPE — MIDDLES',        ['MIDDLES']);
 
   return `<div style="display:flex;flex-direction:column;gap:24px">
     ${pinHtml || '<div class="empty">No pin/backrow attack data for selected sessions</div>'}
