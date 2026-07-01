@@ -449,26 +449,11 @@
     <div style="display:flex;gap:6px;margin-top:16px;margin-bottom:16px;flex-wrap:wrap">
       <button id="rpt-subtab-servrcv"  class="rpt-sub-tab active" onclick="showRptTab('servrcv')">Serve &amp; Receive</button>
       <button id="rpt-subtab-attack"   class="rpt-sub-tab"        onclick="showRptTab('attack')">Attack by Set Type</button>
-      <button id="rpt-subtab-overview" class="rpt-sub-tab"        onclick="showRptTab('overview')">Overview</button>
+      <button id="rpt-subtab-overview" class="rpt-sub-tab"        onclick="showRptTab('overview')">Block &amp; Defense</button>
     </div>
     <div id="rpt-panel-servrcv"  class="card" style="padding:12px;overflow-x:auto"></div>
     <div id="rpt-panel-attack"   class="card" style="padding:12px;overflow-x:auto;display:none"></div>
-    <div id="rpt-panel-overview" class="card" style="padding:16px;display:none">
-      <div class="grid-2">
-        <div><h3>Skill Breakdown</h3><div id="rpt-skill-breakdown"></div></div>
-        <div><h3>Top Performers</h3>
-          <div class="table-scroll">
-            <table class="data-table">
-              <thead><tr>
-                <th>#</th><th>Name</th><th>Skill</th>
-                <th class="num">Att</th><th class="num">K/A/P%</th><th class="num">Err%</th>
-              </tr></thead>
-              <tbody id="rpt-top-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div id="rpt-panel-overview" class="card" style="padding:12px;overflow-x:auto;display:none"></div>
   </div>
 </div>
 
@@ -1866,51 +1851,121 @@ function buildAttackSheet(groups) {
   </div>`;
 }
 
-// ── Overview (Skill Breakdown + Top Performers) ───────────────────────────────
-function buildOverviewPanel(skills) {
-  const SKILL_NAMES = { S:'Serve', R:'Reception', E:'Set', A:'Attack', B:'Block', D:'Dig' };
-  document.getElementById('rpt-skill-breakdown').innerHTML = Object.entries(skills)
-    .filter(([sk]) => SKILL_NAMES[sk])
-    .sort((a,b) => b[1].attempts - a[1].attempts)
-    .map(([sk, sv]) => {
-      const att = sv.attempts||0, kills = sv.evals['#']||0;
-      const bar = att ? Math.min(100, kills/att*100) : 0;
-      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <span style="width:80px;font-size:12px;color:var(--text-muted)">${SKILL_NAMES[sk]}</span>
-        <span style="width:40px;font-size:13px;font-weight:700;text-align:right">${fmt(att)}</span>
-        <div style="flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
-          <div style="width:${bar.toFixed(1)}%;height:100%;background:${sk==='A'?GOLD:sk==='S'?MAROON:sk==='R'?GOLD:'#888888'};border-radius:3px"></div>
-        </div>
-        <span style="width:40px;font-size:12px;font-weight:600;color:${sk==='A'?GOLD:'var(--text)'};text-align:right">${att?(kills/att*100).toFixed(1)+'%':'0%'}</span>
-      </div>`;
-    }).join('');
+// ── Block & Defense ───────────────────────────────────────────────────────────
+function buildBlockDefSheet(groups) {
+  const GH = `background:var(--maroon);color:#fff;font-weight:700;font-size:12px;padding:6px 10px`;
+  const SH = `background:#1a0010;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;letter-spacing:.4px`;
+  const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
 
-  const playerSummary = {};
-  for (const ps of Object.values(DATA.player_session)) {
-    if (!rptSelected.has(ps.session_id)) continue;
-    const pnum = ps.player_num;
-    const sess = DATA.sessions.find(s => s.id === ps.session_id);
-    const name = getPlayerName(pnum, sess?.season);
-    for (const [sk, sv] of Object.entries(ps.skills||{})) {
-      if (!SKILL_NAMES[sk]) continue;
-      const pid = `${pnum}|${sk}`;
-      if (!playerSummary[pid]) playerSummary[pid] = { pnum, name, sk, att:0, kills:0, errs:0 };
-      playerSummary[pid].att   += sv.attempts||0;
-      playerSummary[pid].kills += sv.evals['#']||0;
-      playerSummary[pid].errs  += sv.evals['='||0]||sv.evals['=']||0;
-    }
+  // ── Block table (all front-row positions) ──────────────────────────────────
+  const BLK_GROUPS = ['OUTSIDES','MIDDLES','OPPOSITES','SETTERS'];
+
+  function bRow(ev, att, bold=false) {
+    if (!att) return `<td colspan="7" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
+    const stuffs = ev['#']||0, touch = ev['+']||0, err = ev['=']||0;
+    const stuffPct = stuffs/att*100, touchPct=(stuffs+touch)/att*100, errPct=err/att*100;
+    const B = bold ? 'font-weight:700;' : '';
+    return `
+      <td style="${B}text-align:right">${att}</td>
+      <td style="${B}text-align:right;color:var(--green)">${stuffs||'—'}</td>
+      <td style="${B}text-align:right">${touch||'—'}</td>
+      <td style="${B}text-align:right;color:var(--red)">${err||'—'}</td>
+      <td style="${B}text-align:right;color:var(--green)">${stuffPct.toFixed(1)}%</td>
+      <td style="${B}text-align:right">${touchPct.toFixed(1)}%</td>
+      <td style="${B}text-align:right;color:var(--red)">${errPct.toFixed(1)}%</td>`;
   }
-  document.getElementById('rpt-top-tbody').innerHTML = Object.values(playerSummary)
-    .filter(p => p.att >= 3)
-    .sort((a,b) => b.att - a.att)
-    .slice(0, 25)
-    .map(p => `<tr>
-      <td class="gold">#${p.pnum}</td><td>${p.name}</td>
-      <td style="color:var(--text-muted)">${SKILL_NAMES[p.sk]}</td>
-      <td class="num">${p.att}</td>
-      <td class="num green">${p.att?(p.kills/p.att*100).toFixed(1)+'%':'—'}</td>
-      <td class="num red">${p.att?(p.errs/p.att*100).toFixed(1)+'%':'—'}</td>
-    </tr>`).join('') || '<tr><td colspan="6" class="empty">No data</td></tr>';
+
+  function buildBlockTable() {
+    let rows = '', hasData = false;
+    const teamEv = {}, teamAtt = [0];
+    for (const gName of BLK_GROUPS) {
+      const grp = (groups[gName]||[]).filter(p => p.bAtt > 0);
+      if (!grp.length) continue;
+      hasData = true;
+      rows += `<tr><td colspan="9" style="${GH}">${gName}</td></tr>`;
+      const grpEv = {}, grpAtt = [0];
+      for (const p of grp) {
+        rows += `<tr>
+          <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
+          <td style="white-space:nowrap">${p.name}</td>
+          ${bRow(p.bEv, p.bAtt)}
+        </tr>`;
+        grpAtt[0] += p.bAtt; teamAtt[0] += p.bAtt;
+        for (const [e,n] of Object.entries(p.bEv)) { grpEv[e]=(grpEv[e]||0)+n; teamEv[e]=(teamEv[e]||0)+n; }
+      }
+      rows += `<tr style="background:var(--surface3)">
+        <td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>
+        ${bRow(grpEv, grpAtt[0], true)}</tr>`;
+    }
+    rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
+      <td colspan="2">TEAM TOTAL</td>${bRow(teamEv, teamAtt[0], true)}</tr>`;
+    if (!hasData) return '';
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead>
+        <tr><td colspan="9" style="${SH}">BLOCKING</td></tr>
+        <tr style="${CH}"><th>#</th><th>Player</th>
+          <th class="num">BA</th><th class="num">Stuffs</th><th class="num">Touch+</th><th class="num">Err</th>
+          <th class="num">Stuff%</th><th class="num">Touch%</th><th class="num">Err%</th></tr>
+      </thead><tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  // ── Dig table (all positions) ──────────────────────────────────────────────
+  function dRow(ev, att, bold=false) {
+    if (!att) return `<td colspan="8" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
+    const perf=ev['#']||0, good=ev['+']||0, poor=ev['-']||0, err=ev['=']||0;
+    const perfPct=perf/att*100, posPct=(perf+good)/att*100, errPct=err/att*100;
+    const B = bold ? 'font-weight:700;' : '';
+    return `
+      <td style="${B}text-align:right">${att}</td>
+      <td style="${B}text-align:right;color:var(--green)">${perf||'—'}</td>
+      <td style="${B}text-align:right">${good||'—'}</td>
+      <td style="${B}text-align:right">${poor||'—'}</td>
+      <td style="${B}text-align:right;color:var(--red)">${err||'—'}</td>
+      <td style="${B}text-align:right;color:var(--green)">${perfPct.toFixed(1)}%</td>
+      <td style="${B}text-align:right">${posPct.toFixed(1)}%</td>
+      <td style="${B}text-align:right;color:var(--red)">${errPct.toFixed(1)}%</td>`;
+  }
+
+  function buildDigTable() {
+    let rows = '', hasData = false;
+    const teamEv = {}, teamAtt = [0];
+    for (const gName of POS_GROUP_ORDER) {
+      const grp = (groups[gName]||[]).filter(p => p.dAtt > 0);
+      if (!grp.length) continue;
+      hasData = true;
+      rows += `<tr><td colspan="10" style="${GH}">${gName}</td></tr>`;
+      const grpEv = {}, grpAtt = [0];
+      for (const p of grp) {
+        rows += `<tr>
+          <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
+          <td style="white-space:nowrap">${p.name}</td>
+          ${dRow(p.dEv, p.dAtt)}
+        </tr>`;
+        grpAtt[0] += p.dAtt; teamAtt[0] += p.dAtt;
+        for (const [e,n] of Object.entries(p.dEv)) { grpEv[e]=(grpEv[e]||0)+n; teamEv[e]=(teamEv[e]||0)+n; }
+      }
+      rows += `<tr style="background:var(--surface3)">
+        <td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>
+        ${dRow(grpEv, grpAtt[0], true)}</tr>`;
+    }
+    rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
+      <td colspan="2">TEAM TOTAL</td>${dRow(teamEv, teamAtt[0], true)}</tr>`;
+    if (!hasData) return '';
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead>
+        <tr><td colspan="10" style="${SH}">DIGGING</td></tr>
+        <tr style="${CH}"><th>#</th><th>Player</th>
+          <th class="num">DA</th><th class="num">Perf</th><th class="num">Good</th><th class="num">Poor</th><th class="num">Err</th>
+          <th class="num">Perf%</th><th class="num">Pos%</th><th class="num">Err%</th></tr>
+      </thead><tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  return `<div style="display:flex;flex-direction:column;gap:24px">
+    ${buildBlockTable() || '<div class="empty">No block data for selected sessions</div>'}
+    ${buildDigTable()   || '<div class="empty">No dig data for selected sessions</div>'}
+  </div>`;
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -1968,7 +2023,7 @@ function renderRptDetail() {
   // Render setter charts after DOM update
   if (setterSectionHTML) renderRptSetterChart();
 
-  buildOverviewPanel(skills);
+  document.getElementById('rpt-panel-overview').innerHTML = buildBlockDefSheet(groups);
 
   // Show the active sub-tab
   showRptTab(rptActiveSubTab);
