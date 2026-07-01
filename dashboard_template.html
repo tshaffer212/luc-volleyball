@@ -1855,7 +1855,6 @@ function buildAttackSheet(groups) {
   return `<div style="display:flex;flex-direction:column;gap:24px">
     ${pinHtml || '<div class="empty">No pin/backrow attack data for selected sessions</div>'}
     ${midHtml || '<div class="empty">No middle attack data for selected sessions</div>'}
-    ${buildZoneSheet(groups)}
   </div>`;
 }
 
@@ -1951,7 +1950,7 @@ function renderRptDetail() {
 
   // Build the spreadsheet tables
   const groups = buildPlayerGroups();
-  document.getElementById('rpt-panel-servrcv').innerHTML  = buildServeRcvSheet(groups);
+  document.getElementById('rpt-panel-servrcv').innerHTML  = buildServeRcvSheet(groups) + buildZoneSheet(groups);
 
   // Attack tab: setter breakdown chart + set type tables
   const setterSessionMap = getSessionSetterMap();
