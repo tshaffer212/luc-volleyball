@@ -840,8 +840,9 @@ const COMBO_NAMES = {
   KC:'Quick in 3', KM:'Shifted to 2', KP:'Shifted to 4', KE:'No First Tempo', KD:'Slide',
   KB:'BIC (call)',
 };
-const PIN_COMBOS         = ['X5','V5','X6','V6','XP','X8','PP','V8','VP'];
+const PIN_COMBOS         = ['X5','V5','X6','V6','XP','X8','PP','V8'];
 const MIDDLE_COMBOS      = ['X1','X2','X7'];
+const IGNORED_COMBOS     = new Set(['XO','VP']); // typos / unimportant codes to hide everywhere
 const SETTER_CALL_COMBOS = ['K1','K2','K7','KC','KM','KP','KD','KE','KB'];
 // Court zone → combo codes mapping (for court visual)
 const COURT_ZONES = [
@@ -1688,7 +1689,7 @@ function renderRptSetterChart() {
   const allCodes = new Set();
   for (const combos of Object.values(setterCombos)) {
     for (const cc of Object.keys(combos)) {
-      if (combos[cc].a >= 1) allCodes.add(cc);
+      if (combos[cc].a >= 1 && !IGNORED_COMBOS.has(cc)) allCodes.add(cc);
     }
   }
   const sortedCodes = [...allCodes].sort((a, b) => {
@@ -2872,8 +2873,8 @@ function renderAttack() {
       <div class="stat-lbl">${COMBO_NAMES[topCombo]||''}</div></div>
   `;
 
-  // Sort codes by attempts for charts
-  const sortedCodes = [...allCodes].sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0));
+  // Sort codes by attempts for charts (exclude ignored combos)
+  const sortedCodes = [...allCodes].filter(cc => !IGNORED_COMBOS.has(cc)).sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0));
 
   // Distribution bar chart — click to highlight a combo
   const metricLabel = {attempts:'Attempts',kill_pct:'Kill %',efficiency:'Efficiency %',error_pct:'Error %'}[metric];
