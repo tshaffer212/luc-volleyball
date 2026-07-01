@@ -887,21 +887,22 @@ function serveMetrics(evals, attempts) {
   };
 }
 
-// Derive reception stats from eval counts (weight system: #=3, +=2, -=1, /=0.5)
+// Derive reception stats from eval counts (weight system: #=3P, +=2P, -=1P, /=0P overpass, ==0P error)
 function rcvMetrics(evals, attempts) {
   if (!evals || !attempts) return null;
   const perf  = evals['#']||0;
-  const good  = evals['+'||0]||evals['+']||0;
+  const good  = evals['+']||0;
   const poor  = evals['-']||0;
-  const half  = evals['/']||0;
+  const over  = evals['/']||0;
   const err   = evals['=']||0;
-  const avg   = (3*perf + 2*good + 1*poor + 0.5*half) / attempts;
+  const avg   = (3*perf + 2*good + 1*poor) / attempts;  // overpass = 0P
   return {
     attempts,
     avg:      +avg.toFixed(3),
     perf_pct: +(perf/attempts*100).toFixed(1),
     gp_pct:   +((perf+good)/attempts*100).toFixed(1),
     oos_pct:  +(poor/attempts*100).toFixed(1),
+    over_pct: +(over/attempts*100).toFixed(1),
     err_pct:  +(err/attempts*100).toFixed(1),
   };
 }
@@ -1068,6 +1069,7 @@ function init() {
 let rptSelected    = new Set(); // selected session IDs
 let setterGroupSel = null;    // 'pins' | 'middles' | 'bic' | null — setter group bar filter
 let atkCodeSel     = null;    // combo code string | null — attack bar filter
+let rptSetterFilter = null;   // setter pnum string | null — Reports attack setter filter
 
 function getISOWeek(dateStr) {
   const d = new Date(dateStr);
@@ -1164,7 +1166,7 @@ function renderReports() {
   const rcvAvg = monthMetric(sk => {
     const R = sk['R']; if (!R?.attempts) return null;
     const ev = R.evals||{};
-    return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+    return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/R.attempts).toFixed(3);
   });
   const srvAce = monthMetric(sk => {
     const S = sk['S']; if (!S?.attempts) return null;
@@ -1356,13 +1358,15 @@ function xint(n) {
   if (!n) return '—';
   return String(n);
 }
+// Reception AVG: #=3P, +=2P, -=1P, /=0P (overpass), ==0P
 function rcvAvg(ev, att) {
   if (!att) return null;
-  return (3*(ev['#']||0) + 2*(ev['+'||0]||ev['+'||0]||ev['+']||0) + 1*(ev['/']||0)) / att;
+  return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0)) / att;
 }
+// Serve AVG: #=3P (ace), +=2P, /=2P (overpass good for server), -=1P, ==0P
 function srvAvg(ev, att) {
   if (!att) return null;
-  return (2*(ev['+']||0) + 1*(ev['/']||0)) / att;
+  return (3*(ev['#']||0) + 2*(ev['+']||0) + 2*(ev['/']||0) + (ev['-']||0)) / att;
 }
 function atkEff(ev, att) {
   if (!att) return null;
@@ -1504,7 +1508,7 @@ function buildZoneSheet(groups) {
 
   function zoneAvg(ev, att) {
     if (!att) return null;
-    return (3*(ev['#']||0) + 2*(ev['+']||0) + 1*(ev['/']||0)) / att;
+    return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0)) / att;  // /=0P overpass
   }
 
   function buildTable(players) {
@@ -1556,6 +1560,197 @@ function buildZoneSheet(groups) {
   }
 
   return buildTable(POS_GROUP_ORDER.flatMap(g => groups[g]||[]));
+}
+
+// ── Setter breakdown helpers ──────────────────────────────────────────────────
+
+// Returns {sessionId: primarySetterPnum} for all selected sessions
+function getSessionSetterMap() {
+  const map = {};
+  // Group player_session entries by session_id
+  const bySession = {};
+  for (const ps of Object.values(DATA.player_session)) {
+    if (!rptSelected.has(ps.session_id)) continue;
+    if (!bySession[ps.session_id]) bySession[ps.session_id] = [];
+    bySession[ps.session_id].push(ps);
+  }
+  // Primary setter = player with most E attempts that session
+  for (const [sid, players] of Object.entries(bySession)) {
+    let bestPnum = null, bestAtt = 0;
+    for (const ps of players) {
+      const eAtt = ps.skills?.E?.attempts || 0;
+      if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
+    }
+    if (bestPnum && bestAtt >= 3) map[sid] = String(bestPnum);
+  }
+  return map;
+}
+
+// Aggregate attack combos for a set of session IDs, keyed by player
+function aggregateAttackBySessionIds(sessionIds) {
+  const combos = {}; // cc → {k, e, a}
+  for (const ps of Object.values(DATA.player_session)) {
+    if (!sessionIds.has(ps.session_id)) continue;
+    const sk = ps.skills?.A;
+    if (!sk) continue;
+    for (const [cc, cv] of Object.entries(sk.combos || {})) {
+      if (!combos[cc]) combos[cc] = { k:0, e:0, a:0 };
+      combos[cc].k += cv.evals?.['#'] || 0;
+      combos[cc].e += cv.evals?.['='] || 0;
+      combos[cc].a += cv.attempts || 0;
+    }
+  }
+  return combos;
+}
+
+// Build the setter-breakdown section HTML (chart canvas + filter buttons)
+function buildSetterAttackSectionHTML(setterSessionMap) {
+  // Find distinct setters and their session sets
+  const setterSessions = {}; // pnum → Set of session IDs
+  for (const [sid, pnum] of Object.entries(setterSessionMap)) {
+    if (!setterSessions[pnum]) setterSessions[pnum] = new Set();
+    setterSessions[pnum].add(sid);
+  }
+
+  const setterPnums = Object.keys(setterSessions).sort((a, b) => {
+    return (setterSessions[b].size - setterSessions[a].size);
+  });
+
+  if (setterPnums.length === 0) return '';
+
+  // Determine a representative season for name lookup
+  const anySession = DATA.sessions.find(s => rptSelected.has(s.id));
+  const season = anySession?.season;
+
+  const setterNames = {};
+  for (const pnum of setterPnums) {
+    setterNames[pnum] = getPlayerName(pnum, season) || `#${pnum}`;
+  }
+
+  // Filter button HTML
+  const filterBtns = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <button onclick="rptSetterFilter=null;renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${rptSetterFilter===null?'var(--maroon)':'var(--surface2)'};color:${rptSetterFilter===null?'#fff':'var(--text)'}">All Setters</button>
+    ${setterPnums.map(pnum => {
+      const active = rptSetterFilter === pnum;
+      const cnt = setterSessions[pnum].size;
+      return `<button onclick="rptSetterFilter='${pnum}';renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${active?'var(--maroon)':'var(--surface2)'};color:${active?'#fff':'var(--text)'}">#${pnum} ${setterNames[pnum]} <span style="opacity:.6">(${cnt})</span></button>`;
+    }).join('')}
+  </div>`;
+
+  return `<div class="card" style="padding:16px;margin-top:0">
+    <div style="font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Attack by Setter</div>
+    ${filterBtns}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start" id="rpt-setter-grid">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Efficiency % by Set Type</div>
+        <div style="position:relative;height:260px"><canvas id="rpt-setter-eff-chart"></canvas></div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Attempts by Set Type</div>
+        <div style="position:relative;height:260px"><canvas id="rpt-setter-att-chart"></canvas></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Render Chart.js charts for setter breakdown
+function renderRptSetterChart() {
+  const setterSessionMap = getSessionSetterMap();
+
+  // Find distinct setters
+  const setterSessions = {};
+  for (const [sid, pnum] of Object.entries(setterSessionMap)) {
+    if (!setterSessions[pnum]) setterSessions[pnum] = new Set();
+    setterSessions[pnum].add(sid);
+  }
+
+  let setterPnums = Object.keys(setterSessions).sort((a, b) => setterSessions[b].size - setterSessions[a].size);
+
+  // Determine season for name lookup
+  const anySession = DATA.sessions.find(s => rptSelected.has(s.id));
+  const season = anySession?.season;
+
+  // If a filter is active, only show that setter vs. all others
+  const displaySetters = rptSetterFilter
+    ? [rptSetterFilter, ...setterPnums.filter(p => p !== rptSetterFilter)].slice(0, 2)
+    : setterPnums.slice(0, 2);
+
+  // Aggregate combos per setter
+  const setterCombos = {};
+  for (const pnum of displaySetters) {
+    const sessions = rptSetterFilter === pnum
+      ? setterSessions[pnum]
+      : (rptSetterFilter ? new Set([...rptSelected].filter(id => setterSessionMap[id] !== rptSetterFilter)) : setterSessions[pnum]);
+    setterCombos[pnum] = aggregateAttackBySessionIds(sessions);
+  }
+
+  // Collect all combo codes that appear
+  const allCodes = new Set();
+  for (const combos of Object.values(setterCombos)) {
+    for (const cc of Object.keys(combos)) {
+      if (combos[cc].a >= 1) allCodes.add(cc);
+    }
+  }
+  const sortedCodes = [...allCodes].sort((a, b) => {
+    const totA = Object.values(setterCombos).reduce((s,c) => s+(c[a]?.a||0), 0);
+    const totB = Object.values(setterCombos).reduce((s,c) => s+(c[b]?.a||0), 0);
+    return totB - totA;
+  });
+
+  const labels = sortedCodes.map(cc => COMBO_NAMES[cc] || cc);
+  const SETTER_COLORS = [MAROON, GOLD, '#555555', '#888888'];
+
+  function getSetterLabel(pnum) {
+    const name = getPlayerName(pnum, season) || `#${pnum}`;
+    return `${name}`;
+  }
+
+  // Efficiency chart
+  const effCanvas = document.getElementById('rpt-setter-eff-chart');
+  if (effCanvas) {
+    const effDatasets = displaySetters.map((pnum, i) => ({
+      label: getSetterLabel(pnum),
+      data: sortedCodes.map(cc => {
+        const c = setterCombos[pnum]?.[cc];
+        if (!c || !c.a) return null;
+        return +((c.k - c.e) / c.a * 100).toFixed(1);
+      }),
+      backgroundColor: SETTER_COLORS[i] + 'cc',
+      borderColor: SETTER_COLORS[i],
+      borderWidth: 1,
+      borderRadius: 3,
+    }));
+    makeChart('rpt-setter-eff-chart', 'bar', { labels, datasets: effDatasets }, {
+      plugins: {
+        legend: { display: displaySetters.length > 1 },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y !== null ? ctx.parsed.y.toFixed(1)+'%' : '—'}` } }
+      },
+      scales: {
+        y: { title: { display: false }, ticks: { callback: v => v+'%' } },
+        x: { ticks: { maxRotation: 35, font: { size: 10 } } }
+      }
+    });
+  }
+
+  // Attempts chart
+  const attCanvas = document.getElementById('rpt-setter-att-chart');
+  if (attCanvas) {
+    const attDatasets = displaySetters.map((pnum, i) => ({
+      label: getSetterLabel(pnum),
+      data: sortedCodes.map(cc => setterCombos[pnum]?.[cc]?.a || 0),
+      backgroundColor: SETTER_COLORS[i] + 'cc',
+      borderColor: SETTER_COLORS[i],
+      borderWidth: 1,
+      borderRadius: 3,
+    }));
+    makeChart('rpt-setter-att-chart', 'bar', { labels, datasets: attDatasets }, {
+      plugins: { legend: { display: displaySetters.length > 1 } },
+      scales: {
+        y: { title: { display: false } },
+        x: { ticks: { maxRotation: 35, font: { size: 10 } } }
+      }
+    });
+  }
 }
 
 // ── Attack by Set Type ────────────────────────────────────────────────────────
@@ -1757,7 +1952,15 @@ function renderRptDetail() {
   // Build the spreadsheet tables
   const groups = buildPlayerGroups();
   document.getElementById('rpt-panel-servrcv').innerHTML  = buildServeRcvSheet(groups);
-  document.getElementById('rpt-panel-attack').innerHTML   = buildAttackSheet(groups);
+
+  // Attack tab: setter breakdown chart + set type tables
+  const setterSessionMap = getSessionSetterMap();
+  const setterSectionHTML = buildSetterAttackSectionHTML(setterSessionMap);
+  document.getElementById('rpt-panel-attack').innerHTML =
+    setterSectionHTML + buildAttackSheet(groups);
+  // Render setter charts after DOM update
+  if (setterSectionHTML) renderRptSetterChart();
+
   buildOverviewPanel(skills);
 
   // Show the active sub-tab
@@ -2921,7 +3124,7 @@ function renderServRcv() {
         const { skills } = aggregateSessionStats(rcvMoSess[mo]);
         const R = skills['R']; if (!R?.attempts) return null;
         const ev = R.evals||{};
-        return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+        return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/R.attempts).toFixed(3);
       }),
       borderColor: GOLD, backgroundColor: GOLD+'33',
       tension:0.3, fill:true, pointRadius:5, spanGaps:false,
@@ -2949,7 +3152,7 @@ function renderServRcv() {
     const att = zd?.attempts||0;
     if (!att) return null;
     const ev = zd.evals||{};
-    return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0))/att;
+    return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/att;
   }
   function zoneGP(zd) {
     const att = zd?.attempts||0;
@@ -3009,7 +3212,7 @@ function renderServRcv() {
       const ev = zd.evals||{};
       const att = zd.attempts||0;
       if (att) {
-        const a = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0))/att;
+        const a = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/att;
         // weighted merge
         const cur = playerZones[pid].zones[z];
         const prevAtt = cur.attempts - att;
@@ -3039,7 +3242,7 @@ function renderServRcv() {
     for (const [z, zd] of Object.entries(ps.rcv_zones||{})) {
       const att = zd.attempts||0;
       const ev  = zd.evals||{};
-      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/'||0]||ev['/']||0));
+      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0));
       if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
       if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
       if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
@@ -3067,7 +3270,7 @@ function renderServRcv() {
       const zd = rcv_zones[z];
       if (zd?.attempts) {
         const ev = zd.evals||{};
-        const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/zd.attempts;
+        const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0))/zd.attempts;
         zoneMonthData[z].push(+avg.toFixed(3));
       } else {
         zoneMonthData[z].push(null);
