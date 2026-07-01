@@ -51,7 +51,7 @@ def add_action(skill_stats, action, zone_stats=None):
     sk['attempts'] += 1
     ev = action.get('evaluation', '~')
     sk['evals'][ev] = sk['evals'].get(ev, 0) + 1
-    if s == 'A' and action.get('combo_code'):
+    if s in ('A', 'E') and action.get('combo_code'):
         cc = action['combo_code']
         cn = action.get('combo_name') or cc
         if cc not in sk['combos']:
@@ -167,6 +167,24 @@ def main(raw_path, out_path):
     player_season  = defaultdict(lambda: {'sessions':set(),'actions':0,'skills':{},'rcv_zones':{}})
 
     print("Aggregating Loyola sessions ...", file=sys.stderr)
+
+    # Pre-compute dominant unnamed players per session.
+    # If one nameless player accounts for >50% of session actions, keep them
+    # (this handles sessions where no jersey numbers were set up — every action
+    # goes under one placeholder number by design).
+    for s in sessions_raw:
+        actions = s.get('actions', [])
+        total   = len(actions)
+        keep    = set()
+        if total > 0:
+            from collections import Counter as _C
+            counts = _C(a.get('player_num','') for a in actions)
+            for pnum_k, cnt in counts.items():
+                pname = s.get('players',{}).get(pnum_k, {}).get('name','')
+                if (not pname or pname.startswith('#')) and cnt / total >= 0.50:
+                    keep.add(pnum_k)
+        s['_keep_unnamed'] = keep
+
     for s in sessions_raw:
         sid    = f"{s['season']}|{s['file']}"
         season = s['season']
@@ -177,12 +195,19 @@ def main(raw_path, out_path):
         if stype == 'practice': ss['practice_sessions'] += 1
         if stype == 'match':    ss['match_sessions'] += 1
 
-        loyola_side = loyola_side_for_session(s)
+        loyola_side   = loyola_side_for_session(s)
+        keep_unnamed  = s.get('_keep_unnamed', set())
 
         for action in s.get('actions', []):
             pnum = action.get('player_num', '')
             if not pnum:
                 continue
+
+            # Skip players with no real name (unless they're the dominant placeholder)
+            pname = action.get('player_name', '')
+            if not pname or pname.startswith('#'):
+                if pnum not in keep_unnamed:
+                    continue
 
             # For match files: only count Loyola's side
             if stype == 'match':

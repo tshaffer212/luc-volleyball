@@ -643,20 +643,46 @@
 
   <div class="grid-4" id="set-kpi-row"></div>
 
+  <!-- Court visual + distribution doughnut -->
   <div class="grid-2 mt-16">
     <div class="card">
-      <h3>Overall Set Distribution</h3>
+      <h3>Offense Zone Distribution</h3>
+      <svg id="set-court-svg" viewBox="0 0 420 270" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:420px;display:block;margin:0 auto"></svg>
+    </div>
+    <div class="card">
+      <h3>Set Distribution</h3>
       <div class="chart-wrap"><canvas id="chart-set-dist"></canvas></div>
     </div>
+  </div>
+
+  <div class="grid-2 mt-16">
     <div class="card">
       <h3>Distribution by Group</h3>
       <div class="chart-wrap"><canvas id="chart-set-group"></canvas></div>
     </div>
+    <div class="card">
+      <h3>Set Distribution Trend</h3>
+      <div class="chart-wrap"><canvas id="chart-set-trend"></canvas></div>
+    </div>
   </div>
 
-  <div class="card mt-16">
-    <h3>Set Distribution Trend by Season</h3>
-    <div class="chart-wrap"><canvas id="chart-set-trend"></canvas></div>
+  <!-- Setter calls section (K1/K2/K7 — middle routes) -->
+  <div class="card mt-16" id="set-calls-card">
+    <h3>Middle Setter Calls <span style="font-size:11px;color:var(--text-dim);font-weight:400">(coded on Set actions — what route the middle ran)</span></h3>
+    <div class="grid-2">
+      <div>
+        <div class="chart-wrap" style="max-height:200px"><canvas id="chart-set-calls"></canvas></div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>Call</th><th>Route</th>
+            <th class="num">Att</th><th class="num">%</th>
+          </tr></thead>
+          <tbody id="set-calls-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="card mt-16">
@@ -810,17 +836,32 @@ const COMBO_NAMES = {
   X5:'IS Outside', V5:'High Outside', X6:'IS Right Side', V6:'High Right Side',
   XP:'BIC / Pipe', X8:'D-Ball', PP:'Pipe (Back Set)', V8:'High Back Row', VP:'High Pipe',
   X1:'Front Quick', X2:'Back Quick', X7:'Gap / 31',
+  // Setter calls (coded on E actions — what route the middle runs)
+  K1:'Front Quick (call)', K2:'Back Quick (call)', K7:'Shoot/Gap (call)',
+  KC:'Quick in 3', KM:'Shifted to 2', KP:'Shifted to 4', KE:'No First Tempo', KD:'Slide',
+  KB:'BIC (call)',
 };
-const PIN_COMBOS    = ['X5','V5','X6','V6','XP','X8','PP','V8','VP'];
-const MIDDLE_COMBOS = ['X1','X2','X7'];
+const PIN_COMBOS         = ['X5','V5','X6','V6','XP','X8','PP','V8','VP'];
+const MIDDLE_COMBOS      = ['X1','X2','X7'];
+const SETTER_CALL_COMBOS = ['K1','K2','K7','KC','KM','KP','KD','KE','KB'];
+// Court zone → combo codes mapping (for court visual)
+const COURT_ZONES = [
+  { id:'z4', label:'Left\nAntenna', codes:['X5','V5'],       color:'#8D0034', row:0, col:0 },
+  { id:'z3', label:'Middle\nFront', codes:['X1','X2','X7','K1','K2','K7','KC'], color:'#9c27b0', row:0, col:1 },
+  { id:'z2', label:'Right\nAntenna',codes:['X6','V6'],       color:'#FEBC18', row:0, col:2 },
+  { id:'z6', label:'Pipe /\nBIC',   codes:['XP','PP','KB'],  color:'#4caf50', row:1, col:1 },
+  { id:'z1', label:'D-Ball /\nBack',codes:['X8','V8','VP'],  color:'#2196f3', row:1, col:2 },
+];
 const COMBO_COLORS  = {
   X5:'#8D0034', V5:'#c0004f', X6:'#FEBC18', V6:'#FED056',
   XP:'#4caf50', X8:'#2e7d32', PP:'#2196f3', V8:'#64b5f6', VP:'#90a4ae',
   X1:'#9c27b0', X2:'#ce93d8', X7:'#6a1b9a',
+  K1:'#7b1fa2', K2:'#ab47bc', K7:'#4a148c',
+  KC:'#880e4f', KM:'#e91e63', KP:'#ff5722', KD:'#795548', KE:'#607d8b', KB:'#00897b',
 };
 
 // Position group helpers
-const PIN_POS      = new Set(['2','5']);   // outside + opposite
+const PIN_POS      = new Set(['2','3']);   // outside + opposite
 const MIDDLE_POS   = new Set(['4']);
 const LIBERO_POS   = new Set(['1']);
 
@@ -865,7 +906,7 @@ function rcvMetrics(evals, attempts) {
   };
 }
 const EVAL_NAMES = {'#':'Kill/Ace/Perfect', '+':'Positive', '/':'Half-Positive', '-':'Negative', '=':'Error', '!':'Overpass'};
-const POS_NAMES  = {'1':'Libero', '2':'Outside', '3':'Setter', '4':'Middle', '5':'Opposite', '6':'Def. Spec'};
+const POS_NAMES  = {'1':'Libero', '2':'Outside', '3':'Opposite', '4':'Middle', '5':'Setter', '6':'Def. Spec'};
 const SEASONS_SORTED = ['Fall 2025','Spring 2025','Fall 2026','Spring 2026'];
 
 const CHART_DEFAULTS = {
@@ -1195,12 +1236,13 @@ function getPlayerGroup(pnum, season) {
   const p = getPlayerInfo(pnum, season);
   if (!p) return 'OUTSIDES';
   if (p.is_libero) return 'LIBEROS';
-  const pos = (p.position_code || '').toUpperCase().trim();
-  if (['S','SET','SE'].includes(pos))                return 'SETTERS';
-  if (['MB','MH','M','MID','MI'].includes(pos))      return 'MIDDLES';
-  if (['OP','RS','OPP','RH','OS'].includes(pos))     return 'OPPOSITES';
-  if (['L','LB','LIB'].includes(pos))                return 'LIBEROS';
-  return 'OUTSIDES';
+  const pos = (p.position_code || '').trim();
+  // DataVolley numeric codes: 1=Libero, 2=Outside, 3=Opposite, 4=Middle, 5=Setter
+  if (pos === '1' || ['L','LB','LIB'].includes(pos.toUpperCase()))        return 'LIBEROS';
+  if (pos === '5' || ['S','SET','SE'].includes(pos.toUpperCase()))         return 'SETTERS';
+  if (pos === '4' || ['MB','MH','M','MID','MI'].includes(pos.toUpperCase())) return 'MIDDLES';
+  if (pos === '3' || ['OP','RS','OPP','RH','OS'].includes(pos.toUpperCase())) return 'OPPOSITES';
+  return 'OUTSIDES'; // pos === '2' or unknown → OUTSIDES
 }
 
 function buildPlayerGroups() {
@@ -2220,15 +2262,52 @@ function renderPlayerList() {
   });
 
   const container = document.getElementById('player-list');
-  container.innerHTML = players.map(p => {
+
+  // When showing all seasons, collapse to one card per unique player (name-based)
+  let displayPlayers = players;
+  if (seasonFilter === 'all' && pinnedPlayers.size === 0) {
+    const byName = {};
+    for (const p of players) {
+      if (!byName[p.name]) {
+        byName[p.name] = { ...p, allSeasons: [] };
+      }
+      if (!byName[p.name].allSeasons.includes(p.season)) {
+        byName[p.name].allSeasons.push(p.season);
+      }
+    }
+    // Re-aggregate career stats for each unique player
+    displayPlayers = Object.values(byName).map(p => {
+      const careerAgg = getPlayerAggSeason(p.num, p.allSeasons);
+      return { ...p, agg: careerAgg };
+    });
+    // Re-apply sort on career agg
+    displayPlayers.sort((a,b) => {
+      if (sortBy === 'attacks') return (b.agg.skills?.A?.attempts||0) - (a.agg.skills?.A?.attempts||0);
+      if (sortBy === 'kills')   return (b.agg.skills?.A?.kill_pct||0) - (a.agg.skills?.A?.kill_pct||0);
+      if (sortBy === 'serves')  return (b.agg.skills?.S?.attempts||0) - (a.agg.skills?.S?.attempts||0);
+      return (b.agg.actions||0) - (a.agg.actions||0);
+    });
+  }
+
+  container.innerHTML = displayPlayers.map(p => {
     const A = p.agg.skills?.A;
     const S = p.agg.skills?.S;
-    const isSelected = selectedPlayer === p.num && selectedPlayerSeason === p.season;
-    const seasonLabel = p.season !== 'all' ? `<span style="font-size:10px;color:var(--text-dim);margin-left:4px">${p.season}</span>` : '';
-    return `<div class="player-card ${isSelected?'selected':''}" onclick="selectPlayer('${p.num}','${p.season}')">
+    const isSelected = selectedPlayer === p.num && (selectedPlayerSeason === p.season || selectedPlayerSeason === 'all');
+    // Season chips for multi-season cards
+    const seasonChips = p.allSeasons
+      ? p.allSeasons.map(s => {
+          const isActiveSeason = selectedPlayer === p.num && selectedPlayerSeason === s;
+          return `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;cursor:pointer;margin:1px;background:${isActiveSeason?'var(--gold)':'var(--surface3)'};color:${isActiveSeason?'#000':'var(--text-muted)'};border:1px solid ${isActiveSeason?'var(--gold)':'var(--border)'}"
+            onclick="event.stopPropagation();selectPlayer('${p.num}','${s}')">${s.replace('Fall ','F').replace('Spring ','S')}</span>`;
+        }).join('')
+      : '';
+    const hasMultipleSeasons = p.allSeasons && p.allSeasons.length > 1;
+    return `<div class="player-card ${isSelected?'selected':''}" onclick="selectPlayer('${p.num}','${p.allSeasons?'all':p.season}')">
       <div class="player-num">#${p.num}</div>
-      <div class="player-name">${p.name} ${p.is_libero ? '<span class="libero-badge">L</span>' : ''} ${seasonLabel}</div>
+      <div class="player-name">${p.name} ${p.is_libero ? '<span class="libero-badge">L</span>' : ''}</div>
       <div class="player-pos">${POS_NAMES[p.position_code]||'Unknown'}</div>
+      ${hasMultipleSeasons ? `<div style="margin:4px 0 2px">${seasonChips}</div>` : ''}
+      ${!hasMultipleSeasons && p.season && p.season !== 'all' ? `<div style="font-size:10px;color:var(--text-dim);margin:2px 0">${p.season}</div>` : ''}
       <div class="player-mini-stats">
         <div class="player-mini-stat">
           <div class="player-mini-val">${fmt(p.agg.actions)}</div>
@@ -2961,6 +3040,114 @@ function renderServRcv() {
   });
 }
 
+// ═══════════════════════════ SETTER COURT VISUAL ═════════════════════════════
+
+function renderSetterCourt(allCombos, totalAtt) {
+  const svg = document.getElementById('set-court-svg');
+  if (!svg) return;
+
+  // Compute zone stats from COURT_ZONES mapping
+  const zoneData = COURT_ZONES.map(z => {
+    let att=0, k=0, e=0;
+    for (const cc of z.codes) {
+      const cv = allCombos[cc];
+      if (!cv) continue;
+      att += cv.attempts||0;
+      k   += cv.kills||0;
+      e   += cv.errors||0;
+    }
+    const eff    = att ? ((k-e)/att*100) : null;
+    const killPct= att ? (k/att*100) : null;
+    const errPct = att ? (e/att*100) : null;
+    const distPct= totalAtt ? (att/totalAtt*100) : 0;
+    return { ...z, att, k, e, eff, killPct, errPct, distPct };
+  });
+
+  // SVG layout: 3 cols × 2 rows for opponent's half + net strip
+  // Court area: x=10, y=10, w=400, h=200. Net at y=220. LUC strip y=220-260.
+  const CX=10, CY=10, CW=400, CH=200;
+  const COL=[0, 1, 2];
+  const colW = CW/3;
+  const rowH = CH/2;
+
+  // Helper: darken zone fill by attempts (min 0.12 opacity, max 0.75)
+  const maxAtt = Math.max(...zoneData.map(z=>z.att), 1);
+
+  let cells = '';
+  for (const z of zoneData) {
+    const col = z.col, row = z.row;
+    const x = CX + col*colW;
+    const y = CY + row*rowH;
+    const opacity = z.att ? (0.15 + (z.att/maxAtt)*0.65).toFixed(2) : '0.07';
+    const effColor = z.eff === null ? '#888' : z.eff > 25 ? '#4caf50' : z.eff > 0 ? '#FEBC18' : '#ef5350';
+
+    // Label lines
+    const lblLines = z.label.split('\n');
+
+    cells += `
+      <rect x="${x}" y="${y}" width="${colW}" height="${rowH}"
+            fill="${z.color}" fill-opacity="${opacity}" stroke="#333" stroke-width="1" rx="2"/>
+      ${lblLines.map((ln,i) => `<text x="${x+colW/2}" y="${y+14+(i*13)}"
+        font-family="Arial,sans-serif" font-size="10" fill="#fff" text-anchor="middle" opacity="0.8">${ln}</text>`).join('')}
+      ${z.att ? `
+        <text x="${x+colW/2}" y="${y+rowH-50}"
+          font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="${z.color}" filter="none"
+          text-anchor="middle" style="fill:${z.color};filter:brightness(2)">${z.distPct.toFixed(0)}%</text>
+        <text x="${x+colW/2}" y="${y+rowH-35}"
+          font-family="Arial,sans-serif" font-size="11" fill="#ccc" text-anchor="middle">${z.att} att</text>
+        <text x="${x+colW/2}" y="${y+rowH-18}"
+          font-family="Arial,sans-serif" font-size="11" font-weight="600" fill="${effColor}" text-anchor="middle">Eff ${z.eff!==null?(z.eff>=0?'+':'')+z.eff.toFixed(0)+'%':'—'}</text>
+        <text x="${x+colW/2}" y="${y+rowH-5}"
+          font-family="Arial,sans-serif" font-size="10" fill="#aaa" text-anchor="middle">K:${z.killPct!==null?z.killPct.toFixed(0)+'%':'—'} E:${z.errPct!==null?z.errPct.toFixed(0)+'%':'—'}</text>
+      ` : `
+        <text x="${x+colW/2}" y="${y+rowH/2+16}"
+          font-family="Arial,sans-serif" font-size="10" fill="#555" text-anchor="middle">no data</text>
+      `}`;
+  }
+
+  // Net line
+  const netY = CY+CH+12;
+
+  svg.innerHTML = `
+    <!-- Court boundary -->
+    <rect x="${CX}" y="${CY}" width="${CW}" height="${CH}" fill="#0d2137" rx="3" stroke="#1e3a5f" stroke-width="1.5"/>
+    <!-- Column separators -->
+    <line x1="${CX+colW}" y1="${CY}" x2="${CX+colW}" y2="${CY+CH}" stroke="#1e3a5f" stroke-width="1"/>
+    <line x1="${CX+colW*2}" y1="${CY}" x2="${CX+colW*2}" y2="${CY+CH}" stroke="#1e3a5f" stroke-width="1"/>
+    <!-- Row separator -->
+    <line x1="${CX}" y1="${CY+rowH}" x2="${CX+CW}" y2="${CY+rowH}" stroke="#1e3a5f" stroke-width="1"/>
+    <!-- Zone cells -->
+    ${cells}
+    <!-- Zone row labels -->
+    <text x="${CX-6}" y="${CY+rowH/2+4}" font-family="Arial,sans-serif" font-size="9" fill="#555" text-anchor="middle" transform="rotate(-90,${CX-6},${CY+rowH/2+4})">Front Row</text>
+    <text x="${CX-6}" y="${CY+rowH+rowH/2+4}" font-family="Arial,sans-serif" font-size="9" fill="#555" text-anchor="middle" transform="rotate(-90,${CX-6},${CY+rowH+rowH/2+4})">Back Row</text>
+    <!-- Net -->
+    <rect x="${CX}" y="${netY}" width="${CW}" height="10" fill="#b0c4de" rx="2" opacity="0.4"/>
+    <line x1="${CX}" y1="${netY+5}" x2="${CX+CW}" y2="${netY+5}" stroke="#b0c4de" stroke-width="2.5"/>
+    <text x="${CX+CW/2}" y="${netY+9}" font-family="Arial,sans-serif" font-size="8" fill="#b0c4de" text-anchor="middle" opacity="0.7">NET</text>
+    <!-- LUC side label -->
+    <rect x="${CX}" y="${netY+12}" width="${CW}" height="32" fill="#8D0034" fill-opacity="0.12" rx="2"/>
+    <text x="${CX+CW/2}" y="${netY+30}" font-family="Arial Black,Arial,sans-serif" font-size="11" font-weight="700" fill="#8D0034" text-anchor="middle" opacity="0.7">LUC</text>
+    <!-- Header label -->
+    <text x="${CX+CW/2}" y="${CY+CH+56}" font-family="Arial,sans-serif" font-size="9" fill="#555" text-anchor="middle">← LEFT (Zone 4)   MIDDLE (Zone 3)   RIGHT (Zone 2) →</text>
+  `;
+}
+
+// ── Getter call stats (from Set / E action combos for setter players) ─────────
+function getSetterCallStats(seasons) {
+  const calls = {};
+  for (const [key, ps] of Object.entries(DATA.player_season)) {
+    const [pnum, season] = key.split('|');
+    if (!seasons.includes(season)) continue;
+    if (getPlayerGroup(pnum, season) !== 'SETTERS') continue;
+    for (const [cc, cv] of Object.entries(ps.skills?.E?.combos || {})) {
+      if (!calls[cc]) calls[cc] = { attempts:0 };
+      calls[cc].attempts += cv.attempts||0;
+    }
+  }
+  return calls;
+}
+
 // ═══════════════════════════ SETTER TAB ═══════════════════════════════════════
 function renderSetter() {
   const seasonVal = document.getElementById('set-season').value;
@@ -3059,6 +3246,45 @@ function renderSetter() {
       <td class="num gold">${pct(cv.efficiency)}</td>
     </tr>`;
   }).join('');
+
+  // Court visual
+  renderSetterCourt(allCombos, totalAtt);
+
+  // Setter calls (K1, K2, K7 etc. from E-action combos of setter players)
+  const setterCallStats = getSetterCallStats(seasons);
+  const callCodes = SETTER_CALL_COMBOS.filter(cc => (setterCallStats[cc]?.attempts||0) > 0);
+  const totalCalls = callCodes.reduce((s,cc) => s+(setterCallStats[cc]?.attempts||0), 0);
+
+  const callsCard = document.getElementById('set-calls-card');
+  if (callCodes.length === 0) {
+    callsCard.style.display = 'none';
+  } else {
+    callsCard.style.display = 'block';
+    makeChart('chart-set-calls', 'bar', {
+      labels: callCodes.map(cc => `${cc}`),
+      datasets: [{
+        label: 'Calls',
+        data: callCodes.map(cc => setterCallStats[cc]?.attempts||0),
+        backgroundColor: callCodes.map(cc => COMBO_COLORS[cc]||'#888'),
+        borderRadius: 4,
+      }]
+    }, {
+      indexAxis: 'y',
+      plugins: { legend:{display:false} },
+      scales: { x:{ticks:{stepSize:1}} }
+    });
+    document.getElementById('set-calls-tbody').innerHTML = callCodes
+      .sort((a,b)=>(setterCallStats[b]?.attempts||0)-(setterCallStats[a]?.attempts||0))
+      .map(cc => {
+        const att = setterCallStats[cc]?.attempts||0;
+        return `<tr>
+          <td><span style="color:${COMBO_COLORS[cc]||'#888'};font-weight:700">${cc}</span></td>
+          <td style="color:var(--text-muted)">${COMBO_NAMES[cc]||cc}</td>
+          <td class="num">${att}</td>
+          <td class="num">${totalCalls ? pct(att/totalCalls*100) : '—'}</td>
+        </tr>`;
+      }).join('');
+  }
 }
 
 // ═══════════════════════════ FBSO TAB ════════════════════════════════════════
