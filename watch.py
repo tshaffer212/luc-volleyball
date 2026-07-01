@@ -28,35 +28,52 @@ except ImportError:
     print("     pip3 install watchdog --break-system-packages\n")
     sys.exit(1)
 
-DVW_ROOT  = Path(__file__).parent.parent / "Volleyball DVW Files"
-REBUILD   = Path(__file__).parent / "rebuild.py"
+DVW_ROOT  = Path(__file__).resolve().parent.parent.parent / "Volleyball DVW Files"
+REBUILD   = Path(__file__).resolve().parent / "rebuild.py"
 DEBOUNCE  = 3.0  # seconds to wait after last change before rebuilding
 
 class DVWHandler(FileSystemEventHandler):
     def __init__(self):
-        self._pending = False
-        self._last_event = 0
+        self._pending       = False
+        self._force_rebuild = False  # set True on deletion (need full rescan)
+        self._last_event    = 0
 
     def on_created(self, event):
         if not event.is_directory and event.src_path.endswith('.dvw'):
-            self._queue(event.src_path)
+            self._queue(event.src_path, force=False)
 
     def on_modified(self, event):
         if not event.is_directory and event.src_path.endswith('.dvw'):
-            self._queue(event.src_path)
+            self._queue(event.src_path, force=False)
 
-    def _queue(self, path):
-        print(f"\n  📄  Change detected: {Path(path).name}")
+    def on_deleted(self, event):
+        if not event.is_directory and event.src_path.endswith('.dvw'):
+            self._queue(event.src_path, force=True)
+
+    def _queue(self, path, force=False):
+        label = '🗑' if force else '📄'
+        action = 'Deleted' if force else 'Change detected'
+        print(f"\n  {label}  {action}: {Path(path).name}")
         self._pending = True
         self._last_event = time.time()
+        if force:
+            self._force_rebuild = True  # latch; stays True until rebuild runs
 
     def check_and_rebuild(self):
         if self._pending and (time.time() - self._last_event) >= DEBOUNCE:
             self._pending = False
+            force = self._force_rebuild
+            self._force_rebuild = False
             print(f"\n{'='*60}")
-            print("  🔄  Triggering rebuild...")
+            if force:
+                print("  🔄  File deleted — forcing full rescan...")
+            else:
+                print("  🔄  Triggering rebuild...")
             print(f"{'='*60}")
-            result = subprocess.run([sys.executable, str(REBUILD)])
+            cmd = [sys.executable, str(REBUILD)]
+            if force:
+                cmd.append('--force')
+            result = subprocess.run(cmd)
             if result.returncode == 0:
                 print("\n  ✅  Dashboard updated — refresh your browser.\n")
             else:
@@ -74,8 +91,9 @@ def main():
 
     print(f"\n👀  Watching for .dvw changes in:")
     print(f"    {DVW_ROOT}")
-    print(f"\n    Add or update any .dvw file and the dashboard")
+    print(f"\n    Add, update, or delete any .dvw file and the dashboard")
     print(f"    will rebuild automatically (after a {DEBOUNCE:.0f}s delay).")
+    print(f"    Deletions trigger a full rescan (--force) to remove stale data.")
     print(f"\n    Press Ctrl+C to stop.\n")
 
     try:
