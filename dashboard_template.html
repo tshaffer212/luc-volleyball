@@ -1449,16 +1449,21 @@ function buildServeRcvSheet(groups) {
   const teamTot = totalize(allPlayers);
   teamTot.pnum = '*'; teamTot.name = 'TEAM TOTAL';
 
+  const PASS_GROUPS = ['OUTSIDES', 'LIBEROS'];
+  const rcvPlayers = PASS_GROUPS.flatMap(g => groups[g]||[]);
+  const rcvTeamTot = totalize(rcvPlayers);
+  rcvTeamTot.pnum = '*'; rcvTeamTot.name = 'TEAM TOTAL';
+
   function buildTable(cols, secLabel, rowFn, colSpan, totStyle='background:var(--maroon);color:#fff;font-weight:700') {
+    const isRcv = secLabel === 'RECEIVING';
+    const groupOrder = isRcv ? PASS_GROUPS : POS_GROUP_ORDER;
+    const sectionTot = isRcv ? rcvTeamTot : teamTot;
     let rows = '';
-    let hasData = false;
-    for (const gName of POS_GROUP_ORDER) {
-      const grp = (groups[gName]||[]).filter(p => gName === 'LIBEROS' ? p.rAtt > 0 : true);
-      const relevant = grp.filter(p => secLabel==='SERVING' ? p.sAtt>0 : p.rAtt>0);
-      if (!relevant.length) continue;
-      hasData = true;
+    for (const gName of groupOrder) {
+      const grp = (groups[gName]||[]).filter(p => isRcv ? p.rAtt > 0 : p.sAtt > 0);
+      if (!grp.length) continue;
       rows += `<tr><td colspan="${colSpan+2}" style="${GH}">${gName}</td></tr>`;
-      for (const p of relevant) {
+      for (const p of grp) {
         rows += `<tr>
           <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
           <td style="white-space:nowrap">${p.name}</td>
@@ -1473,7 +1478,7 @@ function buildServeRcvSheet(groups) {
     }
     rows += `<tr style="${totStyle}">
       <td colspan="2" style="font-weight:700">TEAM TOTAL</td>
-      ${rowFn(teamTot, true)}
+      ${rowFn(sectionTot, true)}
     </tr>`;
     return `<div class="xlsx-wrap"><table class="xlsx-tbl">
       <thead>
@@ -1513,8 +1518,9 @@ function buildZoneSheet(groups) {
   }
 
   function buildTable(players) {
+    const PASS_GROUPS = ['OUTSIDES', 'LIBEROS'];
     let rows = '';
-    for (const gName of POS_GROUP_ORDER) {
+    for (const gName of PASS_GROUPS) {
       const grp = (groups[gName]||[]).filter(p => p.rAtt > 0);
       const relevant = grp.filter(p => Object.keys(p.rZones).length > 0);
       if (!relevant.length) continue;
