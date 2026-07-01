@@ -22,7 +22,7 @@
     --text-dim: #666;
     --green: #4caf50;
     --red: #f44336;
-    --blue: #2196f3;
+    --blue: #FEBC18;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
@@ -114,7 +114,7 @@
   .eval-kill { color: var(--green); }
   .eval-err  { color: var(--red); }
   .eval-pos  { color: var(--blue); }
-  .eval-neg  { color: #ff9800; }
+  .eval-neg  { color: #aaaaaa; }
 
   /* Chart containers */
   .chart-wrap { position: relative; }
@@ -475,11 +475,11 @@
 <!-- ═══════════════════════════ ATTACK TAB ═══════════════════════════ -->
 <div id="tab-attack" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="atk-season" onchange="renderAttack()">
+    <div><label>Season</label><br><select id="atk-season" onchange="atkCodeSel=null;renderAttack()">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
-    <div><label>Group</label><br><select id="atk-group" onchange="renderAttack()">
+    <div><label>Group</label><br><select id="atk-group" onchange="atkCodeSel=null;renderAttack()">
       <option value="all">All Hitters</option>
       <option value="pins">Pins (Outside / Opposite)</option>
       <option value="middles">Middles</option>
@@ -632,7 +632,7 @@
 <!-- ═══════════════════════════ SETTER TAB ═══════════════════════════ -->
 <div id="tab-setter" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="set-season" onchange="renderSetter()">
+    <div><label>Season</label><br><select id="set-season" onchange="setterGroupSel=null;renderSetter()">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -825,11 +825,10 @@ const GOLD   = '#FEBC18';
 const GOLD_LIGHT = '#FED056';
 const GREEN  = '#4caf50';
 const RED    = '#f44336';
-const BLUE   = '#64b5f6';
-const ORANGE = '#ff9800';
+const GREY   = '#888888';
 
 const SKILL_NAMES = {S:'Serve', R:'Reception', E:'Set', A:'Attack', B:'Block', D:'Dig', F:'Freeball'};
-const SKILL_COLORS = {S: '#9c27b0', R: BLUE, E: '#ff9800', A: MAROON, B: '#4caf50', D: '#00bcd4', F: '#607d8b'};
+const SKILL_COLORS = {S: MAROON, R: GOLD, A: '#555555', B: '#888888', E: '#aaaaaa', D: '#bbbbbb', F: '#cccccc'};
 
 // Set/combo type definitions
 const COMBO_NAMES = {
@@ -847,17 +846,18 @@ const SETTER_CALL_COMBOS = ['K1','K2','K7','KC','KM','KP','KD','KE','KB'];
 // Court zone → combo codes mapping (for court visual)
 const COURT_ZONES = [
   { id:'z4', label:'Left\nAntenna', codes:['X5','V5'],       color:'#8D0034', row:0, col:0 },
-  { id:'z3', label:'Middle\nFront', codes:['X1','X2','X7','K1','K2','K7','KC'], color:'#9c27b0', row:0, col:1 },
+  { id:'z3', label:'Middle\nFront', codes:['X1','X2','X7','K1','K2','K7','KC'], color:'#666666', row:0, col:1 },
   { id:'z2', label:'Right\nAntenna',codes:['X6','V6'],       color:'#FEBC18', row:0, col:2 },
-  { id:'z6', label:'Pipe /\nBIC',   codes:['XP','PP','KB'],  color:'#4caf50', row:1, col:1 },
-  { id:'z1', label:'D-Ball /\nBack',codes:['X8','V8','VP'],  color:'#2196f3', row:1, col:2 },
+  { id:'z6', label:'Pipe /\nBIC',   codes:['XP','PP','KB'],  color:'#888888', row:1, col:1 },
+  { id:'z1', label:'D-Ball /\nBack',codes:['X8','V8','VP'],  color:'#555555', row:1, col:2 },
 ];
 const COMBO_COLORS  = {
-  X5:'#8D0034', V5:'#c0004f', X6:'#FEBC18', V6:'#FED056',
-  XP:'#4caf50', X8:'#2e7d32', PP:'#2196f3', V8:'#64b5f6', VP:'#90a4ae',
-  X1:'#9c27b0', X2:'#ce93d8', X7:'#6a1b9a',
-  K1:'#7b1fa2', K2:'#ab47bc', K7:'#4a148c',
-  KC:'#880e4f', KM:'#e91e63', KP:'#ff5722', KD:'#795548', KE:'#607d8b', KB:'#00897b',
+  X5:'#8D0034', V5:'#b30045',   // outside left → maroon
+  X6:'#FEBC18', V6:'#c49010',   // right side → gold
+  XP:'#666666', X8:'#888888', PP:'#555555', V8:'#aaaaaa', VP:'#999999', // back row → grey
+  X1:'#b08000', X2:'#d4a800', X7:'#806000',   // quicks → amber
+  K1:'#777777', K2:'#999999', K7:'#555555',
+  KC:'#444444', KM:'#666666', KP:'#888888', KD:'#aaaaaa', KE:'#bbbbbb', KB:'#cccccc',
 };
 
 // Position group helpers
@@ -1065,7 +1065,9 @@ function init() {
 }
 
 // ═══════════════════════════ REPORTS TAB ═════════════════════════════════════
-let rptSelected = new Set(); // selected session IDs
+let rptSelected    = new Set(); // selected session IDs
+let setterGroupSel = null;    // 'pins' | 'middles' | 'bic' | null — setter group bar filter
+let atkCodeSel     = null;    // combo code string | null — attack bar filter
 
 function getISOWeek(dateStr) {
   const d = new Date(dateStr);
@@ -1184,7 +1186,7 @@ function renderReports() {
   makeChart('chart-wk-rcv','line',{
     labels: shortLabels,
     datasets:[{ label:'Reception AVG', data:rcvAvg,
-      borderColor:'#2196f3', backgroundColor:'#2196f333',
+      borderColor:GOLD, backgroundColor:GOLD+'33',
       tension:0.3, fill:true, pointRadius:4, spanGaps:false }]
   },{ scales:{ y:{ min:1.5, max:3, ticks:{ callback:v=>v.toFixed(2) } } } });
 
@@ -1201,8 +1203,23 @@ function renderReports() {
   makeChart('chart-wk-vol','bar',{
     labels: shortLabels,
     datasets:[{ label:'Actions', data:volAct,
-      backgroundColor:MAROON+'cc', borderRadius:4 }]
-  },{});
+      backgroundColor: rptMoKeys.map(mo => {
+        const hasSel = rptMoSess[mo] && [...rptMoSess[mo]].some(id => rptSelected.has(id));
+        return hasSel ? GOLD : MAROON+'cc';
+      }),
+      borderRadius:4 }]
+  },{
+    onClick: (e, elements) => {
+      if (!elements.length) return;
+      const mo = rptMoKeys[elements[0].index];
+      const sids = rptMoSess[mo];
+      if (!sids) return;
+      const allSel = [...sids].every(id => rptSelected.has(id));
+      sids.forEach(id => allSel ? rptSelected.delete(id) : rptSelected.add(id));
+      renderReports();
+      renderRptDetail();
+    }
+  });
 
   // ── Session browser ───────────────────────────────────────────────────────
   const listEl = document.getElementById('rpt-session-list');
@@ -1660,7 +1677,7 @@ function buildOverviewPanel(skills) {
         <span style="width:80px;font-size:12px;color:var(--text-muted)">${SKILL_NAMES[sk]}</span>
         <span style="width:40px;font-size:13px;font-weight:700;text-align:right">${fmt(att)}</span>
         <div style="flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
-          <div style="width:${bar.toFixed(1)}%;height:100%;background:${sk==='A'?GOLD:sk==='S'?GREEN:sk==='R'?'#2196f3':MAROON};border-radius:3px"></div>
+          <div style="width:${bar.toFixed(1)}%;height:100%;background:${sk==='A'?GOLD:sk==='S'?MAROON:sk==='R'?GOLD:'#888888'};border-radius:3px"></div>
         </div>
         <span style="width:40px;font-size:12px;font-weight:600;color:${sk==='A'?GOLD:'var(--text)'};text-align:right">${att?(kills/att*100).toFixed(1)+'%':'0%'}</span>
       </div>`;
@@ -1728,7 +1745,7 @@ function renderRptDetail() {
       <div class="stat-val big" style="color:var(--gold)">${atkEffVal}</div>
       <div class="stat-lbl">${fmt(Aatt)} attacks</div></div>
     <div class="card-sm"><div class="card-title">Reception AVG</div>
-      <div class="stat-val big" style="color:#2196f3">${rcvAvgVal}</div>
+      <div class="stat-val big" style="color:var(--gold)">${rcvAvgVal}</div>
       <div class="stat-lbl">${fmt(Ratt)} receptions</div></div>
     <div class="card-sm"><div class="card-title">Serve Ace %</div>
       <div class="stat-val big green">${aceVal}</div>
@@ -1997,7 +2014,7 @@ function renderSeasonOverview(season, container) {
       </div>
       <div class="card-sm">
         <div class="card-title">Reception Perfect</div>
-        <div class="stat-val big" style="color:#ff9800">${R ? pct(R.kill_pct) : '—'}</div>
+        <div class="stat-val big" style="color:var(--gold)">${R ? pct(R.kill_pct) : '—'}</div>
         <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">${R ? fmt(R.attempts) : '—'} receptions · ${R ? pct(R.pos_pct) : '—'} pos</div>
       </div>
     </div>
@@ -2413,7 +2430,7 @@ function renderPlayerDetail(num, detailSeason) {
       ${R ? `
       <div class="section-title">Reception</div>
       <div class="stat-grid">
-        <div class="stat-box highlight"><div class="stat-val" style="color:#ff9800">${pct(R.kill_pct)}</div><div class="stat-lbl">Perfect %</div></div>
+        <div class="stat-box highlight"><div class="stat-val" style="color:var(--gold)">${pct(R.kill_pct)}</div><div class="stat-lbl">Perfect %</div></div>
         <div class="stat-box"><div class="stat-val">${pct(R.pos_pct)}</div><div class="stat-lbl">Positive %</div></div>
         <div class="stat-box"><div class="stat-val">${pct(R.error_pct)}</div><div class="stat-lbl">Error %</div></div>
         <div class="stat-box"><div class="stat-val">${fmt(R.attempts)}</div><div class="stat-lbl">Receptions</div></div>
@@ -2556,7 +2573,7 @@ function renderScoutDetail(name) {
           <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(S.attempts)} serves · ${pct(S.error_pct)} err</div>
         </div>` : ''}
         ${R ? `<div class="stat-box">
-          <div class="stat-val" style="color:#ff9800">${pct(R.kill_pct)}</div>
+          <div class="stat-val" style="color:var(--gold)">${pct(R.kill_pct)}</div>
           <div class="stat-lbl">Rcv Perfect%</div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(R.attempts)} receptions</div>
         </div>` : ''}
@@ -2655,14 +2672,17 @@ function renderAttack() {
   // Sort codes by attempts for charts
   const sortedCodes = [...allCodes].sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0));
 
-  // Distribution bar chart
+  // Distribution bar chart — click to highlight a combo
   const metricLabel = {attempts:'Attempts',kill_pct:'Kill %',efficiency:'Efficiency %',error_pct:'Error %'}[metric];
   makeChart('chart-atk-dist', 'bar', {
     labels: sortedCodes.map(cc => `${cc}\n${COMBO_NAMES[cc]||cc}`),
     datasets: [{
       label: metricLabel,
       data: sortedCodes.map(cc => combos[cc]?.[metric] || 0),
-      backgroundColor: sortedCodes.map(cc => COMBO_COLORS[cc] || '#888'),
+      backgroundColor: sortedCodes.map(cc => {
+        const base = COMBO_COLORS[cc] || '#888';
+        return (!atkCodeSel || atkCodeSel === cc) ? base : base + '33';
+      }),
       borderRadius: 4,
     }]
   }, {
@@ -2671,16 +2691,27 @@ function renderAttack() {
     scales: {
       x: { ticks: { callback: v => metric !== 'attempts' ? v+'%' : v } },
       y: { ticks: { font: { size: 10 } } }
+    },
+    onClick: (e, elements) => {
+      if (!elements.length) { atkCodeSel = null; }
+      else {
+        const cc = sortedCodes[elements[0].index];
+        atkCodeSel = (atkCodeSel === cc) ? null : cc;
+      }
+      renderAttack();
     }
   });
 
-  // Efficiency grouped bar chart
+  // Efficiency grouped bar chart — dim non-selected combos
   makeChart('chart-atk-eff', 'bar', {
     labels: sortedCodes,
     datasets: [
-      { label: 'Kill %',  data: sortedCodes.map(cc => combos[cc]?.kill_pct||0),  backgroundColor: GREEN, borderRadius: 3 },
-      { label: 'Eff %',   data: sortedCodes.map(cc => combos[cc]?.efficiency||0), backgroundColor: GOLD,  borderRadius: 3 },
-      { label: 'Error %', data: sortedCodes.map(cc => combos[cc]?.error_pct||0), backgroundColor: RED,   borderRadius: 3 },
+      { label:'Kill %',  data:sortedCodes.map(cc=>combos[cc]?.kill_pct||0),
+        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel||atkCodeSel===cc)?GREEN:GREEN+'33'), borderRadius:3 },
+      { label:'Eff %',   data:sortedCodes.map(cc=>combos[cc]?.efficiency||0),
+        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel||atkCodeSel===cc)?GOLD:GOLD+'33'),  borderRadius:3 },
+      { label:'Error %', data:sortedCodes.map(cc=>combos[cc]?.error_pct||0),
+        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel||atkCodeSel===cc)?RED:RED+'33'),   borderRadius:3 },
     ]
   }, {
     scales: { y: { ticks: { callback: v => v+'%' } } }
@@ -2725,7 +2756,8 @@ function renderAttack() {
   const topCodes = sortedCodes.slice(0, 8);
   document.getElementById('atk-player-thead').innerHTML = `<tr>
     <th>#</th><th>Player</th><th class="num">Total</th>
-    ${topCodes.map(cc => `<th class="num" title="${COMBO_NAMES[cc]||cc}">${cc}</th>`).join('')}
+    ${topCodes.map(cc => `<th class="num" title="${COMBO_NAMES[cc]||cc}"
+      style="${atkCodeSel===cc?'background:'+MAROON+'55;color:var(--gold)':''}">${cc}</th>`).join('')}
   </tr>`;
   document.getElementById('atk-player-tbody').innerHTML = playerData.map(p => `<tr>
     <td class="gold">#${p.pnum}</td>
@@ -2733,9 +2765,10 @@ function renderAttack() {
     <td class="num">${p.totalAtt}</td>
     ${topCodes.map(cc => {
       const cv = p.combos[cc];
-      if (!cv || !cv.attempts) return '<td class="num" style="color:var(--text-dim)">—</td>';
+      const hiCol = atkCodeSel === cc ? 'background:'+MAROON+'22;' : '';
+      if (!cv || !cv.attempts) return `<td class="num" style="${hiCol}color:var(--text-dim)">—</td>`;
       const kp = cv.attempts ? (cv.kills/cv.attempts*100).toFixed(0) : 0;
-      return `<td class="num" title="${cv.attempts} att">${kp}%<span style="font-size:10px;color:var(--text-dim);margin-left:3px">${cv.attempts}</span></td>`;
+      return `<td class="num" style="${hiCol}" title="${cv.attempts} att">${kp}%<span style="font-size:10px;color:var(--text-dim);margin-left:3px">${cv.attempts}</span></td>`;
     }).join('')}
   </tr>`).join('') || '<tr><td colspan="20" class="empty">No data</td></tr>';
 
@@ -2846,7 +2879,7 @@ function renderServRcv() {
       <td class="num gold">${rm?.avg.toFixed(2) || '—'}</td>
       <td class="num green">${pct(rm?.perf_pct)}</td>
       <td class="num">${pct(rm?.gp_pct)}</td>
-      <td class="num" style="color:#ff9800">${pct(rm?.oos_pct)}</td>
+      <td class="num" style="color:var(--gold)">${pct(rm?.oos_pct)}</td>
       <td class="num red">${pct(rm?.err_pct)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="8" class="empty">No reception data</td></tr>';
@@ -2858,7 +2891,7 @@ function renderServRcv() {
   makeChart('chart-serve-evals', 'doughnut', {
     labels: serveLabels,
     datasets: [{ data: serveVals,
-      backgroundColor:[GREEN,'#64b5f6','#ff9800','#ff7043',RED],
+      backgroundColor:[GREEN,'#aaaaaa','#777777','#444444',RED],
       borderColor:'#1a1a1a', borderWidth:2 }]
   }, {
     scales:{x:{display:false},y:{display:false}},
@@ -2871,7 +2904,7 @@ function renderServRcv() {
   makeChart('chart-rcv-evals', 'doughnut', {
     labels: rcvLabels,
     datasets: [{ data: rcvVals,
-      backgroundColor:[GREEN,'#64b5f6','#ff9800','#ff7043',RED],
+      backgroundColor:[GREEN,'#aaaaaa','#777777','#444444',RED],
       borderColor:'#1a1a1a', borderWidth:2 }]
   }, {
     scales:{x:{display:false},y:{display:false}},
@@ -2900,7 +2933,7 @@ function renderServRcv() {
   // ── Receive Zone Breakdown ────────────────────────────────────────────────
   // Aggregate zone data across selected seasons
   const ZONE_LABELS = { '1':'Zone 1 (Back Right)', '5':'Zone 5 (Back Left)', '6':'Zone 6 (Back Middle)' };
-  const ZONE_COLORS = { '1': MAROON, '5': '#2196f3', '6': GOLD };
+  const ZONE_COLORS = { '1': MAROON, '5': '#888888', '6': GOLD };
   const teamZones = {};
   for (const s of seasons) {
     const sz = DATA.season_stats[s]?.rcv_zones || {};
@@ -3187,20 +3220,30 @@ function renderSetter() {
       <div class="stat-val big" style="color:var(--maroon)">${totalAtt ? pct(pinAtt/totalAtt*100) : '—'}</div>
       <div class="stat-lbl">${fmt(pinAtt)} sets</div></div>
     <div class="card-sm"><div class="card-title">Quick %</div>
-      <div class="stat-val big" style="color:#9c27b0">${totalAtt ? pct(midAtt/totalAtt*100) : '—'}</div>
+      <div class="stat-val big" style="color:#888888">${totalAtt ? pct(midAtt/totalAtt*100) : '—'}</div>
       <div class="stat-lbl">${fmt(midAtt)} sets</div></div>
     <div class="card-sm"><div class="card-title">BIC / Back Row %</div>
       <div class="stat-val big green">${totalAtt ? pct(bicAtt/totalAtt*100) : '—'}</div>
       <div class="stat-lbl">${fmt(bicAtt)} sets</div></div>
   `;
 
-  // Overall distribution doughnut
+  // Overall distribution doughnut — dim non-selected group if filter active
+  const BIC_COMBOS = ['XP','PP','X8'];
   const distCodes = [...PIN_COMBOS,...MIDDLE_COMBOS].filter(cc=>allCombos[cc]?.attempts>0);
+  function inSetterGroup(cc) {
+    if (setterGroupSel === 'pins')    return PIN_COMBOS.includes(cc) && !BIC_COMBOS.includes(cc);
+    if (setterGroupSel === 'middles') return MIDDLE_COMBOS.includes(cc);
+    if (setterGroupSel === 'bic')     return BIC_COMBOS.includes(cc);
+    return true;
+  }
   makeChart('chart-set-dist', 'doughnut', {
     labels: distCodes.map(cc => `${cc} — ${COMBO_NAMES[cc]||cc}`),
     datasets: [{
       data: distCodes.map(cc => allCombos[cc]?.attempts||0),
-      backgroundColor: distCodes.map(cc => COMBO_COLORS[cc]||'#888'),
+      backgroundColor: distCodes.map(cc => {
+        const base = COMBO_COLORS[cc]||'#888';
+        return (!setterGroupSel || inSetterGroup(cc)) ? base : base + '22';
+      }),
       borderColor:'#1a1a1a', borderWidth:2,
     }]
   }, {
@@ -3208,15 +3251,32 @@ function renderSetter() {
     plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}}}
   });
 
-  // Pin vs Middle vs BIC grouped bar
-  const groupLabels = ['Pin Calls', 'Quick Calls', 'BIC/Back Row'];
-  const groupAtts   = [pinAtt - bicAtt, midAtt, bicAtt].map(v=>Math.max(0,v));
+  // Pin vs Middle vs BIC grouped bar — click to filter
+  const groupLabels  = ['Pin Calls', 'Quick Calls', 'BIC/Back Row'];
+  const groupKeys    = ['pins',      'middles',      'bic'];
+  const groupBaseClr = [MAROON,      '#666666',      '#888888'];
+  const groupAtts    = [pinAtt - bicAtt, midAtt, bicAtt].map(v=>Math.max(0,v));
   makeChart('chart-set-group', 'bar', {
     labels: groupLabels,
-    datasets: [
-      { label:'Attempts', data:groupAtts, backgroundColor:[MAROON,'#9c27b0',GREEN], borderRadius:4 }
-    ]
-  }, { plugins:{legend:{display:false}} });
+    datasets: [{
+      label:'Attempts',
+      data: groupAtts,
+      backgroundColor: groupKeys.map((k, i) =>
+        (!setterGroupSel || setterGroupSel === k) ? groupBaseClr[i] : groupBaseClr[i] + '44'
+      ),
+      borderRadius:4
+    }]
+  }, {
+    plugins:{ legend:{display:false} },
+    onClick: (e, elements) => {
+      if (!elements.length) { setterGroupSel = null; }
+      else {
+        const k = groupKeys[elements[0].index];
+        setterGroupSel = (setterGroupSel === k) ? null : k;
+      }
+      renderSetter();
+    }
+  });
 
   // Set distribution trend by month (all seasons)
   const trendCodes = ['X5','X6','XP','X1','X7'].filter(cc=>distCodes.includes(cc));
@@ -3253,8 +3313,8 @@ function renderSetter() {
   allCodes.sort((a,b)=>(allCombos[b]?.attempts||0)-(allCombos[a]?.attempts||0));
   document.getElementById('set-eff-tbody').innerHTML = allCodes.map(cc => {
     const cv = allCombos[cc];
-    const grp = MIDDLE_COMBOS.includes(cc)?'Quick':PIN_COMBOS.slice(4).includes(cc)?'Back Row':'Pin';
-    return `<tr>
+    const dim = setterGroupSel && !inSetterGroup(cc);
+    return `<tr style="${dim ? 'opacity:0.3' : ''}">
       <td><span style="color:${COMBO_COLORS[cc]||'#888'};font-weight:700">${cc}</span></td>
       <td style="color:var(--text-muted)">${COMBO_NAMES[cc]||cc}</td>
       <td class="num">${cv.attempts}</td>
