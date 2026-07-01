@@ -1866,13 +1866,17 @@ function buildBlockDefSheet(groups) {
 
   function bRow(ev, att, bold=false) {
     if (!att) return `<td colspan="7" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
-    const stuffs = ev['#']||0, touch = ev['+']||0, err = ev['=']||0;
-    const stuffPct = stuffs/att*100, touchPct=(stuffs+touch)/att*100, errPct=err/att*100;
+    const stuffs  = ev['#']||0;
+    const touches = (ev['+']||0) + (ev['-']||0);  // all deflections that didn't kill
+    const err     = ev['=']||0;
+    const stuffPct = stuffs/att*100;
+    const touchPct = touches/att*100;
+    const errPct   = err/att*100;
     const B = bold ? 'font-weight:700;' : '';
     return `
       <td style="${B}text-align:right">${att}</td>
       <td style="${B}text-align:right;color:var(--green)">${stuffs||'—'}</td>
-      <td style="${B}text-align:right">${touch||'—'}</td>
+      <td style="${B}text-align:right">${touches||'—'}</td>
       <td style="${B}text-align:right;color:var(--red)">${err||'—'}</td>
       <td style="${B}text-align:right;color:var(--green)">${stuffPct.toFixed(1)}%</td>
       <td style="${B}text-align:right">${touchPct.toFixed(1)}%</td>
@@ -1908,7 +1912,7 @@ function buildBlockDefSheet(groups) {
       <thead>
         <tr><td colspan="9" style="${SH}">BLOCKING</td></tr>
         <tr style="${CH}"><th>#</th><th>Player</th>
-          <th class="num">BA</th><th class="num">Stuffs</th><th class="num">Touch+</th><th class="num">Err</th>
+          <th class="num">BA</th><th class="num">Stuffs</th><th class="num">Touches</th><th class="num">Err</th>
           <th class="num">Stuff%</th><th class="num">Touch%</th><th class="num">Err%</th></tr>
       </thead><tbody>${rows}</tbody>
     </table></div>`;
