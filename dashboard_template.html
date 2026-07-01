@@ -64,6 +64,7 @@
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
   .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 
   /* Cards */
@@ -170,7 +171,7 @@
 
   /* Responsive */
   @media (max-width: 900px) {
-    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: 1fr; }
     .header-stats { display: none; }
   }
 
@@ -441,7 +442,7 @@
   </div>
 
   <!-- KPI row for selected sessions -->
-  <div class="grid-4" id="rpt-kpi-row" style="display:none"></div>
+  <div class="grid-5" id="rpt-kpi-row" style="display:none"></div>
 
   <div id="rpt-empty" class="empty mt-20">Select one or more sessions above to see a detailed report.</div>
 
@@ -1285,6 +1286,7 @@ function buildPlayerGroups() {
         bEv:{}, bAtt:0,   // block
         dEv:{}, dAtt:0,   // dig
         rZones:{},         // receive zones
+        digKillR:0, digTotR:0, // rally-level dig conversion
       };
     }
     const pl = players[pnum];
@@ -1313,6 +1315,8 @@ function buildPlayerGroups() {
     }
     if (sk.B) { pl.bAtt += sk.B.attempts||0; addEv(pl.bEv, sk.B.evals); }
     if (sk.D) { pl.dAtt += sk.D.attempts||0; addEv(pl.dEv, sk.D.evals); }
+    pl.digTotR  += ps.dig_total_rallies || 0;
+    pl.digKillR += ps.dig_kill_rallies  || 0;
   }
 
   const groups = {};
@@ -1911,10 +1915,11 @@ function buildBlockDefSheet(groups) {
   }
 
   // ── Dig table (all positions) ──────────────────────────────────────────────
-  function dRow(ev, att, bold=false) {
-    if (!att) return `<td colspan="8" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
+  function dRow(ev, att, bold=false, digTotR=0, digKillR=0) {
+    if (!att) return `<td colspan="9" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
     const perf=ev['#']||0, good=ev['+']||0, poor=ev['-']||0, err=ev['=']||0;
     const perfPct=perf/att*100, posPct=(perf+good)/att*100, errPct=err/att*100;
+    const convPct = digTotR ? digKillR/digTotR*100 : null;
     const B = bold ? 'font-weight:700;' : '';
     return `
       <td style="${B}text-align:right">${att}</td>
@@ -1924,40 +1929,44 @@ function buildBlockDefSheet(groups) {
       <td style="${B}text-align:right;color:var(--red)">${err||'—'}</td>
       <td style="${B}text-align:right;color:var(--green)">${perfPct.toFixed(1)}%</td>
       <td style="${B}text-align:right">${posPct.toFixed(1)}%</td>
-      <td style="${B}text-align:right;color:var(--red)">${errPct.toFixed(1)}%</td>`;
+      <td style="${B}text-align:right;color:var(--red)">${errPct.toFixed(1)}%</td>
+      <td style="${B}text-align:right;color:var(--gold)">${convPct!==null?convPct.toFixed(1)+'%':'—'}</td>`;
   }
 
   function buildDigTable() {
     let rows = '', hasData = false;
-    const teamEv = {}, teamAtt = [0];
+    const teamEv = {}, teamAtt = [0], teamDigR = [0,0]; // [total, kills]
     for (const gName of POS_GROUP_ORDER) {
       const grp = (groups[gName]||[]).filter(p => p.dAtt > 0);
       if (!grp.length) continue;
       hasData = true;
-      rows += `<tr><td colspan="10" style="${GH}">${gName}</td></tr>`;
-      const grpEv = {}, grpAtt = [0];
+      rows += `<tr><td colspan="11" style="${GH}">${gName}</td></tr>`;
+      const grpEv = {}, grpAtt = [0], grpDigR = [0,0];
       for (const p of grp) {
         rows += `<tr>
           <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
           <td style="white-space:nowrap">${p.name}</td>
-          ${dRow(p.dEv, p.dAtt)}
+          ${dRow(p.dEv, p.dAtt, false, p.digTotR, p.digKillR)}
         </tr>`;
         grpAtt[0] += p.dAtt; teamAtt[0] += p.dAtt;
+        grpDigR[0] += p.digTotR; grpDigR[1] += p.digKillR;
+        teamDigR[0] += p.digTotR; teamDigR[1] += p.digKillR;
         for (const [e,n] of Object.entries(p.dEv)) { grpEv[e]=(grpEv[e]||0)+n; teamEv[e]=(teamEv[e]||0)+n; }
       }
       rows += `<tr style="background:var(--surface3)">
         <td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>
-        ${dRow(grpEv, grpAtt[0], true)}</tr>`;
+        ${dRow(grpEv, grpAtt[0], true, grpDigR[0], grpDigR[1])}</tr>`;
     }
     rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
-      <td colspan="2">TEAM TOTAL</td>${dRow(teamEv, teamAtt[0], true)}</tr>`;
+      <td colspan="2">TEAM TOTAL</td>${dRow(teamEv, teamAtt[0], true, teamDigR[0], teamDigR[1])}</tr>`;
     if (!hasData) return '';
     return `<div class="xlsx-wrap"><table class="xlsx-tbl">
       <thead>
-        <tr><td colspan="10" style="${SH}">DIGGING</td></tr>
+        <tr><td colspan="11" style="${SH}">DIGGING</td></tr>
         <tr style="${CH}"><th>#</th><th>Player</th>
           <th class="num">DA</th><th class="num">Perf</th><th class="num">Good</th><th class="num">Poor</th><th class="num">Err</th>
-          <th class="num">Perf%</th><th class="num">Pos%</th><th class="num">Err%</th></tr>
+          <th class="num">Perf%</th><th class="num">Pos%</th><th class="num">Err%</th>
+          <th class="num" style="color:var(--gold)">Dig→K%</th></tr>
       </thead><tbody>${rows}</tbody>
     </table></div>`;
   }
@@ -1997,6 +2006,16 @@ function renderRptDetail() {
   const rcvAvgVal = Ratt ? rcvAvg(R.evals||{}, Ratt).toFixed(2) : '—';
   const aceVal    = Satt ? (((S.evals||{})['#']||0)/Satt*100).toFixed(1)+'%' : '—';
   const errVal    = Satt ? (((S.evals||{})['=']||0)/Satt*100).toFixed(1)+'%' : '—';
+
+  // FBSO%
+  let fbsoRcv = 0, fbsoKills = 0;
+  for (const sid of rptSelected) {
+    const sess = DATA.sessions.find(s => s.id === sid);
+    fbsoRcv   += sess?.fbso_rcv   || 0;
+    fbsoKills += sess?.fbso_kills || 0;
+  }
+  const fbsoPct = fbsoRcv ? (fbsoKills/fbsoRcv*100).toFixed(1)+'%' : '—';
+
   kpiEl.innerHTML = `
     <div class="card-sm"><div class="card-title">Attack Efficiency</div>
       <div class="stat-val big" style="color:var(--gold)">${atkEffVal}</div>
@@ -2009,7 +2028,10 @@ function renderRptDetail() {
       <div class="stat-lbl">${fmt(Satt)} serves</div></div>
     <div class="card-sm"><div class="card-title">Serve Err %</div>
       <div class="stat-val big red">${errVal}</div>
-      <div class="stat-lbl">&nbsp;</div></div>`;
+      <div class="stat-lbl">&nbsp;</div></div>
+    <div class="card-sm"><div class="card-title">FBSO %</div>
+      <div class="stat-val big" style="color:var(--gold)">${fbsoPct}</div>
+      <div class="stat-lbl">${fbsoRcv} rcv rallies</div></div>`;
 
   // Build the spreadsheet tables
   const groups = buildPlayerGroups();

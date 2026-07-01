@@ -83,6 +83,89 @@ def derive_zones(zone_stats):
         zs['gp_pct']  = round(gp, 1)
         zs['err_pct'] = round(err, 1)
 
+def compute_rally_sequences(actions, loyola_side):
+    """
+    Split actions into rallies (a new rally begins at each Serve action) and compute:
+
+      1. Per-player dig→kill conversion
+         A dig "converts" only if the SAME side that dug the ball kills in that rally.
+         In practice (loyola_side='both') both sides are Loyola, so we track by side
+         to avoid crediting a dig on side A when side B kills.
+
+      2. Team FBSO (First Ball Sideout)
+         For each rally where Loyola is receiving (opponent served), check whether
+         the receiving side's FIRST attack in that rally is a kill.
+         In practice every rally has a receiving side — both count since both = Loyola.
+
+    Returns:
+        player_dig : {pnum: {'dig_rallies': int, 'dig_kill_rallies': int}}
+        fbso       : {'rcv_rallies': int, 'fbso_kills': int}
+    """
+    # ── Split into rallies ───────────────────────────────────────────────────────
+    rallies, current = [], []
+    for a in actions:
+        if a.get('skill_code') == 'S' and current:
+            rallies.append(current)
+            current = []
+        current.append(a)
+    if current:
+        rallies.append(current)
+
+    player_dig = {}   # pnum → {dig_rallies, dig_kill_rallies}
+    fbso = {'rcv_rallies': 0, 'fbso_kills': 0}
+
+    for rally in rallies:
+        if not rally:
+            continue
+
+        # Serving side = team of the first action (the serve itself)
+        serve_side = rally[0].get('team_side')   # 'home' | 'away'
+        rcv_side   = 'away' if serve_side == 'home' else 'home'
+
+        # Which sides scored a kill in this rally?
+        sides_killed = {
+            a.get('team_side')
+            for a in rally
+            if a.get('skill_code') == 'A' and a.get('evaluation') == '#'
+        }
+
+        # ── Dig → Kill ──────────────────────────────────────────────────────────
+        for a in rally:
+            if a.get('skill_code') != 'D':
+                continue
+            a_side = a.get('team_side')
+            # Match mode: only Loyola digs count
+            if loyola_side != 'both' and a_side != loyola_side:
+                continue
+            pnum = a.get('player_num', '')
+            if not pnum:
+                continue
+            if pnum not in player_dig:
+                player_dig[pnum] = {'dig_rallies': 0, 'dig_kill_rallies': 0}
+            player_dig[pnum]['dig_rallies'] += 1
+            # Convert only if the SAME side that dug also kills
+            if a_side in sides_killed:
+                player_dig[pnum]['dig_kill_rallies'] += 1
+
+        # ── FBSO ────────────────────────────────────────────────────────────────
+        # In match mode skip rallies where Loyola is serving (not receiving)
+        if loyola_side != 'both' and rcv_side != loyola_side:
+            continue
+
+        fbso['rcv_rallies'] += 1
+
+        # First attack by the receiving side in this rally
+        first_atk = next(
+            (a for a in rally
+             if a.get('team_side') == rcv_side and a.get('skill_code') == 'A'),
+            None
+        )
+        if first_atk and first_atk.get('evaluation') == '#':
+            fbso['fbso_kills'] += 1
+
+    return player_dig, fbso
+
+
 def derive(skill_stats):
     """Add kill%, error%, pos%, efficiency to each skill (in-place)."""
     for st in skill_stats.values():
@@ -142,11 +225,22 @@ def main(raw_path, out_path):
 
     loyola_player_nums = set(players.keys())
 
+    # ── Rally sequences (dig→kill + FBSO) ────────────────────────────────────
+    print("Computing rally sequences ...", file=sys.stderr)
+    session_rally = {}   # sid → {'dig': {...}, 'fbso': {...}}
+    for s in sessions_raw:
+        sid = f"{s['season']}|{s['file']}"
+        ls  = loyola_side_for_session(s)
+        dig, fbso = compute_rally_sequences(s.get('actions', []), ls)
+        session_rally[sid] = {'dig': dig, 'fbso': fbso}
+
     # ── Session index ─────────────────────────────────────────────────────────
     sessions_index = []
     for s in sessions_raw:
+        sid  = f"{s['season']}|{s['file']}"
+        fbso = session_rally[sid]['fbso']
         sessions_index.append({
-            'id':             f"{s['season']}|{s['file']}",
+            'id':             sid,
             'file':           s['file'],
             'date':           s.get('date'),
             'season':         s.get('season'),
@@ -157,11 +251,14 @@ def main(raw_path, out_path):
             'action_count':   s.get('action_count', 0),
             'coding_version': s.get('coding_version', 'basic'),
             'loyola_side':    loyola_side_for_session(s),
+            'fbso_rcv':       fbso['rcv_rallies'],
+            'fbso_kills':     fbso['fbso_kills'],
         })
 
     # ── Aggregation accumulators ──────────────────────────────────────────────
     season_stats   = defaultdict(lambda: {
-        'sessions':0,'practice_sessions':0,'match_sessions':0,'actions':0,'skills':{},'rcv_zones':{}
+        'sessions':0,'practice_sessions':0,'match_sessions':0,'actions':0,
+        'skills':{},'rcv_zones':{},'fbso_rcv':0,'fbso_kills':0,
     })
     player_session = defaultdict(lambda: {'actions':0,'skills':{},'rcv_zones':{}})
     player_season  = defaultdict(lambda: {'sessions':set(),'actions':0,'skills':{},'rcv_zones':{}})
@@ -229,6 +326,29 @@ def main(raw_path, out_path):
             pse['sessions'].add(sid)
             pse['actions'] += 1
             add_action(pse['skills'], action, pse['rcv_zones'])
+
+        # ── Season FBSO ───────────────────────────────────────────────────────
+        fbso = session_rally[sid]['fbso']
+        ss['fbso_rcv']   += fbso['rcv_rallies']
+        ss['fbso_kills'] += fbso['fbso_kills']
+
+        # ── Per-player dig conversion (rally-level) ───────────────────────────
+        for pnum, dstats in session_rally[sid]['dig'].items():
+            # Apply same name/roster filters as the per-action loop
+            pname = s.get('players', {}).get(pnum, {}).get('name', '')
+            if not pname or pname.startswith('#'):
+                if pnum not in keep_unnamed:
+                    continue
+            if stype == 'match' and loyola_side != 'both' and pnum not in loyola_player_nums:
+                continue
+
+            psk = player_session[(pnum, sid)]
+            psk['dig_kill_rallies']  = psk.get('dig_kill_rallies',  0) + dstats['dig_kill_rallies']
+            psk['dig_total_rallies'] = psk.get('dig_total_rallies', 0) + dstats['dig_rallies']
+
+            pse = player_season[(pnum, season)]
+            pse['dig_kill_rallies']  = pse.get('dig_kill_rallies',  0) + dstats['dig_kill_rallies']
+            pse['dig_total_rallies'] = pse.get('dig_total_rallies', 0) + dstats['dig_rallies']
 
     # Derive metrics
     for ss in season_stats.values():
