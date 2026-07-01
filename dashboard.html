@@ -818,25 +818,27 @@ const SKILL_COLORS = {S: MAROON, R: GOLD, A: '#555555', B: '#888888', E: '#aaaaa
 
 // Set/combo type definitions
 const COMBO_NAMES = {
-  X5:'IS Outside', V5:'High Outside', X6:'IS Right Side', V6:'High Right Side',
-  XP:'BIC / Pipe', X8:'D-Ball', PP:'Pipe (Back Set)', V8:'High Back Row', VP:'High Pipe',
-  X1:'Front Quick', X2:'Back Quick', X7:'Gap / 31',
+  X5:'Outside', V5:'High Outside', X6:'Right Side', V6:'High Right Side',
+  XP:'BIC',     X8:'D-Ball',
+  X1:'Front Quick', X2:'Back Quick', X7:'Gap',
   // Setter calls (coded on E actions — what route the middle runs)
   K1:'Front Quick (call)', K2:'Back Quick (call)', K7:'Shoot/Gap (call)',
   KC:'Quick in 3', KM:'Shifted to 2', KP:'Shifted to 4', KE:'No First Tempo', KD:'Slide',
   KB:'BIC (call)',
 };
-const PIN_COMBOS         = ['X5','V5','X6','V6','XP','X8','PP','V8'];
-const MIDDLE_COMBOS      = ['X1','X2','X7'];
-const IGNORED_COMBOS     = new Set(['XO','VP']); // typos / unimportant codes to hide everywhere
+const PIN_COMBOS     = ['X5','X6','V5','V6','XP','X8'];
+const MIDDLE_COMBOS  = ['X1','X2','X7'];
+// Whitelist — only these attack codes are shown; everything else is treated as a typo or unimportant
+const VALID_COMBOS   = new Set([...PIN_COMBOS, ...MIDDLE_COMBOS]);
+const IGNORED_COMBOS = VALID_COMBOS; // kept as alias so any remaining references still work
 const SETTER_CALL_COMBOS = ['K1','K2','K7','KC','KM','KP','KD','KE','KB'];
 // Court zone → combo codes mapping (for court visual)
 const COURT_ZONES = [
-  { id:'z4', label:'Left\nAntenna', codes:['X5','V5'],       color:'#8D0034', row:0, col:0 },
+  { id:'z4', label:'Left\nAntenna', codes:['X5','V5'],             color:'#8D0034', row:0, col:0 },
   { id:'z3', label:'Middle\nFront', codes:['X1','X2','X7','K1','K2','K7','KC'], color:'#666666', row:0, col:1 },
-  { id:'z2', label:'Right\nAntenna',codes:['X6','V6'],       color:'#FEBC18', row:0, col:2 },
-  { id:'z6', label:'Pipe /\nBIC',   codes:['XP','PP','KB'],  color:'#888888', row:1, col:1 },
-  { id:'z1', label:'D-Ball /\nBack',codes:['X8','V8','VP'],  color:'#555555', row:1, col:2 },
+  { id:'z2', label:'Right\nAntenna',codes:['X6','V6'],             color:'#FEBC18', row:0, col:2 },
+  { id:'z6', label:'BIC /\nPipe',   codes:['XP','KB'],             color:'#888888', row:1, col:1 },
+  { id:'z1', label:'D-Ball',        codes:['X8'],                  color:'#555555', row:1, col:2 },
 ];
 const COMBO_COLORS  = {
   X5:'#8D0034', V5:'#b30045',   // outside left → maroon
@@ -1692,7 +1694,7 @@ function renderRptSetterChart() {
   const allCodes = new Set();
   for (const combos of Object.values(setterCombos)) {
     for (const cc of Object.keys(combos)) {
-      if (combos[cc].a >= 1 && !IGNORED_COMBOS.has(cc)) allCodes.add(cc);
+      if (combos[cc].a >= 1 && VALID_COMBOS.has(cc)) allCodes.add(cc);
     }
   }
   const sortedCodes = [...allCodes].sort((a, b) => {
@@ -1838,7 +1840,7 @@ function buildAttackSheet(groups) {
         <tr><td colspan="${2+NC*4+4}" style="${SH}">${title}</td></tr>
         <tr style="${CH}">
           <th>#</th><th>Player</th>
-          ${comboCodes.map(cc=>`<th colspan="4" class="num" style="color:${COMBO_COLORS[cc]||'#888'}">${cc} — ${COMBO_NAMES[cc]||cc}</th>`).join('')}
+          ${comboCodes.map(cc=>`<th colspan="4" class="num" style="color:${COMBO_COLORS[cc]||'#888'}">${COMBO_NAMES[cc]||cc}</th>`).join('')}
           <th colspan="4" class="num" style="color:var(--gold)">TOTAL</th>
         </tr>
         <tr style="${CH}">
@@ -2964,17 +2966,17 @@ function renderAttack() {
     <div class="card-sm"><div class="card-title">Efficiency</div>
       <div class="stat-val big" style="color:var(--gold)">${totalAtt ? pct((totalKill-totalErr)/totalAtt*100) : '—'}</div></div>
     <div class="card-sm"><div class="card-title">Top Call</div>
-      <div class="stat-val big" style="font-size:22px">${topCombo||'—'}</div>
-      <div class="stat-lbl">${COMBO_NAMES[topCombo]||''}</div></div>
+      <div class="stat-val big" style="font-size:20px">${topCombo ? (COMBO_NAMES[topCombo]||topCombo) : '—'}</div>
+      <div class="stat-lbl">${topCombo||''}</div></div>
   `;
 
   // Sort codes by attempts for charts (exclude ignored combos)
-  const sortedCodes = [...allCodes].filter(cc => !IGNORED_COMBOS.has(cc)).sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0));
+  const sortedCodes = [...allCodes].filter(cc => VALID_COMBOS.has(cc)).sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0));
 
   // Distribution bar chart — click to highlight a combo
   const metricLabel = {attempts:'Attempts',kill_pct:'Kill %',efficiency:'Efficiency %',error_pct:'Error %'}[metric];
   makeChart('chart-atk-dist', 'bar', {
-    labels: sortedCodes.map(cc => `${cc}\n${COMBO_NAMES[cc]||cc}`),
+    labels: sortedCodes.map(cc => COMBO_NAMES[cc]||cc),
     datasets: [{
       label: metricLabel,
       data: sortedCodes.map(cc => combos[cc]?.[metric] || 0),
@@ -3003,7 +3005,7 @@ function renderAttack() {
 
   // Efficiency grouped bar chart — dim non-selected combos
   makeChart('chart-atk-eff', 'bar', {
-    labels: sortedCodes,
+    labels: sortedCodes.map(cc => COMBO_NAMES[cc]||cc),
     datasets: [
       { label:'Kill %',  data:sortedCodes.map(cc=>combos[cc]?.kill_pct||0),
         backgroundColor:sortedCodes.map(cc=>(!atkCodeSel||atkCodeSel===cc)?GREEN:GREEN+'33'), borderRadius:3 },
@@ -3055,8 +3057,8 @@ function renderAttack() {
   const topCodes = sortedCodes.slice(0, 8);
   document.getElementById('atk-player-thead').innerHTML = `<tr>
     <th>#</th><th>Player</th><th class="num">Total</th>
-    ${topCodes.map(cc => `<th class="num" title="${COMBO_NAMES[cc]||cc}"
-      style="${atkCodeSel===cc?'background:'+MAROON+'55;color:var(--gold)':''}">${cc}</th>`).join('')}
+    ${topCodes.map(cc => `<th class="num" title="${cc}"
+      style="${atkCodeSel===cc ? 'background:'+MAROON+'55;color:var(--gold)' : ''}">${COMBO_NAMES[cc]||cc}</th>`).join('')}
   </tr>`;
   document.getElementById('atk-player-tbody').innerHTML = playerData.map(p => `<tr>
     <td class="gold">#${p.pnum}</td>
@@ -3536,7 +3538,7 @@ function renderSetter() {
     return true;
   }
   makeChart('chart-set-dist', 'doughnut', {
-    labels: distCodes.map(cc => `${cc} — ${COMBO_NAMES[cc]||cc}`),
+    labels: distCodes.map(cc => COMBO_NAMES[cc]||cc),
     datasets: [{
       data: distCodes.map(cc => allCombos[cc]?.attempts||0),
       backgroundColor: distCodes.map(cc => {
@@ -3614,8 +3616,8 @@ function renderSetter() {
     const cv = allCombos[cc];
     const dim = setterGroupSel && !inSetterGroup(cc);
     return `<tr style="${dim ? 'opacity:0.3' : ''}">
-      <td><span style="color:${COMBO_COLORS[cc]||'#888'};font-weight:700">${cc}</span></td>
-      <td style="color:var(--text-muted)">${COMBO_NAMES[cc]||cc}</td>
+      <td><span style="color:${COMBO_COLORS[cc]||'#888'};font-weight:700">${COMBO_NAMES[cc]||cc}</span></td>
+      <td style="color:var(--text-muted);font-size:11px">${cc}</td>
       <td class="num">${cv.attempts}</td>
       <td class="num">${totalAll ? pct(cv.attempts/totalAll*100) : '—'}</td>
       <td class="num">${cv.kills||0}</td>
