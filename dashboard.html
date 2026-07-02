@@ -3673,6 +3673,8 @@ function getSetterSessionMap(seasons) {
     let bestPnum = null, bestAtt = 0;
     for (const ps of players) {
       const eAtt = ps.skills?.E?.attempts || 0;
+      // Skip liberos — they should never be classified as primary setter
+      if (playerInGroup(ps.player_num, season, 'liberos')) continue;
       if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
     }
     if (bestPnum && bestAtt >= 3) {
@@ -3798,11 +3800,14 @@ function renderSetter() {
 
   // ── Resolve active session IDs ──────────────────────────────────────────────
   // Intersection of: setter's sessions across all time  ∩  sessions in selected seasons
+  // IMPORTANT: always assign a Set (even empty) when a filter is active — never fall back to null.
+  // A null activeSids means "no filter" (show all), which is wrong when a setter is selected
+  // but has no sessions in the current season view.
   let activeSids = null;
   if (setterPnumFilter && settersByPlayer[setterPnumFilter]) {
     const seasonSids = new Set(DATA.sessions.filter(s => seasons.includes(s.season)).map(s => s.id));
     const filtered = [...settersByPlayer[setterPnumFilter].allSids].filter(sid => seasonSids.has(sid));
-    if (filtered.length) activeSids = new Set(filtered);
+    activeSids = new Set(filtered); // empty Set if no overlap → shows zeros, not all-season data
   }
 
   // ── Aggregate combos (session-filtered when a setter is selected) ───────────
