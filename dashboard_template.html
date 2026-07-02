@@ -68,8 +68,18 @@
   .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 
   /* Cards */
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
-  .card-sm { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .card {
+    background: linear-gradient(160deg, #1e1e1e 0%, #181818 100%);
+    border: 1px solid #363636;
+    border-radius: 12px; padding: 18px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
+  }
+  .card-sm {
+    background: linear-gradient(160deg, #1e1e1e 0%, #181818 100%);
+    border: 1px solid #363636;
+    border-radius: 10px; padding: 14px;
+    box-shadow: 0 3px 14px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.04) inset;
+  }
   .card h3 { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; font-weight: 600; }
   .card-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
 
@@ -123,15 +133,51 @@
   .chart-wrap.tall canvas { max-height: 360px; }
 
   /* Table */
+  .table-scroll {
+    max-height: 420px; overflow-y: auto;
+    border-radius: 12px;
+    border: 1px solid #3a3a3a;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4),
+                inset 0 1px 0 rgba(255,255,255,0.05);
+  }
   .data-table { width: 100%; border-collapse: collapse; }
-  .data-table th { background: var(--surface2); padding: 8px 12px; text-align: left; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
-  .data-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
-  .data-table tr:hover td { background: var(--surface2); }
+  .data-table thead tr {
+    background: linear-gradient(180deg, #2c2c2c 0%, #1f1f1f 100%);
+    box-shadow: 0 2px 0 rgba(141,0,52,0.45);
+  }
+  .data-table th {
+    padding: 10px 14px; text-align: left; font-size: 10px;
+    color: #aaa; text-transform: uppercase; letter-spacing: 0.7px;
+    font-weight: 700; border-bottom: 2px solid rgba(141,0,52,0.4);
+    position: sticky; top: 0; z-index: 1;
+  }
+  .data-table th:first-child { border-left: 3px solid var(--maroon); }
+  .data-table td {
+    padding: 9px 14px; border-bottom: 1px solid #222; font-size: 13px;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .data-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.018); }
+  .data-table tbody tr:hover td {
+    background: rgba(254,188,24,0.07);
+    border-bottom-color: rgba(254,188,24,0.15);
+  }
+  .data-table tbody tr:last-child td { border-bottom: none; }
   .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
   .data-table .gold { color: var(--gold); font-weight: 600; }
   .data-table .green { color: var(--green); }
   .data-table .red { color: var(--red); }
-  .table-scroll { max-height: 420px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+  /* xlsx / Reports tables */
+  .xlsx-wrap { overflow-x: auto; border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04); }
+  .xlsx-tbl { border-collapse: collapse; min-width: 100%; font-size: 12px; white-space: nowrap; }
+  .xlsx-tbl th, .xlsx-tbl td { padding: 6px 12px; border: 1px solid #222; }
+  .xlsx-tbl th {
+    font-weight: 700; letter-spacing: 0.3px;
+    background: linear-gradient(180deg, #282828 0%, #1d1d1d 100%);
+  }
+  .xlsx-tbl tbody tr:nth-child(even) td { background: rgba(255,255,255,0.018); }
+  .xlsx-tbl tbody tr:hover td { background: rgba(254,188,24,0.06); }
 
   /* Detail panel */
   .detail-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
@@ -189,14 +235,26 @@
   .badge-practice { background: rgba(254,188,24,0.15); color: var(--gold); }
   .badge-match { background: rgba(141,0,52,0.3); color: #f08090; }
 
-  /* Xlsx-style report tables */
-  .xlsx-wrap { overflow-x: auto; }
-  .xlsx-tbl { border-collapse: collapse; min-width: 100%; font-size: 12px; white-space: nowrap; }
-  .xlsx-tbl th, .xlsx-tbl td { padding: 4px 10px; border: 1px solid #2a2a2a; }
-  .xlsx-tbl th { font-weight: 600; }
-  .xlsx-sec-hdr td { background: var(--maroon-dark); color: #fff; font-size: 13px; font-weight: 700; text-align: center; padding: 7px; letter-spacing: 0.5px; }
-  .xlsx-grp-hdr td { background: var(--maroon); color: #fff; font-weight: 700; font-size: 12px; padding: 5px 10px; }
-  .xlsx-col-hdr th { background: #1e1e1e; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+  /* Xlsx-style report tables — overrides on top of main block */
+  .xlsx-sec-hdr td {
+    background: linear-gradient(90deg, #6b0028 0%, #8D0034 60%, #6b0028 100%);
+    color: #fff; font-size: 13px; font-weight: 700; text-align: center;
+    padding: 8px; letter-spacing: 0.6px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3);
+  }
+  .xlsx-grp-hdr td {
+    background: linear-gradient(90deg, rgba(141,0,52,0.55) 0%, rgba(141,0,52,0.35) 100%);
+    color: #f0b0c0; font-weight: 700; font-size: 11px; padding: 5px 12px;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    border-left: 3px solid var(--maroon);
+  }
+  .xlsx-col-hdr th {
+    background: linear-gradient(180deg, #252525 0%, #1c1c1c 100%);
+    color: #999; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.5px; font-weight: 700;
+    border-bottom: 1px solid rgba(141,0,52,0.35);
+  }
   .xlsx-sub-hdr th { background: #181818; color: var(--text-dim); font-size: 10px; }
   .xlsx-tot-row td { background: #2a2020; font-weight: 700; border-top: 2px solid var(--maroon); }
   .xlsx-team-tot td { background: var(--maroon); color: #fff; font-weight: 700; }
