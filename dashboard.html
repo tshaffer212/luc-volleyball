@@ -2356,18 +2356,21 @@ function renderSeasonOverview(season, container) {
 
 function buildSkillBars(skills) {
   if (!skills) return '<div class="empty">No data</div>';
-  const maxAtt = Math.max(...Object.values(skills).map(s => s.attempts), 1);
-  const rows = Object.entries(skills)
-    .filter(([,v]) => v.attempts > 0)
-    .sort((a,b) => b[1].attempts - a[1].attempts)
+  const SKIP = new Set(['F']); // Freeball — exclude
+  const entries = Object.entries(skills).filter(([k, v]) => !SKIP.has(k) && v.attempts > 0);
+  const totalAtt = entries.reduce((s, [, v]) => s + v.attempts, 0);
+  const maxAtt   = Math.max(...entries.map(([, v]) => v.attempts), 1);
+  const rows = entries
+    .sort((a, b) => b[1].attempts - a[1].attempts)
     .map(([k, v]) => {
-      const color = SKILL_COLORS[k] || GOLD;
+      const color    = SKILL_COLORS[k] || GOLD;
+      const sharePct = totalAtt ? (v.attempts / totalAtt * 100).toFixed(1) : '0.0';
       return `<div class="skill-row">
         <div class="skill-icon" style="background:${color}22;color:${color}">${k}</div>
         <div class="skill-name">${SKILL_NAMES[k]||k}</div>
         <div class="skill-bar-wrap"><div class="skill-bar" style="width:${v.attempts/maxAtt*100}%;background:${color}"></div></div>
         <div class="skill-count">${fmt(v.attempts)}</div>
-        <div class="skill-pct" style="color:${color}">${pct(v.kill_pct||v.efficiency)}</div>
+        <div class="skill-pct" style="color:${color}">${sharePct}%</div>
       </div>`;
     }).join('');
   return rows || '<div class="empty">No skill data</div>';
