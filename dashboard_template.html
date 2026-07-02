@@ -3627,24 +3627,18 @@ function renderSetterCourt(allCombos, totalAtt) {
           <text x="${mx}" y="${y+17+(i*13)}"
             font-family="Arial,sans-serif" font-size="9" font-weight="700"
             fill="#FEBC18" text-anchor="middle" letter-spacing="0.8" opacity="0.85">${ln.toUpperCase()}</text>`).join('')}
-        <!-- thin maroon rule below label -->
-        <line x1="${x+14}" y1="${y+(lblLines.length>1?42:32)}" x2="${x+w-14}" y2="${y+(lblLines.length>1?42:32)}"
-          stroke="#8D0034" stroke-width="0.7" opacity="0.5"/>
         <!-- distribution % -->
         <text x="${mx}" y="${y+h-58}"
           font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#fff" text-anchor="middle">${z.distPct.toFixed(0)}%</text>
         <!-- attempt count -->
         <text x="${mx}" y="${y+h-40}"
-          font-family="Arial,sans-serif" font-size="10" fill="#444" text-anchor="middle">${z.att.toLocaleString()} att</text>
-        <!-- thin maroon rule above eff -->
-        <line x1="${x+14}" y1="${y+h-29}" x2="${x+w-14}" y2="${y+h-29}"
-          stroke="#8D0034" stroke-width="0.7" opacity="0.4"/>
+          font-family="Arial,sans-serif" font-size="10" fill="#888" text-anchor="middle">${z.att.toLocaleString()} att</text>
         <!-- efficiency -->
-        <text x="${mx}" y="${y+h-15}"
+        <text x="${mx}" y="${y+h-20}"
           font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="${effColor}" text-anchor="middle">Eff ${z.eff>=0?'+':''}${z.eff.toFixed(0)}%</text>
         <!-- kill / error -->
-        <text x="${mx}" y="${y+h-2}"
-          font-family="Arial,sans-serif" font-size="9.5" fill="#3a3a3a" text-anchor="middle">K:${z.killPct.toFixed(0)}%   E:${z.errPct.toFixed(0)}%</text>
+        <text x="${mx}" y="${y+h-5}"
+          font-family="Arial,sans-serif" font-size="9.5" fill="#bbb" text-anchor="middle">K:${z.killPct.toFixed(0)}%   E:${z.errPct.toFixed(0)}%</text>
       </g>`;
   }).join('');
 
@@ -3656,8 +3650,8 @@ function renderSetterCourt(allCombos, totalAtt) {
     <line x1="${CX+colW*2}" y1="${CY}" x2="${CX+colW*2}" y2="${CY+CH}" stroke="#1a1a1a" stroke-width="1"/>
     <line x1="${CX}" y1="${CY+rowH}" x2="${CX+CW}" y2="${CY+rowH}" stroke="#1a1a1a" stroke-width="1"/>
     ${cells}
-    <text x="${CX-12}" y="${CY+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#383838" text-anchor="middle" transform="rotate(-90,${CX-12},${CY+rowH/2+4})">FRONT ROW</text>
-    <text x="${CX-12}" y="${CY+rowH+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#383838" text-anchor="middle" transform="rotate(-90,${CX-12},${CY+rowH+rowH/2+4})">BACK ROW</text>
+    <text x="${CX-12}" y="${CY+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#aaa" text-anchor="middle" transform="rotate(-90,${CX-12},${CY+rowH/2+4})">FRONT ROW</text>
+    <text x="${CX-12}" y="${CY+rowH+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#aaa" text-anchor="middle" transform="rotate(-90,${CX-12},${CY+rowH+rowH/2+4})">BACK ROW</text>
     <!-- net -->
     <rect x="${CX}" y="${netY}" width="${CW}" height="8" fill="#252525" rx="3"/>
     <line x1="${CX+10}" y1="${netY+4}" x2="${CX+CW-10}" y2="${netY+4}" stroke="#8D0034" stroke-width="1" opacity="0.4"/>
