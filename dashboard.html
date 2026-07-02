@@ -3588,13 +3588,17 @@ function renderSetterCourt(allCombos, totalAtt) {
     return { ...z, att, k, e, eff, killPct, errPct, distPct };
   });
 
-  const CX=34, CY=8, CW=406, CH=256;
+  const CX=34, CW=406, CH=256;
+  const netH   = 16;   // height of the NET bar at the top
+  const netGap = 4;    // gap between net bar and court grid
+  const CY     = 8;    // top of SVG content
+  const courtY = CY + netH + netGap; // court grid starts below net
   const colW = CW/3, rowH = CH/2;
   const GAP = 4;
 
   const cells = zoneData.map(z => {
     const x  = CX + z.col*colW + GAP;
-    const y  = CY + z.row*rowH + GAP;
+    const y  = courtY + z.row*rowH + GAP;
     const w  = colW - GAP*2;
     const h  = rowH - GAP*2;
     const mx = x + w/2;
@@ -3642,22 +3646,21 @@ function renderSetterCourt(allCombos, totalAtt) {
       </g>`;
   }).join('');
 
-  const netY = CY + CH + 10;
-
   svg.innerHTML = `
-    <rect x="${CX}" y="${CY}" width="${CW}" height="${CH}" fill="#101010" rx="8" stroke="#1e1e1e" stroke-width="1"/>
-    <line x1="${CX+colW}" y1="${CY}" x2="${CX+colW}" y2="${CY+CH}" stroke="#1a1a1a" stroke-width="1"/>
-    <line x1="${CX+colW*2}" y1="${CY}" x2="${CX+colW*2}" y2="${CY+CH}" stroke="#1a1a1a" stroke-width="1"/>
-    <line x1="${CX}" y1="${CY+rowH}" x2="${CX+CW}" y2="${CY+rowH}" stroke="#1a1a1a" stroke-width="1"/>
+    <!-- NET bar at top -->
+    <rect x="${CX}" y="${CY}" width="${CW}" height="${netH}" fill="#2a2a2a" rx="3"/>
+    <line x1="${CX+10}" y1="${CY + netH/2}" x2="${CX+CW-10}" y2="${CY + netH/2}" stroke="#8D0034" stroke-width="2.5" opacity="0.95"/>
+    <text x="${CX+CW/2}" y="${CY + netH/2 + 4}" font-family="Arial,sans-serif" font-size="9" font-weight="700" fill="#ddd" text-anchor="middle" letter-spacing="3">NET</text>
+    <!-- court grid -->
+    <rect x="${CX}" y="${courtY}" width="${CW}" height="${CH}" fill="#101010" rx="8" stroke="#1e1e1e" stroke-width="1"/>
+    <line x1="${CX+colW}" y1="${courtY}" x2="${CX+colW}" y2="${courtY+CH}" stroke="#1a1a1a" stroke-width="1"/>
+    <line x1="${CX+colW*2}" y1="${courtY}" x2="${CX+colW*2}" y2="${courtY+CH}" stroke="#1a1a1a" stroke-width="1"/>
+    <line x1="${CX}" y1="${courtY+rowH}" x2="${CX+CW}" y2="${courtY+rowH}" stroke="#1a1a1a" stroke-width="1"/>
     ${cells}
-    <text x="${CX-12}" y="${CY+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#aaa" text-anchor="middle" transform="rotate(-90,${CX-12},${CY+rowH/2+4})">FRONT ROW</text>
-    <text x="${CX-12}" y="${CY+rowH+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#aaa" text-anchor="middle" transform="rotate(-90,${CX-12},${CY+rowH+rowH/2+4})">BACK ROW</text>
-    <!-- net -->
-    <rect x="${CX}" y="${netY}" width="${CW}" height="8" fill="#252525" rx="3"/>
-    <line x1="${CX+10}" y1="${netY+4}" x2="${CX+CW-10}" y2="${netY+4}" stroke="#8D0034" stroke-width="1" opacity="0.4"/>
-    <text x="${CX+CW/2}" y="${netY+7}" font-family="Arial,sans-serif" font-size="7" fill="#383838" text-anchor="middle" letter-spacing="1">NET</text>
+    <text x="${CX-12}" y="${courtY+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#aaa" text-anchor="middle" transform="rotate(-90,${CX-12},${courtY+rowH/2+4})">FRONT ROW</text>
+    <text x="${CX-12}" y="${courtY+rowH+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#aaa" text-anchor="middle" transform="rotate(-90,${CX-12},${courtY+rowH+rowH/2+4})">BACK ROW</text>
     <!-- zone footer -->
-    <text x="${CX+CW/2}" y="${netY+22}" font-family="Arial,sans-serif" font-size="8.5" fill="#aaa" text-anchor="middle">← LEFT (Zone 4)   MIDDLE (Zone 3)   RIGHT (Zone 2) →</text>
+    <text x="${CX+CW/2}" y="${courtY+CH+18}" font-family="Arial,sans-serif" font-size="8.5" fill="#aaa" text-anchor="middle">← LEFT (Zone 4)   MIDDLE (Zone 3)   RIGHT (Zone 2) →</text>
   `;
 }
 
