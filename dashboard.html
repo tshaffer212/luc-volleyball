@@ -2284,9 +2284,7 @@ function renderSeasonOverview(season, container) {
   const topPlayers = Object.entries(DATA.player_season)
     .filter(([k]) => k.endsWith('|' + season))
     .map(([k, v]) => ({ pnum: k.split('|')[0], season: k.split('|')[1], ...v }))
-    .filter(p => p.actions > 0)
-    .sort((a,b) => (b.skills?.A?.attempts||0) - (a.skills?.A?.attempts||0))
-    .slice(0, 6);
+    .filter(p => p.actions > 0);
 
   const topAttackers = [...topPlayers]
     .filter(p => (p.skills?.A?.attempts||0) >= 20)
