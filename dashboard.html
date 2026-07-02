@@ -584,7 +584,7 @@
     <div><label>Metric</label><br><select id="atk-metric" onchange="renderAttack()">
       <option value="attempts">Attempts</option>
       <option value="kill_pct">Kill %</option>
-      <option value="efficiency">Efficiency</option>
+      <option value="efficiency" selected>Efficiency</option>
       <option value="error_pct">Error %</option>
     </select></div>
   </div>
@@ -3199,15 +3199,25 @@ function renderAttack() {
         const cv = p.combos[cc];
         const hiCol = atkCodeSel === cc ? 'background:'+MAROON+'22;' : '';
         if (!cv || !cv.attempts) return `<td class="num" style="${hiCol}color:var(--text-dim)">—</td>`;
-        const kp = (cv.kills/cv.attempts*100).toFixed(0);
-        return `<td class="num" style="${hiCol}" title="${cv.attempts} att">${kp}%<span style="font-size:10px;color:var(--text-dim);margin-left:3px">${cv.attempts}</span></td>`;
+        let val, color;
+        if (metric === 'attempts') {
+          val = cv.attempts; color = 'var(--text)';
+          return `<td class="num" style="${hiCol}color:${color}">${val}</td>`;
+        } else if (metric === 'kill_pct') {
+          val = (cv.kills/cv.attempts*100).toFixed(0)+'%'; color = 'var(--green)';
+        } else if (metric === 'efficiency') {
+          val = ((cv.kills-cv.errors)/cv.attempts*100).toFixed(0)+'%'; color = 'var(--gold)';
+        } else if (metric === 'error_pct') {
+          val = (cv.errors/cv.attempts*100).toFixed(0)+'%'; color = 'var(--red)';
+        }
+        return `<td class="num" style="${hiCol}color:${color}" title="${cv.attempts} att">${val}<span style="font-size:10px;color:var(--text-dim);margin-left:3px">${cv.attempts}</span></td>`;
       }).join('')}
     </tr>`).join('');
     return `<div style="margin-bottom:20px">
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">${title}</div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>#</th><th>Player</th><th class="num">Total</th>${headerCells}</tr></thead>
+          <thead><tr><th>#</th><th>Player</th><th class="num">Total Att</th>${headerCells}</tr></thead>
           <tbody>${rows || '<tr><td colspan="${colSpan}" class="empty">No data</td></tr>'}</tbody>
         </table>
       </div>
