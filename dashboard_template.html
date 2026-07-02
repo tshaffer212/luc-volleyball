@@ -2338,15 +2338,18 @@ function renderSeasonOverview(season, container) {
     </div>
   `;
 
-  // Attack combo chart
+  // Attack combo chart — only our 9 named combo types, ordered by attempts
   const combos = A?.combos || {};
-  const comboEntries = Object.entries(combos).sort((a,b) => b[1].attempts - a[1].attempts).slice(0, 8);
+  const comboEntries = [...PIN_COMBOS, ...MIDDLE_COMBOS]
+    .filter(cc => (combos[cc]?.attempts || 0) > 0)
+    .map(cc => [cc, combos[cc]])
+    .sort((a, b) => b[1].attempts - a[1].attempts);
   if (comboEntries.length > 0) {
     makeChart('chart-season-attack-dist', 'bar', {
-      labels: comboEntries.map(([k,v]) => v.name || k),
+      labels: comboEntries.map(([cc]) => COMBO_NAMES[cc] || cc),
       datasets: [
-        { label: 'Attempts', data: comboEntries.map(([,v]) => v.attempts), backgroundColor: GOLD, borderRadius: 3 },
-        { label: 'Kills',    data: comboEntries.map(([,v]) => v.evals?.['#']||0), backgroundColor: GREEN, borderRadius: 3 },
+        { label: 'Attempts', data: comboEntries.map(([,v]) => v.attempts),          backgroundColor: GOLD,  borderRadius: 3 },
+        { label: 'Kills',    data: comboEntries.map(([,v]) => v.evals?.['#'] || 0), backgroundColor: GREEN, borderRadius: 3 },
       ]
     }, { scales: { x: { ticks: { maxRotation: 30 } } } });
   } else {
