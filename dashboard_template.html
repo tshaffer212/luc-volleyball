@@ -3497,9 +3497,10 @@ function renderAttack() {
     return getComboStatsBySessions(sids, group)[cc]?.kill_pct ?? null;
   }
 
-  const filteredTrendCodes = [...PIN_COMBOS, ...MIDDLE_COMBOS].filter(cc =>
-    trendLabels.some((_, i) => trendKill(cc, i) !== null)
-  );
+  const filteredTrendCodes = [...PIN_COMBOS, ...MIDDLE_COMBOS].filter(cc => {
+    if (atkCodeSel && cc !== atkCodeSel) return false;
+    return trendLabels.some((_, i) => trendKill(cc, i) !== null);
+  });
   const allKillVals = filteredTrendCodes.flatMap(cc => trendLabels.map((_,i) => trendKill(cc,i))).filter(v=>v!==null);
   const yMin = allKillVals.length ? Math.max(0, Math.floor((Math.min(...allKillVals)-5)/10)*10) : 0;
 
