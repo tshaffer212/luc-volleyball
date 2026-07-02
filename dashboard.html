@@ -2283,7 +2283,7 @@ function renderSeasonOverview(season, container) {
   // Top players this season
   const topPlayers = Object.entries(DATA.player_season)
     .filter(([k]) => k.endsWith('|' + season))
-    .map(([k, v]) => ({ pnum: k.split('|')[0], ...v }))
+    .map(([k, v]) => ({ pnum: k.split('|')[0], season: k.split('|')[1], ...v }))
     .filter(p => p.actions > 0)
     .sort((a,b) => (b.skills?.A?.attempts||0) - (a.skills?.A?.attempts||0))
     .slice(0, 6);
@@ -2388,7 +2388,7 @@ function buildPlayerMiniTable(players, skillCode) {
       const sk = p.skills?.[skillCode];
       return `<tr>
         <td class="gold">#${p.pnum}</td>
-        <td>${getPlayerName(p.pnum)}</td>
+        <td>${getPlayerName(p.pnum, p.season)}</td>
         <td class="num">${fmt(sk?.attempts)}</td>
         <td class="num green">${pct(sk?.kill_pct)}</td>
         <td class="num" style="color:${skillCode==='A'?'var(--gold)':'var(--red)'}">${pct(skillCode==='A'?sk?.efficiency:sk?.error_pct)}</td>
