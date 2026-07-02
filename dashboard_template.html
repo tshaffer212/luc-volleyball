@@ -3657,21 +3657,31 @@ function renderSetterCourt(allCombos, totalAtt) {
 }
 
 // ── Getter call stats (from Set / E action combos for setter players) ─────────
-// Returns { 'pnum|season': Set<sid> } for every player who set ≥ 3 times in a session.
-// This includes both primary setters (100+ attempts) and emergency/out-of-system setters
-// (liberos, pins, etc. who set a handful of times). Keyed by pnum|season so two players
-// who wore the same number in different seasons appear separately.
+// Returns { 'pnum|season': Set<sid> } for the primary setter of each session in given seasons.
+// Keyed by pnum|season so two players who wore the same number in different seasons appear separately.
+// Liberos are excluded from the dropdown entirely.
 function getSetterSessionMap(seasons) {
-  const result = {}; // 'pnum|season' → Set<sid>
+  const bySession = {};
   for (const [key, ps] of Object.entries(DATA.player_session)) {
     const sid = ps.session_id;
     const sess = DATA.sessions.find(s => s.id === sid);
     if (!sess || !seasons.includes(sess.season)) continue;
-    const eAtt = ps.skills?.E?.attempts || 0;
-    if (eAtt < 3) continue; // minimum threshold to appear in dropdown
-    const k = `${ps.player_num}|${sess.season}`;
-    if (!result[k]) result[k] = new Set();
-    result[k].add(sid);
+    if (!bySession[sid]) bySession[sid] = { players: [], season: sess.season };
+    bySession[sid].players.push(ps);
+  }
+  const result = {}; // 'pnum|season' → Set<sid>
+  for (const [sid, { players, season }] of Object.entries(bySession)) {
+    let bestPnum = null, bestAtt = 0;
+    for (const ps of players) {
+      if (playerInGroup(ps.player_num, season, 'liberos')) continue;
+      const eAtt = ps.skills?.E?.attempts || 0;
+      if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
+    }
+    if (bestPnum && bestAtt >= 3) {
+      const k = `${bestPnum}|${season}`;
+      if (!result[k]) result[k] = new Set();
+      result[k].add(sid);
+    }
   }
   return result;
 }
