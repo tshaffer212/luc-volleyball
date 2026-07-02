@@ -3659,26 +3659,28 @@ function renderSetterCourt(allCombos, totalAtt) {
 }
 
 // ── Getter call stats (from Set / E action combos for setter players) ─────────
-// Returns { pnum: Set<sid> } for the primary setter of each session in given seasons
+// Returns { 'pnum|season': Set<sid> } for the primary setter of each session in given seasons.
+// Keyed by pnum|season so two players who wore the same number in different seasons appear separately.
 function getSetterSessionMap(seasons) {
   const bySession = {};
   for (const [key, ps] of Object.entries(DATA.player_session)) {
     const sid = ps.session_id;
     const sess = DATA.sessions.find(s => s.id === sid);
     if (!sess || !seasons.includes(sess.season)) continue;
-    if (!bySession[sid]) bySession[sid] = [];
-    bySession[sid].push(ps);
+    if (!bySession[sid]) bySession[sid] = { players: [], season: sess.season };
+    bySession[sid].players.push(ps);
   }
-  const result = {}; // pnum → Set<sid>
-  for (const [sid, players] of Object.entries(bySession)) {
+  const result = {}; // 'pnum|season' → Set<sid>
+  for (const [sid, { players, season }] of Object.entries(bySession)) {
     let bestPnum = null, bestAtt = 0;
     for (const ps of players) {
       const eAtt = ps.skills?.E?.attempts || 0;
       if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
     }
     if (bestPnum && bestAtt >= 3) {
-      if (!result[bestPnum]) result[bestPnum] = new Set();
-      result[bestPnum].add(sid);
+      const k = `${bestPnum}|${season}`;
+      if (!result[k]) result[k] = new Set();
+      result[k].add(sid);
     }
   }
   return result;
@@ -3772,20 +3774,20 @@ function renderSetter() {
   const seasons   = resolveSeasons(seasonVal);
 
   // ── Populate setter dropdown ────────────────────────────────────────────────
-  const setterSessionMap = getSetterSessionMap(seasons); // pnum → Set<sid>
-  const setterPnums = Object.keys(setterSessionMap).sort((a,b) =>
+  const setterSessionMap = getSetterSessionMap(seasons); // 'pnum|season' → Set<sid>
+  const setterKeys = Object.keys(setterSessionMap).sort((a,b) =>
     setterSessionMap[b].size - setterSessionMap[a].size
   );
   const setterSel = document.getElementById('set-setter');
   const currentVal = setterPnumFilter || '';
   setterSel.innerHTML = '<option value="">All Setters</option>' +
-    setterPnums.map(pnum => {
-      // Find a representative season for name lookup
-      const aSid  = [...setterSessionMap[pnum]][0];
-      const aSess = DATA.sessions.find(s => s.id === aSid);
-      const name  = getPlayerName(pnum, aSess?.season) || `#${pnum}`;
-      const cnt   = setterSessionMap[pnum].size;
-      return `<option value="${pnum}" ${pnum===currentVal?'selected':''}>#${pnum} ${name} (${cnt})</option>`;
+    setterKeys.map(k => {
+      const [pnum, season] = k.split('|');
+      const name = getPlayerName(pnum, season) || `#${pnum}`;
+      const cnt  = setterSessionMap[k].size;
+      const multiSeason = seasons.length > 1;
+      const label = multiSeason ? `#${pnum} ${name} — ${season} (${cnt})` : `#${pnum} ${name} (${cnt})`;
+      return `<option value="${k}" ${k===currentVal?'selected':''}>${label}</option>`;
     }).join('');
 
   // ── Resolve active session IDs (null = use all seasons) ────────────────────
