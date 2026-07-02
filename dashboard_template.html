@@ -796,6 +796,9 @@
       </table>
     </div>
   </div>
+
+  <!-- Per-K-call attack breakdown tables -->
+  <div id="set-call-attack-tables"></div>
 </div>
 
 <!-- ═══════════════════════════ FBSO TAB ═══════════════════════════ -->
@@ -931,17 +934,15 @@ const COMBO_NAMES = {
   X5:'Outside', V5:'High Outside', X6:'Right Side', V6:'High Right Side',
   XP:'BIC',     X8:'D-Ball',
   X1:'Front Quick', X2:'Back Quick', X7:'Gap',
-  // Setter calls (coded on E actions — what route the middle runs)
+  // Setter calls — K1/K2/K7 only; all other K-codes treated as typos
   K1:'Front Quick (call)', K2:'Back Quick (call)', K7:'Shoot/Gap (call)',
-  KC:'Quick in 3', KM:'Shifted to 2', KP:'Shifted to 4', KE:'No First Tempo', KD:'Slide',
-  KB:'BIC (call)',
 };
 const PIN_COMBOS     = ['X5','X6','V5','V6','XP','X8'];
 const MIDDLE_COMBOS  = ['X1','X2','X7'];
 // Whitelist — only these attack codes are shown; everything else is treated as a typo or unimportant
 const VALID_COMBOS   = new Set([...PIN_COMBOS, ...MIDDLE_COMBOS]);
 const IGNORED_COMBOS = VALID_COMBOS; // kept as alias so any remaining references still work
-const SETTER_CALL_COMBOS = ['K1','K2','K7','KC','KM','KP','KD','KE','KB'];
+const SETTER_CALL_COMBOS = ['K1','K2','K7']; // K-codes whitelist — all others treated as typos
 // Court zone → combo codes mapping (for court visual)
 const COURT_ZONES = [
   { id:'z4', label:'Left\nAntenna', codes:['X5','V5'],             color:'#8D0034', row:0, col:0 },
@@ -956,7 +957,6 @@ const COMBO_COLORS  = {
   XP:'#666666', X8:'#888888', PP:'#555555', V8:'#aaaaaa', VP:'#999999', // back row → grey
   X1:'#b08000', X2:'#d4a800', X7:'#806000',   // quicks → amber
   K1:'#777777', K2:'#999999', K7:'#555555',
-  KC:'#444444', KM:'#666666', KP:'#888888', KD:'#aaaaaa', KE:'#bbbbbb', KB:'#cccccc',
 };
 
 // Position group helpers
@@ -3654,6 +3654,25 @@ function renderSetterCourt(allCombos, totalAtt) {
 }
 
 // ── Getter call stats (from Set / E action combos for setter players) ─────────
+// Returns aggregated { K1: {X5:{att,kills,errors},...}, K2:{...}, K7:{...} } for given seasons
+function getCallAttacks(seasons) {
+  const result = {};
+  for (const season of seasons) {
+    const ca = DATA.call_attacks?.[season];
+    if (!ca) continue;
+    for (const [kcode, combos] of Object.entries(ca)) {
+      if (!result[kcode]) result[kcode] = {};
+      for (const [cc, cv] of Object.entries(combos)) {
+        if (!result[kcode][cc]) result[kcode][cc] = {att:0, kills:0, errors:0};
+        result[kcode][cc].att    += cv.attempts||0;
+        result[kcode][cc].kills  += cv.kills||0;
+        result[kcode][cc].errors += cv.errors||0;
+      }
+    }
+  }
+  return result;
+}
+
 function getSetterCallStats(seasons) {
   const calls = {};
   for (const [key, ps] of Object.entries(DATA.player_season)) {
@@ -3838,6 +3857,55 @@ function renderSetter() {
         </tr>`;
       }).join('');
   }
+
+  // ── Per-K-call attack breakdown (K1 / K2 / K7 separate tables) ───────────
+  const callAtks = getCallAttacks(seasons);
+  const callTableOrder = ['K7','K1','K2']; // match display order of K-calls bar chart
+  const callTableHTML = callTableOrder.map(kcode => {
+    const combos = callAtks[kcode];
+    if (!combos) return '';
+    // Only show valid attack combos, sorted by attempts
+    const codes = Object.keys(combos)
+      .filter(cc => VALID_COMBOS.has(cc))
+      .sort((a,b) => combos[b].att - combos[a].att);
+    if (!codes.length) return '';
+    const totalAtt = codes.reduce((s,cc) => s + combos[cc].att, 0);
+    const rows = codes.map(cc => {
+      const cv = combos[cc];
+      const kp  = cv.att ? (cv.kills/cv.att*100).toFixed(1) : 0;
+      const ep  = cv.att ? (cv.errors/cv.att*100).toFixed(1) : 0;
+      const eff = cv.att ? ((cv.kills-cv.errors)/cv.att*100).toFixed(1) : 0;
+      const dist = totalAtt ? (cv.att/totalAtt*100).toFixed(1) : 0;
+      return `<tr>
+        <td><span style="color:${COMBO_COLORS[cc]||'#888'};font-weight:700">${COMBO_NAMES[cc]||cc}</span></td>
+        <td style="color:var(--text-muted);font-size:11px">${cc}</td>
+        <td class="num">${cv.att}</td>
+        <td class="num">${dist}%</td>
+        <td class="num">${cv.kills}</td>
+        <td class="num green">${kp}%</td>
+        <td class="num">${cv.errors}</td>
+        <td class="num red">${ep}%</td>
+        <td class="num gold">${eff}%</td>
+      </tr>`;
+    }).join('');
+    return `<div class="card mt-16">
+      <h3>${COMBO_NAMES[kcode]||kcode} — Offense When ${kcode} Is Called</h3>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">${totalAtt} total attacks on ${kcode} rallies</div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>Call</th><th>Type</th>
+            <th class="num">Att</th><th class="num">Dist %</th>
+            <th class="num">Kills</th><th class="num">Kill %</th>
+            <th class="num">Errors</th><th class="num">Err %</th>
+            <th class="num">Efficiency</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('set-call-attack-tables').innerHTML = callTableHTML;
 }
 
 // ═══════════════════════════ FBSO TAB ════════════════════════════════════════

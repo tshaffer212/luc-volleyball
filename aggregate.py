@@ -92,6 +92,57 @@ def derive_zones(zone_stats):
         zs['gp_pct']  = round(gp, 1)
         zs['err_pct'] = round(err, 1)
 
+VALID_K_CODES = {'K1', 'K2', 'K7'}
+
+def compute_call_attacks(actions, loyola_side):
+    """
+    Per rally: when a setter E action has a K-code (K1/K2/K7),
+    find the next A action on the same team side and record the result.
+    Returns: { k_code: { atk_combo: {attempts, kills, errors} } }
+    """
+    rallies, current = [], []
+    for a in actions:
+        if a.get('skill_code') == 'S' and current:
+            rallies.append(current)
+            current = []
+        current.append(a)
+    if current:
+        rallies.append(current)
+
+    call_atk = defaultdict(lambda: defaultdict(lambda: {'attempts': 0, 'kills': 0, 'errors': 0}))
+
+    for rally in rallies:
+        for i, a in enumerate(rally):
+            if a.get('skill_code') != 'E':
+                continue
+            k_code = a.get('combo_code') or ''
+            if k_code not in VALID_K_CODES:
+                continue
+            e_side = a.get('team_side')
+            if loyola_side != 'both' and e_side != loyola_side:
+                continue
+            # Find the next attack on the same side in this rally
+            next_atk = next(
+                (b for b in rally[i+1:]
+                 if b.get('skill_code') == 'A' and b.get('team_side') == e_side),
+                None
+            )
+            if not next_atk:
+                continue
+            atk_cc = next_atk.get('combo_code') or ''
+            if not atk_cc:
+                continue
+            ev = next_atk.get('evaluation') or ''
+            cv = call_atk[k_code][atk_cc]
+            cv['attempts'] += 1
+            if ev == '#':
+                cv['kills'] += 1
+            elif ev == '=':
+                cv['errors'] += 1
+
+    return {kc: dict(combos) for kc, combos in call_atk.items()}
+
+
 def compute_rally_sequences(actions, loyola_side):
     """
     Split actions into rallies (a new rally begins at each Serve action) and compute:
@@ -287,14 +338,27 @@ def main(raw_path, out_path):
 
     loyola_player_nums = set(players.keys())
 
-    # ── Rally sequences (dig→kill + FBSO) ────────────────────────────────────
+    # ── Rally sequences (dig→kill + FBSO + call attacks) ────────────────────
     print("Computing rally sequences ...", file=sys.stderr)
     session_rally = {}   # sid → {'dig': {...}, 'fbso': {...}}
+    # call_attacks_by_season: season → k_code → atk_combo → {attempts, kills, errors}
+    call_attacks_by_season = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {'attempts':0,'kills':0,'errors':0})))
+
     for s in sessions_raw:
-        sid = f"{s['season']}|{s['file']}"
-        ls  = loyola_side_for_session(s)
-        dig, fbso = compute_rally_sequences(s.get('actions', []), ls)
+        sid    = f"{s['season']}|{s['file']}"
+        season = s['season']
+        ls     = loyola_side_for_session(s)
+        acts   = s.get('actions', [])
+        dig, fbso = compute_rally_sequences(acts, ls)
         session_rally[sid] = {'dig': dig, 'fbso': fbso}
+        # Accumulate setter-call → attack outcome per season
+        ca = compute_call_attacks(acts, ls)
+        for k_code, combos in ca.items():
+            for atk_cc, cv in combos.items():
+                acc = call_attacks_by_season[season][k_code][atk_cc]
+                acc['attempts'] += cv['attempts']
+                acc['kills']    += cv['kills']
+                acc['errors']   += cv['errors']
 
     # ── Session index ─────────────────────────────────────────────────────────
     sessions_index = []
@@ -477,6 +541,13 @@ def main(raw_path, out_path):
         'player_season':  pse_out,
         'scout_index':    scout_index,
         'opponent_stats': dict(opponent_stats),
+        'call_attacks': {
+            season: {
+                k: {cc: dict(cv) for cc, cv in combos.items()}
+                for k, combos in kcodes.items()
+            }
+            for season, kcodes in call_attacks_by_season.items()
+        },
     }
 
     print(f"Writing {out_path} ...", file=sys.stderr)
