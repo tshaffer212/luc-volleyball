@@ -3327,11 +3327,11 @@ function renderAttack() {
     labels: sortedCodes.map(cc => COMBO_NAMES[cc]||cc),
     datasets: [
       { label:'Kill %',  data:sortedCodes.map(cc=>combos[cc]?.kill_pct||0),
-        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel||atkCodeSel===cc)?GREEN:GREEN+'33'), borderRadius:3 },
+        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel.size||atkCodeSel.has(cc))?GREEN:GREEN+'33'), borderRadius:3 },
       { label:'Eff %',   data:sortedCodes.map(cc=>combos[cc]?.efficiency||0),
-        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel||atkCodeSel===cc)?GOLD:GOLD+'33'),  borderRadius:3 },
+        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel.size||atkCodeSel.has(cc))?GOLD:GOLD+'33'),  borderRadius:3 },
       { label:'Error %', data:sortedCodes.map(cc=>combos[cc]?.error_pct||0),
-        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel||atkCodeSel===cc)?RED:RED+'33'),   borderRadius:3 },
+        backgroundColor:sortedCodes.map(cc=>(!atkCodeSel.size||atkCodeSel.has(cc))?RED:RED+'33'),   borderRadius:3 },
     ]
   }, {
     scales: { y: { ticks: { callback: v => v+'%' } } }
