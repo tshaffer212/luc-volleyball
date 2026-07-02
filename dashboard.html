@@ -728,7 +728,7 @@
 <!-- ═══════════════════════════ SETTER TAB ═══════════════════════════ -->
 <div id="tab-setter" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="set-season" onchange="setterPnumFilter=null;setterGroupSel=null;renderSetter()">
+    <div><label>Season</label><br><select id="set-season" onchange="setterPnumFilter=null;setterGroupSel=null;setterZoneSel=null;renderSetter()">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -1179,6 +1179,7 @@ function init() {
 // ═══════════════════════════ REPORTS TAB ═════════════════════════════════════
 let rptSelected    = new Set(); // selected session IDs
 let setterGroupSel   = null;  // 'pins' | 'middles' | 'bic' | null — setter group bar filter
+let setterZoneSel    = null;  // COURT_ZONES id ('z4','z3','z2','z6','z1') | null — zone card filter
 let setterPnumFilter = null;  // pnum string | null — which setter to isolate
 let atkCodeSel     = null;    // combo code string | null — attack bar filter
 let rptSetterFilter = null;   // setter pnum string | null — Reports attack setter filter
@@ -3597,44 +3598,54 @@ function renderSetterCourt(allCombos, totalAtt) {
     const w  = colW - GAP*2;
     const h  = rowH - GAP*2;
     const mx = x + w/2;
+    const isSelected = setterZoneSel === z.id;
+    const isDimmed   = setterZoneSel && !isSelected;
     const effColor = z.eff === null ? '#555'
                    : z.eff > 25    ? '#4caf50'
                    : z.eff > 0     ? '#FEBC18'
                    : '#ef5350';
     const lblLines = z.label.split('\n');
+    // Click handler: toggle this zone, clear group sel
+    const clickFn = `setterZoneSel=setterZoneSel==='${z.id}'?null:'${z.id}';setterGroupSel=null;renderSetter()`;
 
     if (!z.att) return `
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#141414" rx="7" stroke="#222" stroke-width="1"/>
-      <text x="${mx}" y="${y+h/2+4}" font-family="Arial,sans-serif" font-size="12" fill="#2a2a2a" text-anchor="middle">—</text>`;
+      <g onclick="${clickFn}" style="cursor:pointer" opacity="${isDimmed?0.25:1}">
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#141414" rx="7"
+          stroke="${isSelected?'#FEBC18':'#222'}" stroke-width="${isSelected?2:1}"/>
+        <text x="${mx}" y="${y+h/2+4}" font-family="Arial,sans-serif" font-size="12" fill="#2a2a2a" text-anchor="middle">—</text>
+      </g>`;
 
     return `
-      <!-- cell bg -->
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#181818" rx="7" stroke="#262626" stroke-width="1"/>
-      <!-- maroon top accent bar -->
-      <rect x="${x}" y="${y}" width="${w}" height="3" fill="#8D0034" rx="2"/>
-      <!-- zone label in gold -->
-      ${lblLines.map((ln,i) => `
-        <text x="${mx}" y="${y+17+(i*13)}"
-          font-family="Arial,sans-serif" font-size="9" font-weight="700"
-          fill="#FEBC18" text-anchor="middle" letter-spacing="0.8" opacity="0.85">${ln.toUpperCase()}</text>`).join('')}
-      <!-- thin maroon rule below label -->
-      <line x1="${x+14}" y1="${y+(lblLines.length>1?42:32)}" x2="${x+w-14}" y2="${y+(lblLines.length>1?42:32)}"
-        stroke="#8D0034" stroke-width="0.7" opacity="0.5"/>
-      <!-- distribution % -->
-      <text x="${mx}" y="${y+h-58}"
-        font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#fff" text-anchor="middle">${z.distPct.toFixed(0)}%</text>
-      <!-- attempt count -->
-      <text x="${mx}" y="${y+h-40}"
-        font-family="Arial,sans-serif" font-size="10" fill="#444" text-anchor="middle">${z.att.toLocaleString()} att</text>
-      <!-- thin maroon rule above eff -->
-      <line x1="${x+14}" y1="${y+h-29}" x2="${x+w-14}" y2="${y+h-29}"
-        stroke="#8D0034" stroke-width="0.7" opacity="0.4"/>
-      <!-- efficiency -->
-      <text x="${mx}" y="${y+h-15}"
-        font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="${effColor}" text-anchor="middle">Eff ${z.eff>=0?'+':''}${z.eff.toFixed(0)}%</text>
-      <!-- kill / error -->
-      <text x="${mx}" y="${y+h-2}"
-        font-family="Arial,sans-serif" font-size="9.5" fill="#3a3a3a" text-anchor="middle">K:${z.killPct.toFixed(0)}%   E:${z.errPct.toFixed(0)}%</text>`;
+      <g onclick="${clickFn}" style="cursor:pointer" opacity="${isDimmed?0.25:1}">
+        <!-- cell bg — gold border when selected -->
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#181818" rx="7"
+          stroke="${isSelected?'#FEBC18':'#262626'}" stroke-width="${isSelected?2:1}"/>
+        <!-- top accent: gold when selected, maroon otherwise -->
+        <rect x="${x}" y="${y}" width="${w}" height="3" fill="${isSelected?'#FEBC18':'#8D0034'}" rx="2"/>
+        <!-- zone label in gold -->
+        ${lblLines.map((ln,i) => `
+          <text x="${mx}" y="${y+17+(i*13)}"
+            font-family="Arial,sans-serif" font-size="9" font-weight="700"
+            fill="#FEBC18" text-anchor="middle" letter-spacing="0.8" opacity="0.85">${ln.toUpperCase()}</text>`).join('')}
+        <!-- thin maroon rule below label -->
+        <line x1="${x+14}" y1="${y+(lblLines.length>1?42:32)}" x2="${x+w-14}" y2="${y+(lblLines.length>1?42:32)}"
+          stroke="#8D0034" stroke-width="0.7" opacity="0.5"/>
+        <!-- distribution % -->
+        <text x="${mx}" y="${y+h-58}"
+          font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#fff" text-anchor="middle">${z.distPct.toFixed(0)}%</text>
+        <!-- attempt count -->
+        <text x="${mx}" y="${y+h-40}"
+          font-family="Arial,sans-serif" font-size="10" fill="#444" text-anchor="middle">${z.att.toLocaleString()} att</text>
+        <!-- thin maroon rule above eff -->
+        <line x1="${x+14}" y1="${y+h-29}" x2="${x+w-14}" y2="${y+h-29}"
+          stroke="#8D0034" stroke-width="0.7" opacity="0.4"/>
+        <!-- efficiency -->
+        <text x="${mx}" y="${y+h-15}"
+          font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="${effColor}" text-anchor="middle">Eff ${z.eff>=0?'+':''}${z.eff.toFixed(0)}%</text>
+        <!-- kill / error -->
+        <text x="${mx}" y="${y+h-2}"
+          font-family="Arial,sans-serif" font-size="9.5" fill="#3a3a3a" text-anchor="middle">K:${z.killPct.toFixed(0)}%   E:${z.errPct.toFixed(0)}%</text>
+      </g>`;
   }).join('');
 
   const netY = CY + CH + 10;
@@ -3884,12 +3895,24 @@ function renderSetter() {
         const k = groupKeys[elements[0].index];
         setterGroupSel = (setterGroupSel === k) ? null : k;
       }
+      setterZoneSel = null; // clear zone card selection
       renderSetter();
     }
   });
 
-  // Set distribution trend by month (all seasons)
-  const trendCodes = [...PIN_COMBOS,...MIDDLE_COMBOS].filter(cc=>distCodes.includes(cc));
+  // Set distribution trend by month — filtered by bar-group or zone-card selection
+  let trendCodes = [...PIN_COMBOS,...MIDDLE_COMBOS].filter(cc=>distCodes.includes(cc));
+  if (setterZoneSel) {
+    // Zone card clicked: show only the combos for that zone
+    const zone = COURT_ZONES.find(z => z.id === setterZoneSel);
+    if (zone) trendCodes = trendCodes.filter(cc => zone.codes.includes(cc));
+  } else if (setterGroupSel === 'pins') {
+    trendCodes = trendCodes.filter(cc => PIN_COMBOS.includes(cc) && !BIC_COMBOS.includes(cc));
+  } else if (setterGroupSel === 'middles') {
+    trendCodes = trendCodes.filter(cc => MIDDLE_COMBOS.includes(cc));
+  } else if (setterGroupSel === 'bic') {
+    trendCodes = trendCodes.filter(cc => BIC_COMBOS.includes(cc));
+  }
   const { monthKeys: setMoKeys, shortLabels: setMoLabels, sessionIdsByMonth: setMoSess } = getMonthBuckets(null);
   // Per-month combo attempt counts (from player_session)
   const setMoCombos = setMoKeys.map(mo => {
