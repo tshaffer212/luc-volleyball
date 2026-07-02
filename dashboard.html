@@ -3900,16 +3900,16 @@ function renderSetter() {
 
     barDatasets = [
       {
-        label: 'Rest',
-        data: baseData,
-        backgroundColor: groupBaseClr.map(c => c + '33'),
+        label: 'Selected Zone',
+        data: highlightData,
+        backgroundColor: groupBaseClr.map((c, i) => i === zoneGroupIdx ? c : 'transparent'),
         borderRadius: 4,
         stack: 'g'
       },
       {
-        label: 'Selected Zone',
-        data: highlightData,
-        backgroundColor: groupBaseClr.map((c, i) => i === zoneGroupIdx ? c : 'transparent'),
+        label: 'Rest',
+        data: baseData,
+        backgroundColor: groupBaseClr.map(c => c + '33'),
         borderRadius: 4,
         stack: 'g'
       }
