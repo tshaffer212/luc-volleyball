@@ -203,7 +203,11 @@
     font-weight: 700; border-bottom: 2px solid rgba(141,0,52,0.4);
     position: sticky; top: 0; z-index: 1;
     background: linear-gradient(180deg, #2c2c2c 0%, #1f1f1f 100%);
+    cursor: pointer; user-select: none; white-space: nowrap;
   }
+  .data-table th::after { content: ' ↕'; color: rgba(255,255,255,0.18); font-size: 9px; }
+  .data-table th[data-sort-dir="desc"]::after { content: ' ↓'; color: var(--gold); }
+  .data-table th[data-sort-dir="asc"]::after  { content: ' ↑'; color: var(--gold); }
   .data-table th:first-child { border-left: 3px solid var(--maroon); }
   .data-table td {
     padding: 9px 14px; border-bottom: 1px solid #222; font-size: 13px;
@@ -3862,6 +3866,45 @@ function renderFbso() {
     </div>
   `).join('');
 }
+
+// ─── SORTABLE TABLES (event delegation — works on all dynamically rendered tables) ──
+document.addEventListener('click', function(e) {
+  const th = e.target.closest('.data-table th');
+  if (!th) return;
+  const table = th.closest('.data-table');
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+
+  const ths = [...th.closest('tr').querySelectorAll('th')];
+  const colIdx = ths.indexOf(th);
+  const prev = th.dataset.sortDir || '';
+  const dir = prev === 'desc' ? 'asc' : 'desc';
+
+  // Reset all headers in this table, then mark active one
+  table.querySelectorAll('thead th').forEach(h => delete h.dataset.sortDir);
+  th.dataset.sortDir = dir;
+
+  const rows = [...tbody.querySelectorAll('tr')];
+  rows.sort((a, b) => {
+    const aCell = a.cells[colIdx];
+    const bCell = b.cells[colIdx];
+    const aRaw = aCell?.textContent?.trim() || '';
+    const bRaw = bCell?.textContent?.trim() || '';
+    // Empty / dash values always sort to bottom
+    const aEmpty = !aRaw || aRaw === '—';
+    const bEmpty = !bRaw || bRaw === '—';
+    if (aEmpty && bEmpty) return 0;
+    if (aEmpty) return 1;
+    if (bEmpty) return -1;
+    // Numeric comparison (strips %, commas, spaces)
+    const aNum = parseFloat(aRaw.replace(/[^0-9.-]/g, ''));
+    const bNum = parseFloat(bRaw.replace(/[^0-9.-]/g, ''));
+    if (!isNaN(aNum) && !isNaN(bNum)) return dir === 'desc' ? bNum - aNum : aNum - bNum;
+    // String fallback
+    return dir === 'desc' ? bRaw.localeCompare(aRaw) : aRaw.localeCompare(bRaw);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+});
 
 // ─── START ────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', init);
