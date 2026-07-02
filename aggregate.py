@@ -11,11 +11,20 @@ Key rule for match files:
 """
 
 import json, sys, os
-from collections import defaultdict
+from collections import defaultdict, Counter
+from difflib import SequenceMatcher
 
 SKILLS = ['S','R','E','A','B','D','F','O']
 EVALS  = ['#','+','/','-','=','!']
 LOYOLA_KEYWORDS = ['loyola', 'luc', 'lmv']
+
+# ── Manual name overrides ─────────────────────────────────────────────────────
+# Use when fuzzy matching picks the wrong (more frequent but misspelled) variant.
+# Format: { jersey_number_string: 'Correct Full Name' }
+# The correct name will be used regardless of which spelling appears most in the data.
+NAME_OVERRIDES = {
+    # '16': 'Alex Smith Van Oyen',   # uncomment if Smith is correct, not Smits
+}
 
 def is_loyola_team(team_str):
     if not team_str:
@@ -212,6 +221,59 @@ def main(raw_path, out_path):
                     'is_libero':     p.get('is_libero', False),
                     'position_code': p.get('position_code', ''),
                 }
+
+    # ── Normalize similar names for the same jersey number across seasons ────
+    # Catches typos like "Wil Hatch" / "Will Hatch" or "Smits" / "Smith".
+    # Collects all real name variants per number, clusters by similarity,
+    # then picks the most-used spelling as canonical.
+    num_name_counts = defaultdict(Counter)  # num -> {name: count}
+    for season, roster in players_by_season.items():
+        for num, p in roster.items():
+            name = p['name']
+            if not name.startswith('#'):
+                num_name_counts[num][name] += 1
+
+    name_canon = {}  # (num, variant) -> canonical
+    for num, counts in num_name_counts.items():
+        names = list(counts.keys())
+        if len(names) <= 1:
+            continue
+        assigned = set()
+        for i, a in enumerate(names):
+            if a in assigned:
+                continue
+            group = [a]
+            assigned.add(a)
+            for b in names:
+                if b not in assigned:
+                    ratio = SequenceMatcher(None, a.lower(), b.lower()).ratio()
+                    if ratio >= 0.82:
+                        group.append(b)
+                        assigned.add(b)
+            if len(group) > 1:
+                canonical = max(group, key=lambda n: counts[n])
+                for variant in group:
+                    if variant != canonical:
+                        name_canon[(num, variant)] = canonical
+                        print(f"  Name fix: #{num} '{variant}' → '{canonical}'", file=sys.stderr)
+
+    # Apply manual overrides — force correct spelling regardless of frequency
+    for num, correct_name in NAME_OVERRIDES.items():
+        for season, roster in players_by_season.items():
+            if num in roster:
+                old = roster[num]['name']
+                if old != correct_name:
+                    roster[num]['name'] = correct_name
+                    print(f"  Name override: #{num} '{old}' → '{correct_name}'", file=sys.stderr)
+                # Also update name_canon so any variant maps to the override
+                name_canon[(num, old)] = correct_name
+
+    # Apply normalized names back into players_by_season
+    for season, roster in players_by_season.items():
+        for num, p in roster.items():
+            canon = name_canon.get((num, p['name']))
+            if canon:
+                p['name'] = canon
 
     # ── Merged global roster (for backward compat / cross-season lookups) ────
     # When a number appears in multiple seasons with different names, the
