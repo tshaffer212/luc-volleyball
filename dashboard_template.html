@@ -2286,13 +2286,27 @@ function renderSeasonOverview(season, container) {
     .map(([k, v]) => ({ pnum: k.split('|')[0], season: k.split('|')[1], ...v }))
     .filter(p => p.actions > 0);
 
-  const topAttackers = [...topPlayers]
-    .filter(p => (p.skills?.A?.attempts||0) >= 20)
-    .sort((a,b) => (b.skills?.A?.kill_pct||0) - (a.skills?.A?.kill_pct||0))
+  // Median-threshold helper: only players at or above the median attempts qualify,
+  // preventing low-volume outliers from overshadowing high-volume players.
+  function medianThreshold(arr) {
+    if (!arr.length) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+
+  const atkPool   = topPlayers.filter(p => (p.skills?.A?.attempts||0) > 0);
+  const atkMedian = medianThreshold(atkPool.map(p => p.skills.A.attempts));
+  const topAttackers = atkPool
+    .filter(p => p.skills.A.attempts >= atkMedian)
+    .sort((a,b) => (b.skills.A.kill_pct||0) - (a.skills.A.kill_pct||0))
     .slice(0, 10);
-  const topServers = [...topPlayers]
-    .filter(p => (p.skills?.S?.attempts||0) >= 20)
-    .sort((a,b) => (b.skills?.S?.kill_pct||0) - (a.skills?.S?.kill_pct||0))
+
+  const srvPool   = topPlayers.filter(p => (p.skills?.S?.attempts||0) > 0);
+  const srvMedian = medianThreshold(srvPool.map(p => p.skills.S.attempts));
+  const topServers = srvPool
+    .filter(p => p.skills.S.attempts >= srvMedian)
+    .sort((a,b) => (b.skills.S.kill_pct||0) - (a.skills.S.kill_pct||0))
     .slice(0, 10);
 
   container.innerHTML = `
