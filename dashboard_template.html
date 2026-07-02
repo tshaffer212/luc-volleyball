@@ -620,8 +620,12 @@
 <!-- ═══════════════════════════ SERVE & RECEIVE TAB ═══════════════════════════ -->
 <div id="tab-servrcv" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="sr-season" onchange="renderServRcv()">
+    <div><label>Season</label><br><select id="sr-season" onchange="populateSrPeriod();renderServRcv()">
       <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Period</label><br><select id="sr-period" onchange="renderServRcv()">
+      <option value="all">All Season</option>
     </select></div>
     <div class="filter-sep"></div>
     <div><label>Group</label><br><select id="sr-group" onchange="renderServRcv()">
@@ -629,12 +633,6 @@
       <option value="pins">Outsides / Opposites</option>
       <option value="liberos">Liberos</option>
       <option value="middles">Middles</option>
-    </select></div>
-    <div class="filter-sep"></div>
-    <div><label>View</label><br><select id="sr-view" onchange="renderServRcv()">
-      <option value="both">Serve + Receive</option>
-      <option value="serve">Serve Only</option>
-      <option value="receive">Receive Only</option>
     </select></div>
   </div>
 
@@ -727,8 +725,12 @@
 <!-- ═══════════════════════════ SETTER TAB ═══════════════════════════ -->
 <div id="tab-setter" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="set-season" onchange="setterPnumFilter=null;setterGroupSel=null;setterZoneSel=null;renderSetter()">
+    <div><label>Season</label><br><select id="set-season" onchange="setterPnumFilter=null;setterGroupSel=null;setterZoneSel=null;populateSetPeriod();renderSetter()">
       <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Period</label><br><select id="set-period" onchange="renderSetter()">
+      <option value="all">All Season</option>
     </select></div>
     <div class="filter-sep"></div>
     <div><label>Setter</label><br><select id="set-setter" onchange="setterPnumFilter=this.value||null;renderSetter()">
@@ -1180,7 +1182,9 @@ function init() {
   renderReports();
   populateAtkPeriod();
   renderAttack();
+  populateSrPeriod();
   renderServRcv();
+  populateSetPeriod();
   renderSetter();
   renderFbso();
   renderPlayerList();
@@ -3185,17 +3189,17 @@ function getComboStats(seasons, group) {
   return combos;
 }
 
-function populateAtkPeriod() {
-  const seasonVal = document.getElementById('atk-season').value;
-  const seasons   = resolveSeasons(seasonVal);
-  const el        = document.getElementById('atk-period');
-  const curVal    = el.value;
+// ── Shared period-filter helpers ─────────────────────────────────────────────
 
+// Populate a period dropdown (Month / Week optgroups) from the selected seasons.
+function populatePeriodDropdown(seasonVal, elId) {
+  const seasons = resolveSeasons(seasonVal);
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const curVal = el.value;
   el.innerHTML = '<option value="all">All Season</option>';
-
   const sessions = DATA.sessions.filter(s => seasons.includes(s.season) && s.date);
 
-  // Month buckets
   const monthKeys = [...new Set(sessions.map(s => s.date.slice(0,7)))].sort();
   if (monthKeys.length) {
     const mg = document.createElement('optgroup');
@@ -3210,34 +3214,52 @@ function populateAtkPeriod() {
     el.appendChild(mg);
   }
 
-  // Week buckets (Monday as key)
   const weekMap = {};
   for (const sess of sessions) {
-    const d = new Date(sess.date);
-    const dow = d.getDay();
+    const d = new Date(sess.date), dow = d.getDay();
     const mon = new Date(d);
     mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
-    const key = mon.toISOString().slice(0,10);
-    weekMap[key] = true;
+    weekMap[mon.toISOString().slice(0,10)] = true;
   }
   const weekKeys = Object.keys(weekMap).sort();
   if (weekKeys.length) {
     const wg = document.createElement('optgroup');
     wg.label = 'By Week';
     for (const wk of weekKeys) {
-      const d = new Date(wk);
       wg.appendChild(new Option(
-        `Wk of ${d.toLocaleString('default',{month:'short',day:'numeric'})}`,
+        `Wk of ${new Date(wk).toLocaleString('default',{month:'short',day:'numeric'})}`,
         'week:' + wk
       ));
     }
     el.appendChild(wg);
   }
 
-  // Restore previous selection if still valid, otherwise reset
   if ([...el.options].some(o => o.value === curVal)) el.value = curVal;
   else el.value = 'all';
 }
+
+// Build the Set of session IDs matching the period value ('all' → null).
+function buildPeriodSids(seasons, periodVal) {
+  if (!periodVal || periodVal === 'all') return null;
+  const sids = new Set();
+  for (const sess of DATA.sessions) {
+    if (!seasons.includes(sess.season) || !sess.date) continue;
+    if (periodVal.startsWith('month:')) {
+      if (sess.date.startsWith(periodVal.slice(6))) sids.add(sess.id);
+    } else if (periodVal.startsWith('week:')) {
+      const wkStart = periodVal.slice(5);
+      const d = new Date(sess.date), dow = d.getDay();
+      const mon = new Date(d);
+      mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+      if (mon.toISOString().slice(0,10) === wkStart) sids.add(sess.id);
+    }
+  }
+  return sids;
+}
+
+function populateAtkPeriod() { populatePeriodDropdown(document.getElementById('atk-season').value, 'atk-period'); }
+function populateSrPeriod()  { populatePeriodDropdown(document.getElementById('sr-season').value,  'sr-period');  }
+function populateSetPeriod() { populatePeriodDropdown(document.getElementById('set-season').value, 'set-period'); }
 
 function renderAttack() {
   const seasonVal = document.getElementById('atk-season').value;
@@ -3520,32 +3542,48 @@ function renderAttack() {
 function renderServRcv() {
   const seasonVal = document.getElementById('sr-season').value;
   const group     = document.getElementById('sr-group').value;
-  const view      = document.getElementById('sr-view').value;
+  const periodVal = document.getElementById('sr-period')?.value || 'all';
   const seasons   = resolveSeasons(seasonVal);
+  const activeSids = buildPeriodSids(seasons, periodVal);
 
-  // Build per-player serve/receive aggregates
-  const playerStats = {};
-  for (const [key, ps] of Object.entries(DATA.player_season)) {
-    const [pnum, season] = key.split('|');
-    if (!seasons.includes(season)) continue;
-    if (!playerInGroup(pnum, season, group)) continue;
-    const name = getPlayerName(pnum, season);
-    const pid  = `${pnum}|${name}`;
-
-    if (!playerStats[pid]) playerStats[pid] = { pnum, name, season, serve_ev:{}, serve_att:0, rcv_ev:{}, rcv_att:0 };
-    const entry = playerStats[pid];
-
+  // Helper to add serve/receive skill data into a playerStats entry
+  function mergeSkills(entry, ps) {
     const S = ps.skills?.S;
     if (S) {
       entry.serve_att += S.attempts||0;
       for (const [e,n] of Object.entries(S.evals||{}))
-        entry.serve_ev[e] = (entry.serve_ev[e]||0) + n;
+        entry.serve_ev[e] = (entry.serve_ev[e]||0)+n;
     }
     const R = ps.skills?.R;
     if (R) {
       entry.rcv_att += R.attempts||0;
       for (const [e,n] of Object.entries(R.evals||{}))
-        entry.rcv_ev[e] = (entry.rcv_ev[e]||0) + n;
+        entry.rcv_ev[e] = (entry.rcv_ev[e]||0)+n;
+    }
+  }
+
+  // Build per-player serve/receive aggregates — from player_session when period active
+  const playerStats = {};
+  if (activeSids) {
+    for (const [, ps] of Object.entries(DATA.player_session)) {
+      if (!activeSids.has(ps.session_id)) continue;
+      const pnum   = ps.player_num;
+      const season = DATA.sessions.find(s => s.id === ps.session_id)?.season;
+      if (!season || !playerInGroup(pnum, season, group)) continue;
+      const name = getPlayerName(pnum, season);
+      const pid  = `${pnum}|${name}`;
+      if (!playerStats[pid]) playerStats[pid] = { pnum, name, season, serve_ev:{}, serve_att:0, rcv_ev:{}, rcv_att:0 };
+      mergeSkills(playerStats[pid], ps);
+    }
+  } else {
+    for (const [key, ps] of Object.entries(DATA.player_season)) {
+      const [pnum, season] = key.split('|');
+      if (!seasons.includes(season)) continue;
+      if (!playerInGroup(pnum, season, group)) continue;
+      const name = getPlayerName(pnum, season);
+      const pid  = `${pnum}|${name}`;
+      if (!playerStats[pid]) playerStats[pid] = { pnum, name, season, serve_ev:{}, serve_att:0, rcv_ev:{}, rcv_att:0 };
+      mergeSkills(playerStats[pid], ps);
     }
   }
 
@@ -3661,14 +3699,19 @@ function renderServRcv() {
   // Aggregate zone data across selected seasons
   const ZONE_LABELS = { '1':'Zone 1 (Back Right)', '5':'Zone 5 (Back Left)', '6':'Zone 6 (Back Middle)' };
   const ZONE_COLORS = { '1': MAROON, '5': '#888888', '6': GOLD };
-  const teamZones = {};
-  for (const s of seasons) {
-    const sz = DATA.season_stats[s]?.rcv_zones || {};
-    for (const [z, zd] of Object.entries(sz)) {
-      if (!teamZones[z]) teamZones[z] = { attempts:0, evals:{} };
-      teamZones[z].attempts += zd.attempts||0;
-      for (const [e,n] of Object.entries(zd.evals||{}))
-        teamZones[z].evals[e] = (teamZones[z].evals[e]||0) + n;
+  // Team zone aggregation — use session-level data when period is active
+  let teamZones = {};
+  if (activeSids) {
+    teamZones = aggregateSessionStats(activeSids).rcv_zones || {};
+  } else {
+    for (const s of seasons) {
+      const sz = DATA.season_stats[s]?.rcv_zones || {};
+      for (const [z, zd] of Object.entries(sz)) {
+        if (!teamZones[z]) teamZones[z] = { attempts:0, evals:{} };
+        teamZones[z].attempts += zd.attempts||0;
+        for (const [e,n] of Object.entries(zd.evals||{}))
+          teamZones[z].evals[e] = (teamZones[z].evals[e]||0) + n;
+      }
     }
   }
   // Derive team zone metrics
@@ -3753,12 +3796,10 @@ function renderServRcv() {
     const tb = Object.values(b.zones).reduce((s,z)=>s+z.attempts,0);
     return tb-ta;
   });
-  // Rebuild zone averages from player_season directly for accuracy
+  // Per-player zone averages — branch on period filter
   const pzDisplay = {};
-  for (const [key, ps] of Object.entries(DATA.player_season)) {
-    const [pnum, season] = key.split('|');
-    if (!seasons.includes(season)) continue;
-    if (!playerInGroup(pnum, season, group)) continue;
+  function mergePzEntry(pnum, season, ps) {
+    if (!playerInGroup(pnum, season, group)) return;
     const name = getPlayerName(pnum, season);
     const pid  = `${pnum}|${name}`;
     if (!pzDisplay[pid]) pzDisplay[pid] = { pnum, name, z1a:0,z1s:0, z5a:0,z5s:0, z6a:0,z6s:0 };
@@ -3770,6 +3811,20 @@ function renderServRcv() {
       if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
       if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
       if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
+    }
+  }
+  if (activeSids) {
+    for (const [, ps] of Object.entries(DATA.player_session)) {
+      if (!activeSids.has(ps.session_id)) continue;
+      const pnum   = ps.player_num;
+      const season = DATA.sessions.find(s => s.id === ps.session_id)?.season;
+      if (season) mergePzEntry(pnum, season, ps);
+    }
+  } else {
+    for (const [key, ps] of Object.entries(DATA.player_season)) {
+      const [pnum, season] = key.split('|');
+      if (!seasons.includes(season)) continue;
+      mergePzEntry(pnum, season, ps);
     }
   }
   const pzRows = Object.values(pzDisplay)
@@ -4055,15 +4110,20 @@ function renderSetter() {
       ).join('');
 
   // ── Resolve active session IDs ──────────────────────────────────────────────
-  // Intersection of: setter's sessions across all time  ∩  sessions in selected seasons
-  // IMPORTANT: always assign a Set (even empty) when a filter is active — never fall back to null.
-  // A null activeSids means "no filter" (show all), which is wrong when a setter is selected
-  // but has no sessions in the current season view.
+  const periodVal  = document.getElementById('set-period')?.value || 'all';
+  const periodSids = buildPeriodSids(seasons, periodVal); // null = no period filter
+
   let activeSids = null;
   if (setterPnumFilter && settersByPlayer[setterPnumFilter]) {
     const seasonSids = new Set(DATA.sessions.filter(s => seasons.includes(s.season)).map(s => s.id));
     const filtered = [...settersByPlayer[setterPnumFilter].allSids].filter(sid => seasonSids.has(sid));
-    activeSids = new Set(filtered); // empty Set if no overlap → shows zeros, not all-season data
+    activeSids = new Set(filtered);
+  }
+  // Apply period filter on top of setter filter
+  if (periodSids) {
+    activeSids = activeSids
+      ? new Set([...activeSids].filter(sid => periodSids.has(sid)))
+      : periodSids;
   }
 
   // ── Aggregate combos (session-filtered when a setter is selected) ───────────
