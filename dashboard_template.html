@@ -728,8 +728,12 @@
 <!-- ═══════════════════════════ SETTER TAB ═══════════════════════════ -->
 <div id="tab-setter" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="set-season" onchange="setterGroupSel=null;renderSetter()">
+    <div><label>Season</label><br><select id="set-season" onchange="setterPnumFilter=null;setterGroupSel=null;renderSetter()">
       <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Setter</label><br><select id="set-setter" onchange="setterPnumFilter=this.value||null;renderSetter()">
+      <option value="">All Setters</option>
     </select></div>
     <div class="filter-sep"></div>
     <div><label>Situation</label><br><select id="set-situation" onchange="renderSetter()">
@@ -1174,7 +1178,8 @@ function init() {
 
 // ═══════════════════════════ REPORTS TAB ═════════════════════════════════════
 let rptSelected    = new Set(); // selected session IDs
-let setterGroupSel = null;    // 'pins' | 'middles' | 'bic' | null — setter group bar filter
+let setterGroupSel   = null;  // 'pins' | 'middles' | 'bic' | null — setter group bar filter
+let setterPnumFilter = null;  // pnum string | null — which setter to isolate
 let atkCodeSel     = null;    // combo code string | null — attack bar filter
 let rptSetterFilter = null;   // setter pnum string | null — Reports attack setter filter
 
@@ -3654,6 +3659,80 @@ function renderSetterCourt(allCombos, totalAtt) {
 }
 
 // ── Getter call stats (from Set / E action combos for setter players) ─────────
+// Returns { pnum: Set<sid> } for the primary setter of each session in given seasons
+function getSetterSessionMap(seasons) {
+  const bySession = {};
+  for (const [key, ps] of Object.entries(DATA.player_session)) {
+    const sid = ps.session_id;
+    const sess = DATA.sessions.find(s => s.id === sid);
+    if (!sess || !seasons.includes(sess.season)) continue;
+    if (!bySession[sid]) bySession[sid] = [];
+    bySession[sid].push(ps);
+  }
+  const result = {}; // pnum → Set<sid>
+  for (const [sid, players] of Object.entries(bySession)) {
+    let bestPnum = null, bestAtt = 0;
+    for (const ps of players) {
+      const eAtt = ps.skills?.E?.attempts || 0;
+      if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
+    }
+    if (bestPnum && bestAtt >= 3) {
+      if (!result[bestPnum]) result[bestPnum] = new Set();
+      result[bestPnum].add(sid);
+    }
+  }
+  return result;
+}
+
+// Like getComboStats() but filters player_session entries to a Set of session IDs
+function getComboStatsBySessions(sessionIds, group) {
+  const combos = {};
+  for (const [key, ps] of Object.entries(DATA.player_session)) {
+    if (!sessionIds.has(ps.session_id)) continue;
+    const pnum   = ps.player_num;
+    const season = DATA.sessions.find(s => s.id === ps.session_id)?.season;
+    if (group !== 'all' && !playerInGroup(pnum, season, group)) continue;
+    for (const [cc, cv] of Object.entries(ps.skills?.A?.combos || {})) {
+      if (!combos[cc]) combos[cc] = {attempts:0, kills:0, errors:0, evals:{}, kill_pct:0, error_pct:0, efficiency:0};
+      combos[cc].attempts += cv.attempts || 0;
+      combos[cc].kills    = (combos[cc].kills||0) + (cv.evals?.['#']||0);
+      combos[cc].errors   = (combos[cc].errors||0) + (cv.evals?.['=']||0);
+      for (const [ev, cnt] of Object.entries(cv.evals || {})) {
+        combos[cc].evals[ev] = (combos[cc].evals[ev]||0) + cnt;
+      }
+    }
+  }
+  for (const cv of Object.values(combos)) {
+    const att = cv.attempts;
+    if (att) {
+      cv.kill_pct   = +((cv.kills/att)*100).toFixed(1);
+      cv.error_pct  = +((cv.errors/att)*100).toFixed(1);
+      cv.efficiency = +(((cv.kills-cv.errors)/att)*100).toFixed(1);
+    }
+  }
+  return combos;
+}
+
+// Aggregate call_attacks from session entries (for setter-filtered K-call tables)
+function getCallAttacksBySessions(sessionIds) {
+  const result = {};
+  for (const s of DATA.sessions) {
+    if (!sessionIds.has(s.id)) continue;
+    const ca = s.call_attacks;
+    if (!ca) continue;
+    for (const [kcode, combos] of Object.entries(ca)) {
+      if (!result[kcode]) result[kcode] = {};
+      for (const [cc, cv] of Object.entries(combos)) {
+        if (!result[kcode][cc]) result[kcode][cc] = {att:0, kills:0, errors:0};
+        result[kcode][cc].att    += cv.attempts||0;
+        result[kcode][cc].kills  += cv.kills||0;
+        result[kcode][cc].errors += cv.errors||0;
+      }
+    }
+  }
+  return result;
+}
+
 // Returns aggregated { K1: {X5:{att,kills,errors},...}, K2:{...}, K7:{...} } for given seasons
 function getCallAttacks(seasons) {
   const result = {};
@@ -3692,10 +3771,31 @@ function renderSetter() {
   const seasonVal = document.getElementById('set-season').value;
   const seasons   = resolveSeasons(seasonVal);
 
-  // Aggregate combos from all hitters
-  const pinCombos  = getComboStats(seasons, 'pins');
-  const midCombos  = getComboStats(seasons, 'middles');
-  const allCombos  = getComboStats(seasons, 'all');
+  // ── Populate setter dropdown ────────────────────────────────────────────────
+  const setterSessionMap = getSetterSessionMap(seasons); // pnum → Set<sid>
+  const setterPnums = Object.keys(setterSessionMap).sort((a,b) =>
+    setterSessionMap[b].size - setterSessionMap[a].size
+  );
+  const setterSel = document.getElementById('set-setter');
+  const currentVal = setterPnumFilter || '';
+  setterSel.innerHTML = '<option value="">All Setters</option>' +
+    setterPnums.map(pnum => {
+      // Find a representative season for name lookup
+      const aSid  = [...setterSessionMap[pnum]][0];
+      const aSess = DATA.sessions.find(s => s.id === aSid);
+      const name  = getPlayerName(pnum, aSess?.season) || `#${pnum}`;
+      const cnt   = setterSessionMap[pnum].size;
+      return `<option value="${pnum}" ${pnum===currentVal?'selected':''}>#${pnum} ${name} (${cnt})</option>`;
+    }).join('');
+
+  // ── Resolve active session IDs (null = use all seasons) ────────────────────
+  const activeSids = (setterPnumFilter && setterSessionMap[setterPnumFilter])
+    ? setterSessionMap[setterPnumFilter] : null;
+
+  // ── Aggregate combos (session-filtered when a setter is selected) ───────────
+  const pinCombos  = activeSids ? getComboStatsBySessions(activeSids,'pins')    : getComboStats(seasons,'pins');
+  const midCombos  = activeSids ? getComboStatsBySessions(activeSids,'middles') : getComboStats(seasons,'middles');
+  const allCombos  = activeSids ? getComboStatsBySessions(activeSids,'all')     : getComboStats(seasons,'all');
 
   const pinAtt  = PIN_COMBOS.reduce((s,cc)=>s+(pinCombos[cc]?.attempts||0),0);
   const midAtt  = MIDDLE_COMBOS.reduce((s,cc)=>s+(midCombos[cc]?.attempts||0),0);
@@ -3822,8 +3922,21 @@ function renderSetter() {
   // Court visual
   renderSetterCourt(allCombos, totalAtt);
 
-  // Setter calls (K1, K2, K7 etc. from E-action combos of setter players)
-  const setterCallStats = getSetterCallStats(seasons);
+  // Setter calls (K1, K2, K7 — filtered by setter when selected)
+  const setterCallStats = activeSids
+    ? (() => {
+        const calls = {};
+        for (const [key, ps] of Object.entries(DATA.player_session)) {
+          if (!activeSids.has(ps.session_id)) continue;
+          for (const [cc, cv] of Object.entries(ps.skills?.E?.combos || {})) {
+            if (!SETTER_CALL_COMBOS.includes(cc)) continue;
+            if (!calls[cc]) calls[cc] = {attempts:0};
+            calls[cc].attempts += cv.attempts||0;
+          }
+        }
+        return calls;
+      })()
+    : getSetterCallStats(seasons);
   const callCodes = SETTER_CALL_COMBOS.filter(cc => (setterCallStats[cc]?.attempts||0) > 0);
   const totalCalls = callCodes.reduce((s,cc) => s+(setterCallStats[cc]?.attempts||0), 0);
 
@@ -3859,7 +3972,7 @@ function renderSetter() {
   }
 
   // ── Per-K-call attack breakdown (K1 / K2 / K7 separate tables) ───────────
-  const callAtks = getCallAttacks(seasons);
+  const callAtks = activeSids ? getCallAttacksBySessions(activeSids) : getCallAttacks(seasons);
   const callTableOrder = ['K7','K1','K2']; // match display order of K-calls bar chart
   const callTableHTML = callTableOrder.map(kcode => {
     const combos = callAtks[kcode];

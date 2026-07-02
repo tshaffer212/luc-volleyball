@@ -350,9 +350,9 @@ def main(raw_path, out_path):
         ls     = loyola_side_for_session(s)
         acts   = s.get('actions', [])
         dig, fbso = compute_rally_sequences(acts, ls)
-        session_rally[sid] = {'dig': dig, 'fbso': fbso}
-        # Accumulate setter-call → attack outcome per season
         ca = compute_call_attacks(acts, ls)
+        session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca}
+        # Accumulate setter-call → attack outcome per season
         for k_code, combos in ca.items():
             for atk_cc, cv in combos.items():
                 acc = call_attacks_by_season[season][k_code][atk_cc]
@@ -379,6 +379,7 @@ def main(raw_path, out_path):
             'loyola_side':    loyola_side_for_session(s),
             'fbso_rcv':       fbso['rcv_rallies'],
             'fbso_kills':     fbso['fbso_kills'],
+            'call_attacks':   session_rally[sid]['call_atk'],
         })
 
     # ── Aggregation accumulators ──────────────────────────────────────────────
