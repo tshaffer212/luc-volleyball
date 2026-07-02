@@ -612,7 +612,7 @@
   </div>
 
   <div class="card mt-16">
-    <h3>Kill % by Call Type — Season Comparison</h3>
+    <h3 id="atk-trend-title">Kill % by Call Type — Season Comparison</h3>
     <div class="chart-wrap"><canvas id="chart-atk-season"></canvas></div>
   </div>
 </div>
@@ -3434,23 +3434,80 @@ function renderAttack() {
     buildAtkPlayerTable(pinPlayers, pinCodes, 'Pins & Backrow — Outsides + Opposites') +
     buildAtkPlayerTable(midPlayers, midCodes, 'Middles');
 
-  // Season trend — all valid combo codes with data across any season
-  const trendCodes = [...PIN_COMBOS, ...MIDDLE_COMBOS].filter(cc => {
-    return orderedSeasons().some(s => { const sc = getComboStats([s], group); return (sc[cc]?.attempts||0) > 0; });
-  });
-  // Compute dynamic y-axis floor (nearest 10 below min value, with a little padding)
-  const allKillVals = trendCodes.flatMap(cc =>
-    orderedSeasons().map(s => { const sc = getComboStats([s], group); return sc[cc]?.kill_pct ?? null; })
-  ).filter(v => v !== null);
-  const yMin = allKillVals.length ? Math.max(0, Math.floor((Math.min(...allKillVals) - 5) / 10) * 10) : 0;
+  // Bottom trend chart — x-axis adapts to current filters
+  let trendLabels, trendSidSets, trendTitle;
+
+  if (periodVal !== 'all') {
+    if (periodVal.startsWith('week:')) {
+      // Week selected → one point per session within that week
+      const wkStart = periodVal.slice(5);
+      const wkSess = DATA.sessions.filter(sess => {
+        if (!sess.date || !seasons.includes(sess.season)) return false;
+        const d = new Date(sess.date);
+        const dow = d.getDay();
+        const mon = new Date(d);
+        mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+        return mon.toISOString().slice(0,10) === wkStart;
+      }).sort((a,b) => a.date.localeCompare(b.date));
+      trendLabels  = wkSess.map(s => new Date(s.date).toLocaleString('default',{month:'short',day:'numeric'}));
+      trendSidSets = wkSess.map(s => new Set([s.id]));
+      trendTitle   = `Kill % by Call Type — Wk of ${new Date(wkStart).toLocaleString('default',{month:'short',day:'numeric'})}`;
+    } else {
+      // Month selected → one point per week within that month
+      const mo = periodVal.slice(6);
+      const moSess = DATA.sessions.filter(s => s.date?.startsWith(mo) && seasons.includes(s.season));
+      const weekMap = {}, weekOrder = [];
+      for (const sess of moSess) {
+        const d = new Date(sess.date), dow = d.getDay();
+        const mon = new Date(d);
+        mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+        const key = mon.toISOString().slice(0,10);
+        if (!weekMap[key]) { weekMap[key] = new Set(); weekOrder.push(key); }
+        weekMap[key].add(sess.id);
+      }
+      weekOrder.sort();
+      trendLabels  = weekOrder.map(wk => `Wk ${new Date(wk).toLocaleString('default',{month:'short',day:'numeric'})}`);
+      trendSidSets = weekOrder.map(wk => weekMap[wk]);
+      trendTitle   = `Kill % by Call Type — ${new Date(mo+'-15').toLocaleString('default',{month:'long',year:'numeric'})}`;
+    }
+  } else if (seasonVal !== 'all') {
+    // Specific season, no period → one point per month
+    const { keys: moKeys, labels: moLabels, sessionIdsByBucket: moSids } = getTimeBuckets([seasonVal], 'month');
+    trendLabels  = moLabels;
+    trendSidSets = moKeys.map(k => moSids[k]);
+    trendTitle   = `Kill % by Call Type — ${seasonVal}`;
+  } else {
+    // All seasons → one point per season (existing behaviour)
+    trendLabels  = orderedSeasons();
+    trendSidSets = null;
+    trendTitle   = 'Kill % by Call Type — Season Comparison';
+  }
+
+  const atkTrendEl = document.getElementById('atk-trend-title');
+  if (atkTrendEl) atkTrendEl.textContent = trendTitle;
+
+  // Kill% per bucket per combo
+  function trendKill(cc, i) {
+    if (!trendSidSets) {
+      const sc = getComboStats([trendLabels[i]], group);
+      return sc[cc]?.kill_pct ?? null;
+    }
+    const sids = trendSidSets[i];
+    if (!sids?.size) return null;
+    return getComboStatsBySessions(sids, group)[cc]?.kill_pct ?? null;
+  }
+
+  const filteredTrendCodes = [...PIN_COMBOS, ...MIDDLE_COMBOS].filter(cc =>
+    trendLabels.some((_, i) => trendKill(cc, i) !== null)
+  );
+  const allKillVals = filteredTrendCodes.flatMap(cc => trendLabels.map((_,i) => trendKill(cc,i))).filter(v=>v!==null);
+  const yMin = allKillVals.length ? Math.max(0, Math.floor((Math.min(...allKillVals)-5)/10)*10) : 0;
+
   makeChart('chart-atk-season', 'line', {
-    labels: orderedSeasons(),
-    datasets: trendCodes.map(cc => ({
+    labels: trendLabels,
+    datasets: filteredTrendCodes.map(cc => ({
       label: `${COMBO_NAMES[cc]||cc} Kill%`,
-      data: orderedSeasons().map(s => {
-        const sc = getComboStats([s], group);
-        return sc[cc]?.kill_pct || null;
-      }),
+      data: trendLabels.map((_,i) => trendKill(cc,i)),
       borderColor: COMBO_COLORS[cc],
       backgroundColor: COMBO_COLORS[cc]+'33',
       tension: 0.3, pointRadius: 5, fill: false, spanGaps: false,
