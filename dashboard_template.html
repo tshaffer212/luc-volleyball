@@ -3774,25 +3774,38 @@ function renderSetter() {
   const seasons   = resolveSeasons(seasonVal);
 
   // ── Populate setter dropdown ────────────────────────────────────────────────
-  const setterSessionMap = getSetterSessionMap(seasons); // 'pnum|season' → Set<sid>
-  const setterKeys = Object.keys(setterSessionMap).sort((a,b) =>
-    setterSessionMap[b].size - setterSessionMap[a].size
-  );
+  // Use ALL seasons to find every session each setter has ever set in,
+  // then intersect with the selected seasons when filtering data.
+  const allSeasons = orderedSeasons();
+  const fullSetterMap = getSetterSessionMap(allSeasons); // 'pnum|season' → Set<sid>
+
+  // Group by pnum|name so same person across seasons = one dropdown entry
+  const settersByPlayer = {}; // 'pnum|name' → { pnum, name, allSids: Set }
+  for (const [k, sids] of Object.entries(fullSetterMap)) {
+    const [pnum, season] = k.split('|');
+    const name = getPlayerName(pnum, season) || `#${pnum}`;
+    const playerKey = `${pnum}|${name}`;
+    if (!settersByPlayer[playerKey]) settersByPlayer[playerKey] = { pnum, name, allSids: new Set() };
+    for (const sid of sids) settersByPlayer[playerKey].allSids.add(sid);
+  }
+
   const setterSel = document.getElementById('set-setter');
   const currentVal = setterPnumFilter || '';
   setterSel.innerHTML = '<option value="">All Setters</option>' +
-    setterKeys.map(k => {
-      const [pnum, season] = k.split('|');
-      const name = getPlayerName(pnum, season) || `#${pnum}`;
-      const cnt  = setterSessionMap[k].size;
-      const multiSeason = seasons.length > 1;
-      const label = multiSeason ? `#${pnum} ${name} — ${season} (${cnt})` : `#${pnum} ${name} (${cnt})`;
-      return `<option value="${k}" ${k===currentVal?'selected':''}>${label}</option>`;
-    }).join('');
+    Object.entries(settersByPlayer)
+      .sort((a, b) => b[1].allSids.size - a[1].allSids.size)
+      .map(([k, { pnum, name, allSids }]) =>
+        `<option value="${k}" ${k===currentVal?'selected':''}>#${pnum} ${name} (${allSids.size})</option>`
+      ).join('');
 
-  // ── Resolve active session IDs (null = use all seasons) ────────────────────
-  const activeSids = (setterPnumFilter && setterSessionMap[setterPnumFilter])
-    ? setterSessionMap[setterPnumFilter] : null;
+  // ── Resolve active session IDs ──────────────────────────────────────────────
+  // Intersection of: setter's sessions across all time  ∩  sessions in selected seasons
+  let activeSids = null;
+  if (setterPnumFilter && settersByPlayer[setterPnumFilter]) {
+    const seasonSids = new Set(DATA.sessions.filter(s => seasons.includes(s.season)).map(s => s.id));
+    const filtered = [...settersByPlayer[setterPnumFilter].allSids].filter(sid => seasonSids.has(sid));
+    if (filtered.length) activeSids = new Set(filtered);
+  }
 
   // ── Aggregate combos (session-filtered when a setter is selected) ───────────
   const pinCombos  = activeSids ? getComboStatsBySessions(activeSids,'pins')    : getComboStats(seasons,'pins');
