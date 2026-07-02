@@ -2289,11 +2289,11 @@ function renderSeasonOverview(season, container) {
   const topAttackers = [...topPlayers]
     .filter(p => (p.skills?.A?.attempts||0) >= 20)
     .sort((a,b) => (b.skills?.A?.kill_pct||0) - (a.skills?.A?.kill_pct||0))
-    .slice(0, 5);
+    .slice(0, 10);
   const topServers = [...topPlayers]
     .filter(p => (p.skills?.S?.attempts||0) >= 20)
     .sort((a,b) => (b.skills?.S?.kill_pct||0) - (a.skills?.S?.kill_pct||0))
-    .slice(0, 5);
+    .slice(0, 10);
 
   container.innerHTML = `
     <div class="grid-4">
@@ -2388,7 +2388,7 @@ function buildPlayerMiniTable(players, skillCode) {
   const label = skillCode === 'A' ? ['Kill%','Eff%'] : ['Ace%','Err%'];
   return `<table class="data-table">
     <thead><tr><th>#</th><th>Name</th><th class="num">Att</th><th class="num">${label[0]}</th><th class="num">${label[1]}</th></tr></thead>
-    <tbody>${players.filter(p => p.skills?.[skillCode]?.attempts > 0).slice(0,5).map(p => {
+    <tbody>${players.filter(p => p.skills?.[skillCode]?.attempts > 0).slice(0,10).map(p => {
       const sk = p.skills?.[skillCode];
       return `<tr>
         <td class="gold">#${p.pnum}</td>
