@@ -456,7 +456,7 @@
 
   <div class="grid-2 mt-16">
     <div class="card">
-      <h3>Actions by Season</h3>
+      <h3 id="team-seasons-title">Actions by Season</h3>
       <div class="chart-wrap"><canvas id="chart-team-seasons"></canvas></div>
     </div>
     <div class="card">
@@ -467,11 +467,11 @@
 
   <div class="grid-2 mt-16">
     <div class="card">
-      <h3>Season Comparison — Kill %</h3>
+      <h3 id="team-compare-kill-title">Season Comparison — Kill %</h3>
       <div class="chart-wrap"><canvas id="chart-season-compare-kill"></canvas></div>
     </div>
     <div class="card">
-      <h3>Season Comparison — Error %</h3>
+      <h3 id="team-compare-err-title">Season Comparison — Error %</h3>
       <div class="chart-wrap"><canvas id="chart-season-compare-err"></canvas></div>
     </div>
   </div>
@@ -2300,17 +2300,60 @@ function renderTeam() {
     </div>
   `;
 
-  // Chart: actions by season
+  // Charts: actions + skill comparison — monthly drill-down when a season is selected
   const seasons = orderedSeasons();
-  makeChart('chart-team-seasons', 'bar', {
-    labels: seasons,
-    datasets: [{
-      label: 'Total Actions',
-      data: seasons.map(s => DATA.season_stats[s] ? DATA.season_stats[s].actions : 0),
-      backgroundColor: GOLD,
-      borderRadius: 4,
-    }]
-  }, { plugins: { legend: { display: false } } });
+  const seasonVal = document.getElementById('team-season-filter').value;
+  const skillsToCompare = ['A','S','R','B'];
+
+  if (seasonVal !== 'all') {
+    const { monthKeys, shortLabels, sessionIdsByMonth } = getMonthBuckets([seasonVal]);
+
+    function moStats(mo) {
+      const sids = sessionIdsByMonth[mo]; if (!sids) return {};
+      return aggregateSessionStats(sids).skills;
+    }
+    function moKill(mo, sk) { const s = moStats(mo)[sk], att = s?.attempts||0; return att ? +(((s.evals?.['#']||0)/att)*100).toFixed(1) : 0; }
+    function moErr(mo, sk)  { const s = moStats(mo)[sk], att = s?.attempts||0; return att ? +(((s.evals?.['=']||0)/att)*100).toFixed(1) : 0; }
+
+    const stEl = document.getElementById('team-seasons-title');     if (stEl) stEl.textContent = `Actions by Month — ${seasonVal}`;
+    const ckEl = document.getElementById('team-compare-kill-title'); if (ckEl) ckEl.textContent = `Monthly Kill % — ${seasonVal}`;
+    const ceEl = document.getElementById('team-compare-err-title');  if (ceEl) ceEl.textContent = `Monthly Error % — ${seasonVal}`;
+
+    makeChart('chart-team-seasons', 'bar', {
+      labels: shortLabels,
+      datasets: [{ label: 'Total Actions', data: monthKeys.map(mo => { const sids = sessionIdsByMonth[mo]; return sids ? aggregateSessionStats(sids).totalActions : 0; }), backgroundColor: GOLD, borderRadius: 4 }]
+    }, { plugins: { legend: { display: false } } });
+
+    makeChart('chart-season-compare-kill', 'bar', {
+      labels: shortLabels,
+      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: monthKeys.map(mo => moKill(mo, sk)), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
+    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+
+    makeChart('chart-season-compare-err', 'bar', {
+      labels: shortLabels,
+      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: monthKeys.map(mo => moErr(mo, sk)), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
+    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+
+  } else {
+    const stEl = document.getElementById('team-seasons-title');     if (stEl) stEl.textContent = 'Actions by Season';
+    const ckEl = document.getElementById('team-compare-kill-title'); if (ckEl) ckEl.textContent = 'Season Comparison — Kill %';
+    const ceEl = document.getElementById('team-compare-err-title');  if (ceEl) ceEl.textContent = 'Season Comparison — Error %';
+
+    makeChart('chart-team-seasons', 'bar', {
+      labels: seasons,
+      datasets: [{ label: 'Total Actions', data: seasons.map(s => DATA.season_stats[s] ? DATA.season_stats[s].actions : 0), backgroundColor: GOLD, borderRadius: 4 }]
+    }, { plugins: { legend: { display: false } } });
+
+    makeChart('chart-season-compare-kill', 'bar', {
+      labels: seasons,
+      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: seasons.map(s => DATA.season_stats[s]?.skills?.[sk]?.kill_pct || 0), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
+    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+
+    makeChart('chart-season-compare-err', 'bar', {
+      labels: seasons,
+      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: seasons.map(s => DATA.season_stats[s]?.skills?.[sk]?.error_pct || 0), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
+    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+  }
 
   // Chart: skill distribution (filtered season)
   const skills = agg.skills;
@@ -2327,33 +2370,6 @@ function renderTeam() {
     scales: { x: { display: false }, y: { display: false } },
     plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
   });
-
-  // Season comparison charts
-  const sAll = orderedSeasons();
-  const skillsToCompare = ['A','S','R','B'];
-  const killData = skillsToCompare.map(sk => ({
-    label: SKILL_NAMES[sk],
-    data: sAll.map(s => DATA.season_stats[s]?.skills?.[sk]?.kill_pct || 0),
-    backgroundColor: SKILL_COLORS[sk],
-    borderColor: SKILL_COLORS[sk],
-    borderRadius: 3,
-  }));
-  makeChart('chart-season-compare-kill', 'bar', {
-    labels: sAll,
-    datasets: killData,
-  }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
-
-  const errData = skillsToCompare.map(sk => ({
-    label: SKILL_NAMES[sk],
-    data: sAll.map(s => DATA.season_stats[s]?.skills?.[sk]?.error_pct || 0),
-    backgroundColor: SKILL_COLORS[sk],
-    borderColor: SKILL_COLORS[sk],
-    borderRadius: 3,
-  }));
-  makeChart('chart-season-compare-err', 'bar', {
-    labels: sAll,
-    datasets: errData,
-  }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
 
   // Summary table
   const tbody = document.getElementById('team-skill-tbody');
