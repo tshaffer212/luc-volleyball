@@ -3673,8 +3673,6 @@ function getSetterSessionMap(seasons) {
     let bestPnum = null, bestAtt = 0;
     for (const ps of players) {
       const eAtt = ps.skills?.E?.attempts || 0;
-      // Skip liberos — they should never be classified as primary setter
-      if (playerInGroup(ps.player_num, season, 'liberos')) continue;
       if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
     }
     if (bestPnum && bestAtt >= 3) {
