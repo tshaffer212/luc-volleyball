@@ -3315,7 +3315,7 @@ function renderServRcv() {
   // KPI row
   document.getElementById('sr-kpi-row').innerHTML = `
     <div class="card-sm"><div class="card-title">Serve Ace %</div>
-      <div class="stat-val big" style="color:var(--blue)">${tmS ? pct(tmS.ace_pct) : '—'}</div>
+      <div class="stat-val big green">${tmS ? pct(tmS.ace_pct) : '—'}</div>
       <div class="stat-lbl">${fmt(teamServeAtt)} serves</div></div>
     <div class="card-sm"><div class="card-title">Serve Err %</div>
       <div class="stat-val big red">${tmS ? pct(tmS.err_pct) : '—'}</div>
