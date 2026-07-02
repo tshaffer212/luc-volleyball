@@ -2288,8 +2288,14 @@ function renderSeasonOverview(season, container) {
     .sort((a,b) => (b.skills?.A?.attempts||0) - (a.skills?.A?.attempts||0))
     .slice(0, 6);
 
-  const topAttackers = [...topPlayers].sort((a,b) => (b.skills?.A?.attempts||0)-(a.skills?.A?.attempts||0)).slice(0,5);
-  const topServers   = [...topPlayers].sort((a,b) => (b.skills?.S?.attempts||0)-(a.skills?.S?.attempts||0)).slice(0,5);
+  const topAttackers = [...topPlayers]
+    .filter(p => (p.skills?.A?.attempts||0) >= 20)
+    .sort((a,b) => (b.skills?.A?.kill_pct||0) - (a.skills?.A?.kill_pct||0))
+    .slice(0, 5);
+  const topServers = [...topPlayers]
+    .filter(p => (p.skills?.S?.attempts||0) >= 20)
+    .sort((a,b) => (b.skills?.S?.kill_pct||0) - (a.skills?.S?.kill_pct||0))
+    .slice(0, 5);
 
   container.innerHTML = `
     <div class="grid-4">
