@@ -441,14 +441,11 @@
       <option value="match">Match Only</option>
     </select></div>
     <div class="filter-sep"></div>
-    <div><label>Skill</label><br><select id="team-skill-filter" onchange="renderTeam()">
-      <option value="all">All Skills</option>
-      <option value="S">Serve</option>
-      <option value="R">Reception</option>
-      <option value="E">Set</option>
-      <option value="A">Attack</option>
-      <option value="B">Block</option>
-      <option value="D">Dig</option>
+    <div><label>Group By</label><br><select id="team-time-bucket" onchange="renderTeam()">
+      <option value="season">Season</option>
+      <option value="month" selected>Month</option>
+      <option value="week">Week</option>
+      <option value="day">Day</option>
     </select></div>
   </div>
 
@@ -481,7 +478,7 @@
     <div class="table-scroll">
       <table class="data-table" id="team-skill-table">
         <thead><tr>
-          <th>Season</th><th>Sessions</th><th>Actions</th>
+          <th id="team-table-period-th">Season</th><th>Sessions</th><th>Actions</th>
           <th class="num">Serves</th><th class="num">Ace%</th><th class="num">Srv Err%</th>
           <th class="num">Attacks</th><th class="num">Kill%</th><th class="num">Atk Err%</th><th class="num">Eff%</th>
           <th class="num">Receptions</th><th class="num">Perfect%</th>
@@ -1258,6 +1255,51 @@ function getMonthBuckets(seasonFilter) {
     return `${mo} '${yr}`;
   });
   return { monthKeys, shortLabels, sessionIdsByMonth: byMonth };
+}
+
+// Group sessions into time buckets (season / month / week / day).
+// seasons: array of season strings to include.
+function getTimeBuckets(seasons, bucketType) {
+  const byBucket = {};
+  for (const sess of DATA.sessions) {
+    if (!sess.date || !seasons.includes(sess.season)) continue;
+    let key;
+    if (bucketType === 'season') {
+      key = sess.season;
+    } else if (bucketType === 'month') {
+      key = sess.date.slice(0, 7);
+    } else if (bucketType === 'week') {
+      // Monday of ISO week
+      const d = new Date(sess.date);
+      const dow = d.getDay();
+      const diff = dow === 0 ? -6 : 1 - dow;
+      const mon = new Date(d);
+      mon.setDate(d.getDate() + diff);
+      key = mon.toISOString().slice(0, 10);
+    } else { // day
+      key = sess.date;
+    }
+    if (!byBucket[key]) byBucket[key] = new Set();
+    byBucket[key].add(sess.id);
+  }
+  // For season bucket, ensure all requested seasons appear even if empty
+  if (bucketType === 'season') {
+    for (const s of seasons) if (!byBucket[s]) byBucket[s] = new Set();
+  }
+  const keys = bucketType === 'season'
+    ? seasons.filter(s => byBucket[s])  // keep season order
+    : Object.keys(byBucket).sort();
+
+  const labels = keys.map(k => {
+    if (bucketType === 'season') return k;
+    const d = new Date(k.length === 7 ? k + '-15' : k);
+    if (bucketType === 'month') {
+      return `${d.toLocaleString('default',{month:'short'})} '${String(d.getFullYear()).slice(2)}`;
+    }
+    // week or day: "Mon D"
+    return d.toLocaleString('default', { month: 'short', day: 'numeric' });
+  });
+  return { keys, labels, sessionIdsByBucket: byBucket };
 }
 
 function renderReports() {
@@ -2277,7 +2319,6 @@ function getTeamStats() {
 
 function renderTeam() {
   const agg = getTeamStats();
-  const skillFilter = document.getElementById('team-skill-filter').value;
   const A = safeSkill(agg.skills, 'A');
   const S = safeSkill(agg.skills, 'S');
   const R = safeSkill(agg.skills, 'R');
@@ -2311,61 +2352,82 @@ function renderTeam() {
     </div>
   `;
 
-  // Charts: actions + skill comparison — monthly drill-down when a season is selected
-  const seasons = orderedSeasons();
-  const seasonVal = document.getElementById('team-season-filter').value;
+  // Charts: time-bucketed view driven by Group By filter
+  const seasonVal  = document.getElementById('team-season-filter').value;
+  const timeBucket = document.getElementById('team-time-bucket').value;
   const skillsToCompare = ['A','S','R','B'];
 
-  if (seasonVal !== 'all') {
-    const { monthKeys, shortLabels, sessionIdsByMonth } = getMonthBuckets([seasonVal]);
+  const filteredSeasons = resolveSeasons(seasonVal);
+  const { keys: bucketKeys, labels: bucketLabels, sessionIdsByBucket } = getTimeBuckets(filteredSeasons, timeBucket);
 
-    function moStats(mo) {
-      const sids = sessionIdsByMonth[mo]; if (!sids) return {};
-      return aggregateSessionStats(sids).skills;
+  // Compute and cache skill stats per bucket (with derived pcts)
+  const _bucketSkillCache = {};
+  function bucketSkills(key) {
+    if (_bucketSkillCache[key]) return _bucketSkillCache[key];
+    let skills;
+    if (timeBucket === 'season') {
+      skills = {};
+      for (const [sk, sv] of Object.entries(DATA.season_stats[key]?.skills || {}))
+        skills[sk] = { ...sv, evals: { ...(sv.evals||{}) } };
+    } else {
+      const sids = sessionIdsByBucket[key];
+      skills = sids ? aggregateSessionStats(sids).skills : {};
     }
-    function moKill(mo, sk) { const s = moStats(mo)[sk], att = s?.attempts||0; return att ? +(((s.evals?.['#']||0)/att)*100).toFixed(1) : 0; }
-    function moErr(mo, sk)  { const s = moStats(mo)[sk], att = s?.attempts||0; return att ? +(((s.evals?.['=']||0)/att)*100).toFixed(1) : 0; }
+    for (const sv of Object.values(skills)) {
+      const att = sv.attempts || 0;
+      if (att > 0) {
+        sv.kill_pct   = +(((sv.evals['#']||0)/att)*100).toFixed(1);
+        sv.error_pct  = +(((sv.evals['=']||0)/att)*100).toFixed(1);
+        sv.pos_pct    = +(((sv.evals['#']||0)+(sv.evals['+']||0)+(sv.evals['/']||0))/att*100).toFixed(1);
+        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0))/att*100).toFixed(1);
+      }
+    }
+    _bucketSkillCache[key] = skills;
+    return skills;
+  }
+  function bucketKill(key, sk) { return bucketSkills(key)[sk]?.kill_pct  || 0; }
+  function bucketErr(key, sk)  { return bucketSkills(key)[sk]?.error_pct || 0; }
+  function bucketActions(key) {
+    if (timeBucket === 'season') return DATA.season_stats[key]?.actions || 0;
+    const sids = sessionIdsByBucket[key];
+    return sids ? aggregateSessionStats(sids).totalActions : 0;
+  }
 
-    const stEl = document.getElementById('team-seasons-title');     if (stEl) stEl.textContent = `Actions by Month — ${seasonVal}`;
-    const ckEl = document.getElementById('team-compare-kill-title'); if (ckEl) ckEl.textContent = `Monthly Kill % — ${seasonVal}`;
-    const ceEl = document.getElementById('team-compare-err-title');  if (ceEl) ceEl.textContent = `Monthly Error % — ${seasonVal}`;
+  // Chart titles
+  const bucketWord   = { season:'Season', month:'Month', week:'Week', day:'Day' }[timeBucket];
+  const compareLabel = { season:'Season Comparison —', month:'Monthly', week:'Weekly', day:'Daily' }[timeBucket];
+  const seasonSuffix = seasonVal !== 'all' ? ` — ${seasonVal}` : '';
+  const stEl = document.getElementById('team-seasons-title');     if (stEl) stEl.textContent = `Actions by ${bucketWord}${seasonSuffix}`;
+  const ckEl = document.getElementById('team-compare-kill-title'); if (ckEl) ckEl.textContent = `${compareLabel} Kill %${seasonSuffix}`;
+  const ceEl = document.getElementById('team-compare-err-title');  if (ceEl) ceEl.textContent = `${compareLabel} Error %${seasonSuffix}`;
 
-    makeChart('chart-team-seasons', 'bar', {
-      labels: shortLabels,
-      datasets: [{ label: 'Total Actions', data: monthKeys.map(mo => { const sids = sessionIdsByMonth[mo]; return sids ? aggregateSessionStats(sids).totalActions : 0; }), backgroundColor: GOLD, borderRadius: 4 }]
-    }, { plugins: { legend: { display: false } } });
+  makeChart('chart-team-seasons', 'bar', {
+    labels: bucketLabels,
+    datasets: [{ label:'Total Actions', data: bucketKeys.map(k => bucketActions(k)), backgroundColor: GOLD, borderRadius: 4 }]
+  }, { plugins: { legend: { display: false } } });
 
-    const moTrendOpts = {
-      plugins: { legend: { labels: { boxWidth: 10, filter: item => !item.text.endsWith('·t') } } },
+  if (timeBucket === 'season') {
+    // Season view — plain bars, no trend lines
+    makeChart('chart-season-compare-kill', 'bar', {
+      labels: bucketLabels,
+      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: bucketKeys.map(k => bucketKill(k,sk)), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
+    }, { plugins: { legend: { labels: { boxWidth:10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+    makeChart('chart-season-compare-err', 'bar', {
+      labels: bucketLabels,
+      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: bucketKeys.map(k => bucketErr(k,sk)), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
+    }, { plugins: { legend: { labels: { boxWidth:10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+  } else {
+    // Time-series view — bars + smoothed trend lines
+    const trendOpts = {
+      plugins: { legend: { labels: { boxWidth:10, filter: item => !item.text.endsWith('·t') } } },
       scales: { y: { ticks: { callback: v => v+'%' } } }
     };
-    const killBars  = skillsToCompare.map(sk => ({ type:'bar',  label: SKILL_NAMES[sk],       data: monthKeys.map(mo => moKill(mo, sk)), backgroundColor: SKILL_COLORS[sk]+'99', borderColor: SKILL_COLORS[sk], borderRadius: 3 }));
-    const killLines = skillsToCompare.map(sk => ({ type:'line', label: SKILL_NAMES[sk]+'·t',  data: monthKeys.map(mo => moKill(mo, sk)), borderColor: SKILL_COLORS[sk], backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, pointBackgroundColor: SKILL_COLORS[sk], tension:0.35, fill:false }));
-    makeChart('chart-season-compare-kill', 'bar', { labels: shortLabels, datasets: [...killBars, ...killLines] }, moTrendOpts);
-
-    const errBars  = skillsToCompare.map(sk => ({ type:'bar',  label: SKILL_NAMES[sk],       data: monthKeys.map(mo => moErr(mo, sk)), backgroundColor: SKILL_COLORS[sk]+'99', borderColor: SKILL_COLORS[sk], borderRadius: 3 }));
-    const errLines = skillsToCompare.map(sk => ({ type:'line', label: SKILL_NAMES[sk]+'·t',  data: monthKeys.map(mo => moErr(mo, sk)), borderColor: SKILL_COLORS[sk], backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, pointBackgroundColor: SKILL_COLORS[sk], tension:0.35, fill:false }));
-    makeChart('chart-season-compare-err', 'bar', { labels: shortLabels, datasets: [...errBars, ...errLines] }, moTrendOpts);
-
-  } else {
-    const stEl = document.getElementById('team-seasons-title');     if (stEl) stEl.textContent = 'Actions by Season';
-    const ckEl = document.getElementById('team-compare-kill-title'); if (ckEl) ckEl.textContent = 'Season Comparison — Kill %';
-    const ceEl = document.getElementById('team-compare-err-title');  if (ceEl) ceEl.textContent = 'Season Comparison — Error %';
-
-    makeChart('chart-team-seasons', 'bar', {
-      labels: seasons,
-      datasets: [{ label: 'Total Actions', data: seasons.map(s => DATA.season_stats[s] ? DATA.season_stats[s].actions : 0), backgroundColor: GOLD, borderRadius: 4 }]
-    }, { plugins: { legend: { display: false } } });
-
-    makeChart('chart-season-compare-kill', 'bar', {
-      labels: seasons,
-      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: seasons.map(s => DATA.season_stats[s]?.skills?.[sk]?.kill_pct || 0), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
-    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
-
-    makeChart('chart-season-compare-err', 'bar', {
-      labels: seasons,
-      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: seasons.map(s => DATA.season_stats[s]?.skills?.[sk]?.error_pct || 0), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
-    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+    const killBars  = skillsToCompare.map(sk => ({ type:'bar',  label: SKILL_NAMES[sk],      data: bucketKeys.map(k => bucketKill(k,sk)), backgroundColor: SKILL_COLORS[sk]+'99', borderColor: SKILL_COLORS[sk], borderRadius: 3 }));
+    const killLines = skillsToCompare.map(sk => ({ type:'line', label: SKILL_NAMES[sk]+'·t', data: bucketKeys.map(k => bucketKill(k,sk)), borderColor: SKILL_COLORS[sk], backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, pointBackgroundColor: SKILL_COLORS[sk], tension:0.35, fill:false }));
+    makeChart('chart-season-compare-kill', 'bar', { labels: bucketLabels, datasets: [...killBars, ...killLines] }, trendOpts);
+    const errBars  = skillsToCompare.map(sk => ({ type:'bar',  label: SKILL_NAMES[sk],      data: bucketKeys.map(k => bucketErr(k,sk)), backgroundColor: SKILL_COLORS[sk]+'99', borderColor: SKILL_COLORS[sk], borderRadius: 3 }));
+    const errLines = skillsToCompare.map(sk => ({ type:'line', label: SKILL_NAMES[sk]+'·t', data: bucketKeys.map(k => bucketErr(k,sk)), borderColor: SKILL_COLORS[sk], backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, pointBackgroundColor: SKILL_COLORS[sk], tension:0.35, fill:false }));
+    makeChart('chart-season-compare-err', 'bar', { labels: bucketLabels, datasets: [...errBars, ...errLines] }, trendOpts);
   }
 
   // Chart: skill distribution (filtered season)
@@ -2384,17 +2446,26 @@ function renderTeam() {
     plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
   });
 
-  // Summary table
+  // Summary table — rows follow the same time bucket
+  const periodLabel = { season:'Season', month:'Month', week:'Week Starting', day:'Date' }[timeBucket];
+  const thPeriod = document.getElementById('team-table-period-th');
+  if (thPeriod) thPeriod.textContent = periodLabel;
+
   const tbody = document.getElementById('team-skill-tbody');
   tbody.innerHTML = '';
-  for (const s of seasons) {
-    const ss = DATA.season_stats[s];
-    if (!ss) continue;
-    const A = ss.skills?.A, S = ss.skills?.S, R = ss.skills?.R, B = ss.skills?.B;
+  for (let i = 0; i < bucketKeys.length; i++) {
+    const k = bucketKeys[i];
+    const label = bucketLabels[i];
+    const sk = bucketSkills(k);
+    const A = sk.A, S = sk.S, R = sk.R, B = sk.B;
+    const sessions = timeBucket === 'season'
+      ? (DATA.season_stats[k]?.sessions || 0)
+      : (sessionIdsByBucket[k]?.size || 0);
+    const actions = bucketActions(k);
     tbody.innerHTML += `<tr>
-      <td>${s}</td>
-      <td>${ss.sessions}</td>
-      <td>${fmt(ss.actions)}</td>
+      <td>${label}</td>
+      <td>${sessions}</td>
+      <td>${fmt(actions)}</td>
       <td class="num">${S ? fmt(S.attempts) : '—'}</td>
       <td class="num green">${S ? pct(S.kill_pct) : '—'}</td>
       <td class="num red">${S ? pct(S.error_pct) : '—'}</td>
