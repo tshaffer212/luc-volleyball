@@ -3848,22 +3848,28 @@ function renderSetter() {
       <div class="stat-lbl">${fmt(bicAtt)} sets</div></div>
   `;
 
-  // Overall distribution doughnut — dim non-selected group if filter active
+  // Overall distribution doughnut — dim non-selected combos
   const BIC_COMBOS = ['XP','PP','X8'];
   const distCodes = [...PIN_COMBOS,...MIDDLE_COMBOS].filter(cc=>allCombos[cc]?.attempts>0);
+
+  // Which zone is selected (for doughnut + bar highlighting)
+  const selZone = setterZoneSel ? COURT_ZONES.find(z => z.id === setterZoneSel) : null;
+
   function inSetterGroup(cc) {
+    if (selZone)                      return selZone.codes.includes(cc);
     if (setterGroupSel === 'pins')    return PIN_COMBOS.includes(cc) && !BIC_COMBOS.includes(cc);
     if (setterGroupSel === 'middles') return MIDDLE_COMBOS.includes(cc);
     if (setterGroupSel === 'bic')     return BIC_COMBOS.includes(cc);
     return true;
   }
+
   makeChart('chart-set-dist', 'doughnut', {
     labels: distCodes.map(cc => COMBO_NAMES[cc]||cc),
     datasets: [{
       data: distCodes.map(cc => allCombos[cc]?.attempts||0),
       backgroundColor: distCodes.map(cc => {
         const base = COMBO_COLORS[cc]||'#888';
-        return (!setterGroupSel || inSetterGroup(cc)) ? base : base + '22';
+        return (!setterGroupSel && !selZone || inSetterGroup(cc)) ? base : base + '22';
       }),
       borderColor:'#1a1a1a', borderWidth:2,
     }]
@@ -3877,18 +3883,54 @@ function renderSetter() {
   const groupKeys    = ['pins',      'middles',      'bic'];
   const groupBaseClr = [MAROON,      '#666666',      '#888888'];
   const groupAtts    = [pinAtt - bicAtt, midAtt, bicAtt].map(v=>Math.max(0,v));
-  makeChart('chart-set-group', 'bar', {
-    labels: groupLabels,
-    datasets: [{
-      label:'Attempts',
+
+  // When a zone is selected: show a stacked bar highlighting the zone's share within its group
+  let barDatasets;
+  if (selZone) {
+    const zoneAtt = selZone.codes.reduce((s,cc) => s+(allCombos[cc]?.attempts||0), 0);
+    // Determine which group this zone falls into
+    let zoneGroupIdx = 0; // default pins
+    if (selZone.codes.some(cc => BIC_COMBOS.includes(cc)))       zoneGroupIdx = 2;
+    else if (selZone.codes.some(cc => MIDDLE_COMBOS.includes(cc))) zoneGroupIdx = 1;
+
+    const highlightData = [0, 0, 0];
+    const baseData      = [...groupAtts];
+    highlightData[zoneGroupIdx] = Math.min(zoneAtt, groupAtts[zoneGroupIdx]);
+    baseData[zoneGroupIdx]      = Math.max(0, groupAtts[zoneGroupIdx] - highlightData[zoneGroupIdx]);
+
+    barDatasets = [
+      {
+        label: 'Rest',
+        data: baseData,
+        backgroundColor: groupBaseClr.map(c => c + '33'),
+        borderRadius: 4,
+        stack: 'g'
+      },
+      {
+        label: 'Selected Zone',
+        data: highlightData,
+        backgroundColor: groupBaseClr.map((c, i) => i === zoneGroupIdx ? c : 'transparent'),
+        borderRadius: 4,
+        stack: 'g'
+      }
+    ];
+  } else {
+    barDatasets = [{
+      label: 'Attempts',
       data: groupAtts,
       backgroundColor: groupKeys.map((k, i) =>
         (!setterGroupSel || setterGroupSel === k) ? groupBaseClr[i] : groupBaseClr[i] + '44'
       ),
-      borderRadius:4
-    }]
+      borderRadius: 4
+    }];
+  }
+
+  makeChart('chart-set-group', 'bar', {
+    labels: groupLabels,
+    datasets: barDatasets
   }, {
     plugins:{ legend:{display:false} },
+    scales:{ x:{ stacked: true }, y:{ stacked: true } },
     onClick: (e, elements) => {
       if (!elements.length) { setterGroupSel = null; }
       else {
