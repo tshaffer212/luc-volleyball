@@ -571,8 +571,12 @@
 <!-- ═══════════════════════════ ATTACK TAB ═══════════════════════════ -->
 <div id="tab-attack" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="atk-season" onchange="atkCodeSel=null;renderAttack()">
+    <div><label>Season</label><br><select id="atk-season" onchange="atkCodeSel=null;populateAtkPeriod();renderAttack()">
       <option value="all">All Seasons</option>
+    </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Period</label><br><select id="atk-period" onchange="renderAttack()">
+      <option value="all">All Season</option>
     </select></div>
     <div class="filter-sep"></div>
     <div><label>Group</label><br><select id="atk-group" onchange="atkCodeSel=null;renderAttack()">
@@ -1174,6 +1178,7 @@ function init() {
   renderTeam();
   renderSeason();
   renderReports();
+  populateAtkPeriod();
   renderAttack();
   renderServRcv();
   renderSetter();
@@ -3180,13 +3185,89 @@ function getComboStats(seasons, group) {
   return combos;
 }
 
+function populateAtkPeriod() {
+  const seasonVal = document.getElementById('atk-season').value;
+  const seasons   = resolveSeasons(seasonVal);
+  const el        = document.getElementById('atk-period');
+  const curVal    = el.value;
+
+  el.innerHTML = '<option value="all">All Season</option>';
+
+  const sessions = DATA.sessions.filter(s => seasons.includes(s.season) && s.date);
+
+  // Month buckets
+  const monthKeys = [...new Set(sessions.map(s => s.date.slice(0,7)))].sort();
+  if (monthKeys.length) {
+    const mg = document.createElement('optgroup');
+    mg.label = 'By Month';
+    for (const mo of monthKeys) {
+      const d = new Date(mo + '-15');
+      mg.appendChild(new Option(
+        `${d.toLocaleString('default',{month:'short'})} '${String(d.getFullYear()).slice(2)}`,
+        'month:' + mo
+      ));
+    }
+    el.appendChild(mg);
+  }
+
+  // Week buckets (Monday as key)
+  const weekMap = {};
+  for (const sess of sessions) {
+    const d = new Date(sess.date);
+    const dow = d.getDay();
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+    const key = mon.toISOString().slice(0,10);
+    weekMap[key] = true;
+  }
+  const weekKeys = Object.keys(weekMap).sort();
+  if (weekKeys.length) {
+    const wg = document.createElement('optgroup');
+    wg.label = 'By Week';
+    for (const wk of weekKeys) {
+      const d = new Date(wk);
+      wg.appendChild(new Option(
+        `Wk of ${d.toLocaleString('default',{month:'short',day:'numeric'})}`,
+        'week:' + wk
+      ));
+    }
+    el.appendChild(wg);
+  }
+
+  // Restore previous selection if still valid, otherwise reset
+  if ([...el.options].some(o => o.value === curVal)) el.value = curVal;
+  else el.value = 'all';
+}
+
 function renderAttack() {
   const seasonVal = document.getElementById('atk-season').value;
   const group     = document.getElementById('atk-group').value;
   const metric    = document.getElementById('atk-metric').value;
+  const periodVal = document.getElementById('atk-period')?.value || 'all';
   const seasons   = resolveSeasons(seasonVal);
 
-  const combos = getComboStats(seasons, group);
+  // Build session ID set for the selected period
+  let activeSids = null;
+  if (periodVal !== 'all') {
+    activeSids = new Set();
+    for (const sess of DATA.sessions) {
+      if (!seasons.includes(sess.season) || !sess.date) continue;
+      if (periodVal.startsWith('month:')) {
+        if (sess.date.startsWith(periodVal.slice(6))) activeSids.add(sess.id);
+      } else if (periodVal.startsWith('week:')) {
+        const wkStart = periodVal.slice(5);
+        const d = new Date(sess.date);
+        const dow = d.getDay();
+        const mon = new Date(d);
+        mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+        if (mon.toISOString().slice(0,10) === wkStart) activeSids.add(sess.id);
+      }
+    }
+  }
+
+  const combos = activeSids
+    ? getComboStatsBySessions(activeSids, group)
+    : getComboStats(seasons, group);
   const allCodes = [...PIN_COMBOS, ...MIDDLE_COMBOS]
     .filter(cc => combos[cc]?.attempts > 0);
 
@@ -3256,40 +3337,51 @@ function renderAttack() {
     scales: { y: { ticks: { callback: v => v+'%' } } }
   });
 
-  // Player breakdown table
+  // Player breakdown table — use player_session when period is active, player_season otherwise
   const playerData = [];
-  const activeSeason = seasonVal === 'all' ? null : seasonVal;
-  for (const [key, ps] of Object.entries(DATA.player_season)) {
-    const [pnum, season] = key.split('|');
-    if (!seasons.includes(season)) continue;
-    if (!playerInGroup(pnum, season, group)) continue;
-    if (!ps.skills?.A?.attempts) continue;
-    const name = getPlayerName(pnum, season);
+
+  function mergePlayerEntry(playerData, pnum, season, psEntry) {
+    if (!psEntry.skills?.A?.attempts) return;
+    const name   = getPlayerName(pnum, season);
     const posGrp = playerInGroup(pnum, season, 'pins') ? 'pins'
                  : playerInGroup(pnum, season, 'middles') ? 'middles' : 'other';
-    const existing = playerData.find(p => p.name === name && p.pnum === pnum);
+    const existing = playerData.find(p => p.pnum === pnum);
     if (existing) {
-      // merge same player across seasons
       for (const cc of allCodes) {
-        const cv = ps.skills?.A?.combos?.[cc];
+        const cv = psEntry.skills?.A?.combos?.[cc];
         if (!cv) continue;
         if (!existing.combos[cc]) existing.combos[cc] = {attempts:0,kills:0,errors:0};
         existing.combos[cc].attempts += cv.attempts||0;
         existing.combos[cc].kills    += cv.evals?.['#']||0;
         existing.combos[cc].errors   += cv.evals?.['=']||0;
       }
-      existing.totalAtt += ps.skills.A.attempts||0;
+      existing.totalAtt += psEntry.skills.A.attempts||0;
     } else {
-      const entry = { pnum, name, season, posGrp, totalAtt: ps.skills?.A?.attempts||0, combos: {} };
+      const entry = { pnum, name, season, posGrp, totalAtt: psEntry.skills?.A?.attempts||0, combos: {} };
       for (const cc of allCodes) {
-        const cv = ps.skills?.A?.combos?.[cc];
-        if (cv) entry.combos[cc] = {
-          attempts: cv.attempts||0,
-          kills:    cv.evals?.['#']||0,
-          errors:   cv.evals?.['=']||0,
-        };
+        const cv = psEntry.skills?.A?.combos?.[cc];
+        if (cv) entry.combos[cc] = { attempts: cv.attempts||0, kills: cv.evals?.['#']||0, errors: cv.evals?.['=']||0 };
       }
       playerData.push(entry);
+    }
+  }
+
+  if (activeSids) {
+    // Period mode: aggregate from player_session
+    for (const [, ps] of Object.entries(DATA.player_session)) {
+      if (!activeSids.has(ps.session_id)) continue;
+      const pnum   = ps.player_num;
+      const season = DATA.sessions.find(s => s.id === ps.session_id)?.season;
+      if (!season || !playerInGroup(pnum, season, group)) continue;
+      mergePlayerEntry(playerData, pnum, season, ps);
+    }
+  } else {
+    // Season mode: aggregate from player_season
+    for (const [key, ps] of Object.entries(DATA.player_season)) {
+      const [pnum, season] = key.split('|');
+      if (!seasons.includes(season)) continue;
+      if (!playerInGroup(pnum, season, group)) continue;
+      mergePlayerEntry(playerData, pnum, season, ps);
     }
   }
   playerData.sort((a,b) => b.totalAtt - a.totalAtt);
