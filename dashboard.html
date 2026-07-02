@@ -3571,7 +3571,6 @@ function renderSetterCourt(allCombos, totalAtt) {
   const svg = document.getElementById('set-court-svg');
   if (!svg) return;
 
-  // Compute zone stats from COURT_ZONES mapping
   const zoneData = COURT_ZONES.map(z => {
     let att=0, k=0, e=0;
     for (const cc of z.codes) {
@@ -3581,80 +3580,61 @@ function renderSetterCourt(allCombos, totalAtt) {
       k   += cv.kills||0;
       e   += cv.errors||0;
     }
-    const eff    = att ? ((k-e)/att*100) : null;
-    const killPct= att ? (k/att*100) : null;
-    const errPct = att ? (e/att*100) : null;
-    const distPct= totalAtt ? (att/totalAtt*100) : 0;
+    const eff     = att ? ((k-e)/att*100) : null;
+    const killPct = att ? (k/att*100) : null;
+    const errPct  = att ? (e/att*100) : null;
+    const distPct = totalAtt ? (att/totalAtt*100) : 0;
     return { ...z, att, k, e, eff, killPct, errPct, distPct };
   });
 
-  // SVG layout: 3 cols × 2 rows for opponent's half + net strip
-  // Court area: x=10, y=10, w=400, h=200. Net at y=220. LUC strip y=220-260.
-  const CX=10, CY=10, CW=400, CH=200;
-  const COL=[0, 1, 2];
-  const colW = CW/3;
-  const rowH = CH/2;
+  const CX=30, CY=8, CW=380, CH=210;
+  const colW = CW/3, rowH = CH/2;
+  const GAP = 3; // gap between cells
 
-  // Helper: darken zone fill by attempts (min 0.12 opacity, max 0.75)
-  const maxAtt = Math.max(...zoneData.map(z=>z.att), 1);
-
-  let cells = '';
-  for (const z of zoneData) {
-    const col = z.col, row = z.row;
-    const x = CX + col*colW;
-    const y = CY + row*rowH;
-    const opacity = z.att ? (0.15 + (z.att/maxAtt)*0.65).toFixed(2) : '0.07';
-    const effColor = z.eff === null ? '#888' : z.eff > 25 ? '#4caf50' : z.eff > 0 ? '#FEBC18' : '#ef5350';
-
-    // Label lines
+  const cells = zoneData.map(z => {
+    const x = CX + z.col*colW + GAP;
+    const y = CY + z.row*rowH + GAP;
+    const w = colW - GAP*2;
+    const h = rowH - GAP*2;
+    const effColor = z.eff === null ? '#555'
+                   : z.eff > 25    ? '#4caf50'
+                   : z.eff > 0     ? '#FEBC18'
+                   : '#ef5350';
     const lblLines = z.label.split('\n');
 
-    cells += `
-      <rect x="${x}" y="${y}" width="${colW}" height="${rowH}"
-            fill="${z.color}" fill-opacity="${opacity}" stroke="#333" stroke-width="1" rx="2"/>
-      ${lblLines.map((ln,i) => `<text x="${x+colW/2}" y="${y+14+(i*13)}"
-        font-family="Arial,sans-serif" font-size="10" fill="#fff" text-anchor="middle" opacity="0.8">${ln}</text>`).join('')}
-      ${z.att ? `
-        <text x="${x+colW/2}" y="${y+rowH-50}"
-          font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="${z.color}" filter="none"
-          text-anchor="middle" style="fill:${z.color};filter:brightness(2)">${z.distPct.toFixed(0)}%</text>
-        <text x="${x+colW/2}" y="${y+rowH-35}"
-          font-family="Arial,sans-serif" font-size="11" fill="#ccc" text-anchor="middle">${z.att} att</text>
-        <text x="${x+colW/2}" y="${y+rowH-18}"
-          font-family="Arial,sans-serif" font-size="11" font-weight="600" fill="${effColor}" text-anchor="middle">Eff ${z.eff!==null?(z.eff>=0?'+':'')+z.eff.toFixed(0)+'%':'—'}</text>
-        <text x="${x+colW/2}" y="${y+rowH-5}"
-          font-family="Arial,sans-serif" font-size="10" fill="#aaa" text-anchor="middle">K:${z.killPct!==null?z.killPct.toFixed(0)+'%':'—'} E:${z.errPct!==null?z.errPct.toFixed(0)+'%':'—'}</text>
-      ` : `
-        <text x="${x+colW/2}" y="${y+rowH/2+16}"
-          font-family="Arial,sans-serif" font-size="10" fill="#555" text-anchor="middle">no data</text>
-      `}`;
-  }
+    if (!z.att) return `
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#161616" rx="6" stroke="#252525" stroke-width="1"/>
+      <text x="${x+w/2}" y="${y+h/2+4}" font-family="Arial,sans-serif" font-size="11" fill="#333" text-anchor="middle">—</text>`;
 
-  // Net line
-  const netY = CY+CH+12;
+    return `
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#1a1a1a" rx="6" stroke="#2e2e2e" stroke-width="1"/>
+      ${lblLines.map((ln,i) => `
+        <text x="${x+w/2}" y="${y+14+(i*12)}"
+          font-family="Arial,sans-serif" font-size="9.5" fill="#555" text-anchor="middle" letter-spacing="0.3">${ln.toUpperCase()}</text>`).join('')}
+      <text x="${x+w/2}" y="${y+h-52}"
+        font-family="Arial,sans-serif" font-size="26" font-weight="700" fill="#fff" text-anchor="middle">${z.distPct.toFixed(0)}%</text>
+      <text x="${x+w/2}" y="${y+h-34}"
+        font-family="Arial,sans-serif" font-size="10" fill="#4a4a4a" text-anchor="middle">${z.att.toLocaleString()} att</text>
+      <text x="${x+w/2}" y="${y+h-16}"
+        font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="${effColor}" text-anchor="middle">Eff ${z.eff>=0?'+':''}${z.eff.toFixed(0)}%</text>
+      <text x="${x+w/2}" y="${y+h-3}"
+        font-family="Arial,sans-serif" font-size="9.5" fill="#3a3a3a" text-anchor="middle">K:${z.killPct.toFixed(0)}%  E:${z.errPct.toFixed(0)}%</text>`;
+  }).join('');
+
+  const netY = CY + CH + 8;
 
   svg.innerHTML = `
-    <!-- Court boundary -->
-    <rect x="${CX}" y="${CY}" width="${CW}" height="${CH}" fill="#0d2137" rx="3" stroke="#1e3a5f" stroke-width="1.5"/>
-    <!-- Column separators -->
-    <line x1="${CX+colW}" y1="${CY}" x2="${CX+colW}" y2="${CY+CH}" stroke="#1e3a5f" stroke-width="1"/>
-    <line x1="${CX+colW*2}" y1="${CY}" x2="${CX+colW*2}" y2="${CY+CH}" stroke="#1e3a5f" stroke-width="1"/>
-    <!-- Row separator -->
-    <line x1="${CX}" y1="${CY+rowH}" x2="${CX+CW}" y2="${CY+rowH}" stroke="#1e3a5f" stroke-width="1"/>
-    <!-- Zone cells -->
+    <rect x="${CX}" y="${CY}" width="${CW}" height="${CH}" fill="#111" rx="8" stroke="#222" stroke-width="1"/>
+    <line x1="${CX+colW}" y1="${CY}" x2="${CX+colW}" y2="${CY+CH}" stroke="#1e1e1e" stroke-width="1"/>
+    <line x1="${CX+colW*2}" y1="${CY}" x2="${CX+colW*2}" y2="${CY+CH}" stroke="#1e1e1e" stroke-width="1"/>
+    <line x1="${CX}" y1="${CY+rowH}" x2="${CX+CW}" y2="${CY+rowH}" stroke="#1e1e1e" stroke-width="1"/>
     ${cells}
-    <!-- Zone row labels -->
-    <text x="${CX-6}" y="${CY+rowH/2+4}" font-family="Arial,sans-serif" font-size="9" fill="#555" text-anchor="middle" transform="rotate(-90,${CX-6},${CY+rowH/2+4})">Front Row</text>
-    <text x="${CX-6}" y="${CY+rowH+rowH/2+4}" font-family="Arial,sans-serif" font-size="9" fill="#555" text-anchor="middle" transform="rotate(-90,${CX-6},${CY+rowH+rowH/2+4})">Back Row</text>
-    <!-- Net -->
-    <rect x="${CX}" y="${netY}" width="${CW}" height="10" fill="#b0c4de" rx="2" opacity="0.4"/>
-    <line x1="${CX}" y1="${netY+5}" x2="${CX+CW}" y2="${netY+5}" stroke="#b0c4de" stroke-width="2.5"/>
-    <text x="${CX+CW/2}" y="${netY+9}" font-family="Arial,sans-serif" font-size="8" fill="#b0c4de" text-anchor="middle" opacity="0.7">NET</text>
-    <!-- LUC side label -->
-    <rect x="${CX}" y="${netY+12}" width="${CW}" height="32" fill="#8D0034" fill-opacity="0.12" rx="2"/>
-    <text x="${CX+CW/2}" y="${netY+30}" font-family="Arial Black,Arial,sans-serif" font-size="11" font-weight="700" fill="#8D0034" text-anchor="middle" opacity="0.7">LUC</text>
-    <!-- Header label -->
-    <text x="${CX+CW/2}" y="${CY+CH+56}" font-family="Arial,sans-serif" font-size="9" fill="#555" text-anchor="middle">← LEFT (Zone 4)   MIDDLE (Zone 3)   RIGHT (Zone 2) →</text>
+    <text x="${CX-10}" y="${CY+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#3a3a3a" text-anchor="middle" transform="rotate(-90,${CX-10},${CY+rowH/2+4})">FRONT ROW</text>
+    <text x="${CX-10}" y="${CY+rowH+rowH/2+4}" font-family="Arial,sans-serif" font-size="8" fill="#3a3a3a" text-anchor="middle" transform="rotate(-90,${CX-10},${CY+rowH+rowH/2+4})">BACK ROW</text>
+    <rect x="${CX}" y="${netY}" width="${CW}" height="7" fill="#333" rx="2"/>
+    <line x1="${CX}" y1="${netY+3}" x2="${CX+CW}" y2="${netY+3}" stroke="#444" stroke-width="1.5"/>
+    <text x="${CX+CW/2}" y="${netY+6}" font-family="Arial,sans-serif" font-size="7" fill="#3a3a3a" text-anchor="middle">NET</text>
+    <text x="${CX+CW/2}" y="${netY+20}" font-family="Arial,sans-serif" font-size="8" fill="#2e2e2e" text-anchor="middle">← LEFT (Zone 4)   MIDDLE (Zone 3)   RIGHT (Zone 2) →</text>
   `;
 }
 
