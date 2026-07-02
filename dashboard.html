@@ -1134,6 +1134,17 @@ function showTab(name) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 function init() {
+  // Exclude match sessions — match tab will be built separately
+  DATA.sessions = DATA.sessions.filter(s => s.type !== 'match');
+  // Also exclude their player_session entries
+  const matchSids = new Set();
+  // (sessions already filtered; build a complementary set of valid sids)
+  const validSids = new Set(DATA.sessions.map(s => s.id));
+  for (const key of Object.keys(DATA.player_session)) {
+    if (!validSids.has(DATA.player_session[key].session_id))
+      delete DATA.player_session[key];
+  }
+
   const m = DATA.meta;
   document.getElementById('hs-sessions').textContent = m.total_sessions;
   document.getElementById('hs-actions').textContent  = (m.total_actions / 1000).toFixed(1) + 'k';
@@ -2324,15 +2335,17 @@ function renderTeam() {
       datasets: [{ label: 'Total Actions', data: monthKeys.map(mo => { const sids = sessionIdsByMonth[mo]; return sids ? aggregateSessionStats(sids).totalActions : 0; }), backgroundColor: GOLD, borderRadius: 4 }]
     }, { plugins: { legend: { display: false } } });
 
-    makeChart('chart-season-compare-kill', 'bar', {
-      labels: shortLabels,
-      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: monthKeys.map(mo => moKill(mo, sk)), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
-    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+    const moTrendOpts = {
+      plugins: { legend: { labels: { boxWidth: 10, filter: item => !item.text.endsWith('·t') } } },
+      scales: { y: { ticks: { callback: v => v+'%' } } }
+    };
+    const killBars  = skillsToCompare.map(sk => ({ type:'bar',  label: SKILL_NAMES[sk],       data: monthKeys.map(mo => moKill(mo, sk)), backgroundColor: SKILL_COLORS[sk]+'99', borderColor: SKILL_COLORS[sk], borderRadius: 3 }));
+    const killLines = skillsToCompare.map(sk => ({ type:'line', label: SKILL_NAMES[sk]+'·t',  data: monthKeys.map(mo => moKill(mo, sk)), borderColor: SKILL_COLORS[sk], backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, pointBackgroundColor: SKILL_COLORS[sk], tension:0.35, fill:false }));
+    makeChart('chart-season-compare-kill', 'bar', { labels: shortLabels, datasets: [...killBars, ...killLines] }, moTrendOpts);
 
-    makeChart('chart-season-compare-err', 'bar', {
-      labels: shortLabels,
-      datasets: skillsToCompare.map(sk => ({ label: SKILL_NAMES[sk], data: monthKeys.map(mo => moErr(mo, sk)), backgroundColor: SKILL_COLORS[sk], borderColor: SKILL_COLORS[sk], borderRadius: 3 })),
-    }, { plugins: { legend: { labels: { boxWidth: 10 } } }, scales: { y: { ticks: { callback: v => v+'%' } } } });
+    const errBars  = skillsToCompare.map(sk => ({ type:'bar',  label: SKILL_NAMES[sk],       data: monthKeys.map(mo => moErr(mo, sk)), backgroundColor: SKILL_COLORS[sk]+'99', borderColor: SKILL_COLORS[sk], borderRadius: 3 }));
+    const errLines = skillsToCompare.map(sk => ({ type:'line', label: SKILL_NAMES[sk]+'·t',  data: monthKeys.map(mo => moErr(mo, sk)), borderColor: SKILL_COLORS[sk], backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, pointBackgroundColor: SKILL_COLORS[sk], tension:0.35, fill:false }));
+    makeChart('chart-season-compare-err', 'bar', { labels: shortLabels, datasets: [...errBars, ...errLines] }, moTrendOpts);
 
   } else {
     const stEl = document.getElementById('team-seasons-title');     if (stEl) stEl.textContent = 'Actions by Season';
