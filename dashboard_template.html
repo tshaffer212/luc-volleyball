@@ -571,7 +571,7 @@
 <!-- ═══════════════════════════ ATTACK TAB ═══════════════════════════ -->
 <div id="tab-attack" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="atk-season" onchange="atkCodeSel=null;populateAtkPeriod();renderAttack()">
+    <div><label>Season</label><br><select id="atk-season" onchange="atkCodeSel=new Set();populateAtkPeriod();renderAttack()">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -579,7 +579,7 @@
       <option value="all">All Season</option>
     </select></div>
     <div class="filter-sep"></div>
-    <div><label>Group</label><br><select id="atk-group" onchange="atkCodeSel=null;renderAttack()">
+    <div><label>Group</label><br><select id="atk-group" onchange="atkCodeSel=new Set();renderAttack()">
       <option value="all">All Hitters</option>
       <option value="pins">Pins (Outside / Opposite)</option>
       <option value="middles">Middles</option>
@@ -1192,7 +1192,7 @@ let rptSelected    = new Set(); // selected session IDs
 let setterGroupSel   = null;  // 'pins' | 'middles' | 'bic' | null — setter group bar filter
 let setterZoneSel    = null;  // COURT_ZONES id ('z4','z3','z2','z6','z1') | null — zone card filter
 let setterPnumFilter = null;  // pnum string | null — which setter to isolate
-let atkCodeSel     = null;    // combo code string | null — attack bar filter
+let atkCodeSel     = new Set(); // Set of selected combo codes — attack bar filter
 let rptSetterFilter = null;   // setter pnum string | null — Reports attack setter filter
 
 function getISOWeek(dateStr) {
@@ -3301,7 +3301,7 @@ function renderAttack() {
       data: sortedCodes.map(cc => combos[cc]?.[metric] || 0),
       backgroundColor: sortedCodes.map(cc => {
         const base = COMBO_COLORS[cc] || '#888';
-        return (!atkCodeSel || atkCodeSel === cc) ? base : base + '33';
+        return (!atkCodeSel.size || atkCodeSel.has(cc)) ? base : base + '33';
       }),
       borderRadius: 4,
     }]
@@ -3313,10 +3313,10 @@ function renderAttack() {
       y: { ticks: { font: { size: 10 } } }
     },
     onClick: (e, elements) => {
-      if (!elements.length) { atkCodeSel = null; }
+      if (!elements.length) { atkCodeSel = new Set(); }
       else {
         const cc = sortedCodes[elements[0].index];
-        atkCodeSel = (atkCodeSel === cc) ? null : cc;
+        if (atkCodeSel.has(cc)) atkCodeSel.delete(cc); else atkCodeSel.add(cc);
       }
       renderAttack();
     }
@@ -3391,14 +3391,14 @@ function renderAttack() {
     if (!data.length || !codes.length) return '';
     const colSpan = 3 + codes.length;
     const headerCells = codes.map(cc => `<th class="num" title="${cc}"
-      style="${atkCodeSel===cc ? 'background:'+MAROON+'55;color:var(--gold)' : ''}">${COMBO_NAMES[cc]||cc}</th>`).join('');
+      style="${atkCodeSel.has(cc) ? 'background:'+MAROON+'55;color:var(--gold)' : ''}">${COMBO_NAMES[cc]||cc}</th>`).join('');
     const rows = data.map(p => `<tr>
       <td class="gold">#${p.pnum}</td>
       <td>${p.name}</td>
       <td class="num">${p.totalAtt}</td>
       ${codes.map(cc => {
         const cv = p.combos[cc];
-        const hiCol = atkCodeSel === cc ? 'background:'+MAROON+'22;' : '';
+        const hiCol = atkCodeSel.has(cc) ? 'background:'+MAROON+'22;' : '';
         if (!cv || !cv.attempts) return `<td class="num" style="${hiCol}color:var(--text-dim)">—</td>`;
         let val, color;
         if (metric === 'attempts') {
@@ -3498,7 +3498,7 @@ function renderAttack() {
   }
 
   const filteredTrendCodes = [...PIN_COMBOS, ...MIDDLE_COMBOS].filter(cc => {
-    if (atkCodeSel && cc !== atkCodeSel) return false;
+    if (atkCodeSel.size && !atkCodeSel.has(cc)) return false;
     return trendLabels.some((_, i) => trendKill(cc, i) !== null);
   });
   const allKillVals = filteredTrendCodes.flatMap(cc => trendLabels.map((_,i) => trendKill(cc,i))).filter(v=>v!==null);
