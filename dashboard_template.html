@@ -3323,9 +3323,9 @@ function renderServRcv() {
     <div class="card-sm"><div class="card-title">Reception AVG</div>
       <div class="stat-val big" style="color:var(--gold)">${tmR ? tmR.avg.toFixed(2) : '—'}</div>
       <div class="stat-lbl">${fmt(teamRcvAtt)} receptions</div></div>
-    <div class="card-sm"><div class="card-title">GP %</div>
-      <div class="stat-val big green">${tmR ? pct(tmR.gp_pct) : '—'}</div>
-      <div class="stat-lbl">Perfect ${tmR ? pct(tmR.perf_pct) : '—'}</div></div>
+    <div class="card-sm"><div class="card-title">Perfect %</div>
+      <div class="stat-val big green">${tmR ? pct(tmR.perf_pct) : '—'}</div>
+      <div class="stat-lbl">GP ${tmR ? pct(tmR.gp_pct) : '—'}</div></div>
   `;
 
   // Serve table
