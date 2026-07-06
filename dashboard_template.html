@@ -1425,7 +1425,19 @@ function setSrServeType(type) {
 function serveSkillKey() {
   if (srServeType === 'float')   return 'SM';
   if (srServeType === 'topspin') return 'SQ';
-  return 'S'; // 'both' and 'split' both pull from 'S' for combined; split renders two passes
+  return 'S';
+}
+// Map srServeType to reception skill key (what type of serve was received)
+function rcvSkillKey() {
+  if (srServeType === 'float')   return 'RM';
+  if (srServeType === 'topspin') return 'RQ';
+  return 'R';
+}
+// Map srServeType to zone key
+function rcvZoneKey() {
+  if (srServeType === 'float')   return 'rcv_zones_m';
+  if (srServeType === 'topspin') return 'rcv_zones_q';
+  return 'rcv_zones';
 }
 
 // Returns DATA.sessions filtered to the current type selection
@@ -4265,7 +4277,8 @@ function renderServRcv() {
   } else {
     // ── SINGLE MODE (both / float / topspin) ─────────────────────────────────
     const sKey   = serveSkillKey();
-    const players = buildSrPlayerStats(activeSids, seasons, group, sKey);
+    const rKey   = rcvSkillKey();
+    const players = buildSrPlayerStats(activeSids, seasons, group, sKey, rKey);
 
     const teamServeEv = {}, teamRcvEv = {};
     let teamServeAtt = 0, teamRcvAtt = 0;
@@ -4304,37 +4317,39 @@ function renderServRcv() {
     renderRcvDonut('chart-rcv-evals', teamRcvEv);
   }
 
-  // Reception AVG trend — respects season + period filters
+  // Reception AVG trend — uses correct skill key for current serve type filter
   const rcvTrBuckets = resolveTrendBuckets(seasons, activeSids, periodVal);
+  const rKeyForTrend = rcvSkillKey();
   makeChart('chart-rcv-trend', 'line', {
     labels: rcvTrBuckets.labels,
     datasets: [{
-      label: 'Reception AVG',
+      label: srServeType === 'float' ? 'Float Reception AVG' :
+             srServeType === 'topspin' ? 'Top Spin Reception AVG' : 'Reception AVG',
       data: rcvTrBuckets.sidSets.map(sids => {
         if (!sids?.size) return null;
         const { skills } = aggregateSessionStats(sids);
-        const R = skills['R']; if (!R?.attempts) return null;
+        const R = skills[rKeyForTrend]; if (!R?.attempts) return null;
         const ev = R.evals||{};
         return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
       }),
       borderColor: GOLD, backgroundColor: GOLD+'33',
       tension:0.3, fill:true, pointRadius:5, spanGaps:false,
     }]
-  }, {
-    scales:{y:{ticks:{callback:v=>v.toFixed(2)}}}
-  });
+  }, { scales:{y:{ticks:{callback:v=>v.toFixed(2)}}} });
 
-  // ── Receive Zone Breakdown ────────────────────────────────────────────────
-  // Aggregate zone data across selected seasons
+  // ── Receive Zone Breakdown ─────────────────────────────────────────────────
   const ZONE_LABELS = { '1':'Zone 1 (Back Right)', '5':'Zone 5 (Back Left)', '6':'Zone 6 (Back Middle)' };
   const ZONE_COLORS = { '1': MAROON, '5': '#888888', '6': GOLD };
-  // Team zone aggregation — use session-level data when period is active
+  const zKey = rcvZoneKey();   // 'rcv_zones' | 'rcv_zones_m' | 'rcv_zones_q'
+
+  // Team zone aggregation using correct zone key
   let teamZones = {};
   if (activeSids) {
-    teamZones = aggregateSessionStats(activeSids).rcv_zones || {};
+    const agg = aggregateSessionStats(activeSids);
+    teamZones = agg[zKey] || {};
   } else {
     for (const s of seasons) {
-      const sz = DATA.season_stats[s]?.rcv_zones || {};
+      const sz = DATA.season_stats[s]?.[zKey] || {};
       for (const [z, zd] of Object.entries(sz)) {
         if (!teamZones[z]) teamZones[z] = { attempts:0, evals:{} };
         teamZones[z].attempts += zd.attempts||0;
@@ -4343,89 +4358,12 @@ function renderServRcv() {
       }
     }
   }
-  // Derive team zone metrics
-  function zoneAvg(zd) {
-    const att = zd?.attempts||0;
-    if (!att) return null;
-    const ev = zd.evals||{};
-    return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
-  }
-  function zoneGP(zd) {
-    const att = zd?.attempts||0;
-    if (!att) return null;
-    const ev = zd.evals||{};
-    return (ev['#']||0+ev['+']+ev['/']||0)/att*100;
-  }
 
-  // Team zone display
-  const zoneTeamEl = document.getElementById('rcv-zone-team');
-  const hasZones = Object.keys(teamZones).length > 0;
-  if (!hasZones) {
-    zoneTeamEl.innerHTML = '<div class="empty">No zone data for selected season(s). Zone data starts Fall 2026.</div>';
-  } else {
-    zoneTeamEl.innerHTML = ['1','5','6'].map(z => {
-      const zd = teamZones[z];
-      if (!zd || !zd.attempts) return '';
-      const ev = zd.evals||{};
-      const att = zd.attempts;
-      const avg = zoneAvg(zd);
-      const gp  = att ? (((ev['#']||0)+(ev['+'||0]||ev['+']||0)+(ev['/'||0]||ev['/']||0))/att*100) : 0;
-      const err = att ? ((ev['='||0]||ev['=']||0)/att*100) : 0;
-      const bar = avg ? Math.min(100, (avg/3)*100) : 0;
-      return `<div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:13px;font-weight:700;color:${ZONE_COLORS[z]}">${ZONE_LABELS[z]||'Zone '+z}</span>
-          <span style="font-size:11px;color:var(--text-muted)">${fmt(att)} rcv</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <div style="flex:1;height:8px;background:var(--surface3);border-radius:4px;overflow:hidden">
-            <div style="width:${bar.toFixed(1)}%;height:100%;background:${ZONE_COLORS[z]};border-radius:4px"></div>
-          </div>
-          <span style="font-size:16px;font-weight:700;color:${ZONE_COLORS[z]};width:36px">${avg?avg.toFixed(2):'—'}</span>
-        </div>
-        <div style="display:flex;gap:16px">
-          <span style="font-size:11px;color:var(--green)">GP ${gp.toFixed(1)}%</span>
-          <span style="font-size:11px;color:var(--text-muted)">Err ${err.toFixed(1)}%</span>
-        </div>
-      </div>`;
-    }).join('');
-  }
+  // Team zone display — delegate to reusable helper
+  renderZoneTeamPanel(teamZones, 'rcv-zone-team');
 
-  // Per-player zone table
-  const playerZones = {};
-  for (const [key, ps] of Object.entries(DATA.player_season)) {
-    const [pnum, season] = key.split('|');
-    if (!seasons.includes(season)) continue;
-    if (!playerInGroup(pnum, season, group)) continue;
-    const name = getPlayerName(pnum, season);
-    const pid  = `${pnum}|${name}`;
-    if (!playerZones[pid]) playerZones[pid] = { pnum, name, zones:{} };
-    const zs = ps.rcv_zones||{};
-    for (const [z, zd] of Object.entries(zs)) {
-      if (!playerZones[pid].zones[z]) playerZones[pid].zones[z] = { attempts:0, avg:null };
-      playerZones[pid].zones[z].attempts += zd.attempts||0;
-      // Recompute avg inline
-      const ev = zd.evals||{};
-      const att = zd.attempts||0;
-      if (att) {
-        const a = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
-        // weighted merge
-        const cur = playerZones[pid].zones[z];
-        const prevAtt = cur.attempts - att;
-        if (cur._sum === undefined) cur._sum = 0;
-        cur._sum += a * att;
-      }
-    }
-  }
+  // Per-player zone table — uses zKey so it also filters when float/spin is selected
   const zoneTbody = document.getElementById('rcv-zone-tbody');
-  const pzList = Object.values(playerZones).filter(p =>
-    Object.values(p.zones).some(z => z.attempts > 0)
-  ).sort((a,b) => {
-    const ta = Object.values(a.zones).reduce((s,z)=>s+z.attempts,0);
-    const tb = Object.values(b.zones).reduce((s,z)=>s+z.attempts,0);
-    return tb-ta;
-  });
-  // Per-player zone averages — branch on period filter
   const pzDisplay = {};
   function mergePzEntry(pnum, season, ps) {
     if (!playerInGroup(pnum, season, group)) return;
@@ -4433,7 +4371,7 @@ function renderServRcv() {
     const pid  = `${pnum}|${name}`;
     if (!pzDisplay[pid]) pzDisplay[pid] = { pnum, name, z1a:0,z1s:0, z5a:0,z5s:0, z6a:0,z6s:0 };
     const p = pzDisplay[pid];
-    for (const [z, zd] of Object.entries(ps.rcv_zones||{})) {
+    for (const [z, zd] of Object.entries(ps[zKey]||{})) {
       const att = zd.attempts||0;
       const ev  = zd.evals||{};
       const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0));
@@ -4469,14 +4407,15 @@ function renderServRcv() {
     <td class="num gold">${p.z6a?(p.z6s/p.z6a).toFixed(2):'—'}</td>
   </tr>`).join('') || '<tr><td colspan="8" class="empty">No zone data</td></tr>';
 
-  // Zone AVG trend — respects season + period filters
+  // Zone AVG trend — uses correct zone key for current serve type filter
   const zoneTrBuckets = resolveTrendBuckets(seasons, activeSids, periodVal);
   const zoneMonthData = {'1':[], '5':[], '6':[]};
   for (const sids of zoneTrBuckets.sidSets) {
     if (!sids?.size) { ['1','5','6'].forEach(z => zoneMonthData[z].push(null)); continue; }
-    const { rcv_zones } = aggregateSessionStats(sids);
+    const agg = aggregateSessionStats(sids);
+    const zData = agg[zKey] || {};
     ['1','5','6'].forEach(z => {
-      const zd = rcv_zones[z];
+      const zd = zData[z];
       if (zd?.attempts) {
         const ev = zd.evals||{};
         const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/zd.attempts;
@@ -4494,9 +4433,7 @@ function renderServRcv() {
       borderColor: ZONE_COLORS[z], backgroundColor: ZONE_COLORS[z]+'33',
       tension:0.3, fill:false, pointRadius:5, spanGaps:false,
     }))
-  }, {
-    scales:{y:{ticks:{callback:v=>v.toFixed(2)}}}
-  });
+  }, { scales:{y:{ticks:{callback:v=>v.toFixed(2)}}} });
 }
 
 // ═══════════════════════════ SETTER COURT VISUAL ═════════════════════════════

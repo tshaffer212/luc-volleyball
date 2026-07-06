@@ -516,16 +516,6 @@ def main(raw_path, out_path):
         loyola_side   = loyola_side_for_session(s)
         keep_unnamed  = s.get('_keep_unnamed', set())
 
-        # Pre-build rally_serve_tech: map rally_id → opponent serve technique
-        # Scans ALL actions (both sides) so we catch the opponent's serve
-        rally_serve_tech = {}
-        for _a in s.get('actions', []):
-            if _a.get('skill_code') == 'S':
-                _tech = _a.get('technique', '')
-                _rid  = _a.get('rally_id')
-                if _rid and _tech in ('Q', 'M'):
-                    rally_serve_tech[str(_rid)] = _tech
-
         for action in s.get('actions', []):
             pnum = action.get('player_num', '')
             if not pnum:
@@ -571,9 +561,13 @@ def main(raw_path, out_path):
                     rsk['rcv_pts']  = rsk.get('rcv_pts', 0) + pts
                     rsk['rcv_cat']  = rsk.get('rcv_cat', {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0})
                     rsk['rcv_cat'][cat] = rsk['rcv_cat'].get(cat, 0) + 1
-                # Tag reception by opponent serve type (RQ=vs topspin, RM=vs float)
-                rid  = action.get('rally_id')
-                tech = rally_serve_tech.get(str(rid)) if rid else None
+                # Tag reception by serve type — technique field on the reception action
+                # encodes the incoming serve type: Q=topspin, M=float, H=jump-float
+                tech = action.get('technique', '')
+                tech = tech if tech in ('Q', 'M', 'H') else None
+                if tech in ('Q', 'M', 'H'):
+                    # Normalize H (jump float) → M (float bucket)
+                    tech = 'M' if tech == 'H' else tech
                 if tech in ('Q', 'M'):
                     t_key = 'R' + tech   # 'RQ' or 'RM'
                     zone  = action.get('end_zone')
