@@ -87,6 +87,15 @@ def add_action(skill_stats, action, zone_stats=None):
             sk['combos'][cc] = {'name': cn, 'attempts': 0, 'evals': {e: 0 for e in EVALS}}
         sk['combos'][cc]['attempts'] += 1
         sk['combos'][cc]['evals'][ev] = sk['combos'][cc]['evals'].get(ev, 0) + 1
+    # Track serve by technique: SQ = topspin, SM = float
+    if s == 'S':
+        tech = action.get('technique', '')
+        if tech in ('Q', 'M'):
+            t_key = 'S' + tech  # 'SQ' or 'SM'
+            if t_key not in skill_stats:
+                skill_stats[t_key] = empty_skill()
+            skill_stats[t_key]['attempts'] += 1
+            skill_stats[t_key]['evals'][ev] = skill_stats[t_key]['evals'].get(ev, 0) + 1
     # Track receive zones (end_zone field stores serve receive zone)
     if s == 'R' and zone_stats is not None:
         zone = action.get('end_zone')

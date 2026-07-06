@@ -646,57 +646,146 @@
       <button onclick="setSessionType('practice',renderServRcv)" id="sr-type-practice" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Practices</button>
       <button onclick="setSessionType('both',renderServRcv)" id="sr-type-both" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Both</button>
     </div></div>
+    <div class="filter-sep"></div>
+    <div><label>Serve Type</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setSrServeType('both')" id="sr-sv-both" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Both</button>
+      <button onclick="setSrServeType('float')" id="sr-sv-float" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Float</button>
+      <button onclick="setSrServeType('topspin')" id="sr-sv-topspin" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Top Spin</button>
+      <button onclick="setSrServeType('split')" id="sr-sv-split" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Side by Side</button>
+    </div></div>
   </div>
 
   <div class="grid-4" id="sr-kpi-row"></div>
 
-  <div class="grid-2 mt-16">
-    <div class="card">
-      <h3>Serve Stats by Player</h3>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr>
-            <th>#</th><th>Name</th>
-            <th class="num">Att</th>
-            <th class="num">Ace %</th>
-            <th class="num">Err %</th>
-            <th class="num">OGP %</th>
-            <th class="num">OoS %</th>
-            <th class="num">Over %</th>
-          </tr></thead>
-          <tbody id="serve-tbody"></tbody>
-        </table>
+  <!-- Normal single-type serve view (hidden in split mode) -->
+  <div id="sr-single-view">
+    <div class="grid-2 mt-16">
+      <div class="card">
+        <h3 id="serve-table-title">Serve Stats by Player</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr>
+              <th>#</th><th>Name</th>
+              <th class="num">Att</th>
+              <th class="num">Ace %</th>
+              <th class="num">Err %</th>
+              <th class="num">OGP %</th>
+              <th class="num">OoS %</th>
+              <th class="num">Over %</th>
+            </tr></thead>
+            <tbody id="serve-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Reception Stats by Player</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr>
+              <th>#</th><th>Name</th>
+              <th class="num">Att</th>
+              <th class="num">AVG</th>
+              <th class="num">Perfect %</th>
+              <th class="num">GP %</th>
+              <th class="num">Med %</th>
+              <th class="num">OoS %</th>
+              <th class="num">Over %</th>
+              <th class="num">Err %</th>
+            </tr></thead>
+            <tbody id="rcv-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
-    <div class="card">
-      <h3>Reception Stats by Player</h3>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr>
-            <th>#</th><th>Name</th>
-            <th class="num">Att</th>
-            <th class="num">AVG</th>
-            <th class="num">Perfect %</th>
-            <th class="num">GP %</th>
-            <th class="num">Med %</th>
-            <th class="num">OoS %</th>
-            <th class="num">Over %</th>
-            <th class="num">Err %</th>
-          </tr></thead>
-          <tbody id="rcv-tbody"></tbody>
-        </table>
+    <div class="grid-2 mt-16">
+      <div class="card">
+        <h3 id="serve-chart-title">Serve Breakdown — Team</h3>
+        <div class="chart-wrap"><canvas id="chart-serve-evals"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Reception Breakdown — Team</h3>
+        <div class="chart-wrap"><canvas id="chart-rcv-evals"></canvas></div>
       </div>
     </div>
   </div>
 
-  <div class="grid-2 mt-16">
-    <div class="card">
-      <h3>Serve Breakdown — Team</h3>
-      <div class="chart-wrap"><canvas id="chart-serve-evals"></canvas></div>
+  <!-- Side-by-side split view (shown only in split mode) -->
+  <div id="sr-split-view" style="display:none">
+    <div class="mt-16" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="section-title" style="margin-bottom:8px;color:var(--gold)">Float Serve (SM)</div>
+        <div class="card">
+          <h3>Float — Stats by Player</h3>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr>
+                <th>#</th><th>Name</th>
+                <th class="num">Att</th>
+                <th class="num">Ace %</th>
+                <th class="num">Err %</th>
+                <th class="num">OGP %</th>
+                <th class="num">OoS %</th>
+                <th class="num">Over %</th>
+              </tr></thead>
+              <tbody id="serve-tbody-float"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mt-16">
+          <h3>Float — Team Breakdown</h3>
+          <div class="chart-wrap"><canvas id="chart-serve-float"></canvas></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:8px;color:var(--gold)">Top Spin Serve (SQ)</div>
+        <div class="card">
+          <h3>Top Spin — Stats by Player</h3>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr>
+                <th>#</th><th>Name</th>
+                <th class="num">Att</th>
+                <th class="num">Ace %</th>
+                <th class="num">Err %</th>
+                <th class="num">OGP %</th>
+                <th class="num">OoS %</th>
+                <th class="num">Over %</th>
+              </tr></thead>
+              <tbody id="serve-tbody-topspin"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mt-16">
+          <h3>Top Spin — Team Breakdown</h3>
+          <div class="chart-wrap"><canvas id="chart-serve-topspin"></canvas></div>
+        </div>
+      </div>
     </div>
-    <div class="card">
-      <h3>Reception Breakdown — Team</h3>
-      <div class="chart-wrap"><canvas id="chart-rcv-evals"></canvas></div>
+    <!-- Reception stays full-width below in split mode -->
+    <div class="grid-2 mt-16">
+      <div class="card">
+        <h3>Reception Stats by Player</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr>
+              <th>#</th><th>Name</th>
+              <th class="num">Att</th>
+              <th class="num">AVG</th>
+              <th class="num">Perfect %</th>
+              <th class="num">GP %</th>
+              <th class="num">Med %</th>
+              <th class="num">OoS %</th>
+              <th class="num">Over %</th>
+              <th class="num">Err %</th>
+            </tr></thead>
+            <tbody id="rcv-tbody-split"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Reception Breakdown — Team</h3>
+        <div class="chart-wrap"><canvas id="chart-rcv-evals-split"></canvas></div>
+      </div>
     </div>
   </div>
 
@@ -1233,6 +1322,29 @@ let atkCodeSel     = new Set(); // Set of selected combo codes — attack bar fi
 // ── Session type filter ───────────────────────────────────────────────────────
 // 'both' | 'practice' | 'match'  — controlled per-tab via setSessionType()
 let sessionTypeFilter = 'both';
+
+// ── Serve type filter (S&R tab only) ─────────────────────────────────────────
+// 'both' | 'float' | 'topspin' | 'split'
+let srServeType = 'both';
+
+function setSrServeType(type) {
+  srServeType = type;
+  // Update button highlights
+  ['both','float','topspin','split'].forEach(t => {
+    const btn = document.getElementById('sr-sv-' + t);
+    if (!btn) return;
+    btn.style.background = (t === type) ? 'var(--maroon)' : 'var(--surface2)';
+    btn.style.color = (t === type) ? '#fff' : 'var(--text)';
+  });
+  renderServRcv();
+}
+
+// Map srServeType to the skill key used in player_session data
+function serveSkillKey() {
+  if (srServeType === 'float')   return 'SM';
+  if (srServeType === 'topspin') return 'SQ';
+  return 'S'; // 'both' and 'split' both pull from 'S' for combined; split renders two passes
+}
 
 // Returns DATA.sessions filtered to the current type selection
 function sessionPool() {
@@ -3720,21 +3832,15 @@ function renderAttack() {
 }
 
 // ═══════════════════════════ SERVE & RECEIVE TAB ══════════════════════════════
-function renderServRcv() {
-  syncTypeButtons('sr');
-  const seasonVal = document.getElementById('sr-season').value;
-  const group     = document.getElementById('sr-group').value;
-  const periodVal = document.getElementById('sr-period')?.value || 'all';
-  const seasons   = resolveSeasons(seasonVal);
-  const activeSids = buildPeriodSids(seasons, periodVal);
-  if (showEmptyState(activeSids, 'sr-kpi-row')) return;
 
-  // Helper to add serve/receive skill data into a playerStats entry
-  function mergeSkills(entry, ps) {
-    const S = ps.skills?.S;
-    if (S) {
-      entry.serve_att += S.attempts||0;
-      for (const [e,n] of Object.entries(S.evals||{}))
+// Build player stats pulling from a specific skill key (S, SQ, SM) + R
+function buildSrPlayerStats(activeSids, seasons, group, sKey) {
+  const playerStats = {};
+  function mergeInto(entry, ps) {
+    const Sk = ps.skills?.[sKey];
+    if (Sk) {
+      entry.serve_att += Sk.attempts||0;
+      for (const [e,n] of Object.entries(Sk.evals||{}))
         entry.serve_ev[e] = (entry.serve_ev[e]||0)+n;
     }
     const R = ps.skills?.R;
@@ -3744,9 +3850,6 @@ function renderServRcv() {
         entry.rcv_ev[e] = (entry.rcv_ev[e]||0)+n;
     }
   }
-
-  // Build per-player serve/receive aggregates — from player_session when period active
-  const playerStats = {};
   if (activeSids) {
     for (const [, ps] of Object.entries(DATA.player_session)) {
       if (!activeSids.has(ps.session_id)) continue;
@@ -3756,7 +3859,7 @@ function renderServRcv() {
       const name = getPlayerName(pnum, season);
       const pid  = `${pnum}|${name}`;
       if (!playerStats[pid]) playerStats[pid] = { pnum, name, season, serve_ev:{}, serve_att:0, rcv_ev:{}, rcv_att:0 };
-      mergeSkills(playerStats[pid], ps);
+      mergeInto(playerStats[pid], ps);
     }
   } else {
     for (const [key, ps] of Object.entries(DATA.player_season)) {
@@ -3766,46 +3869,18 @@ function renderServRcv() {
       const name = getPlayerName(pnum, season);
       const pid  = `${pnum}|${name}`;
       if (!playerStats[pid]) playerStats[pid] = { pnum, name, season, serve_ev:{}, serve_att:0, rcv_ev:{}, rcv_att:0 };
-      mergeSkills(playerStats[pid], ps);
+      mergeInto(playerStats[pid], ps);
     }
   }
-
-  const players = Object.values(playerStats)
+  return Object.values(playerStats)
     .filter(p => p.serve_att > 0 || p.rcv_att > 0)
     .sort((a,b) => (b.serve_att + b.rcv_att) - (a.serve_att + a.rcv_att));
+}
 
-  // Team-level evals
-  const teamServeEv = {}, teamRcvEv = {};
-  let teamServeAtt = 0, teamRcvAtt = 0;
-  for (const p of players) {
-    teamServeAtt += p.serve_att;
-    teamRcvAtt   += p.rcv_att;
-    for (const [e,n] of Object.entries(p.serve_ev)) teamServeEv[e] = (teamServeEv[e]||0)+n;
-    for (const [e,n] of Object.entries(p.rcv_ev))   teamRcvEv[e]   = (teamRcvEv[e]||0)+n;
-  }
-
-  const tmS = serveMetrics(teamServeEv, teamServeAtt);
-  const tmR = rcvMetrics(teamRcvEv, teamRcvAtt);
-
-  // KPI row
-  document.getElementById('sr-kpi-row').innerHTML = `
-    <div class="card-sm"><div class="card-title">Serve Ace %</div>
-      <div class="stat-val big green">${tmS ? pct(tmS.ace_pct) : '—'}</div>
-      <div class="stat-lbl">${fmt(teamServeAtt)} serves</div></div>
-    <div class="card-sm"><div class="card-title">Serve Err %</div>
-      <div class="stat-val big red">${tmS ? pct(tmS.err_pct) : '—'}</div>
-      <div class="stat-lbl">OoS ${tmS ? pct(tmS.oos_pct) : '—'}</div></div>
-    <div class="card-sm"><div class="card-title">Reception AVG</div>
-      <div class="stat-val big" style="color:var(--gold)">${tmR ? tmR.avg.toFixed(2) : '—'}</div>
-      <div class="stat-lbl">${fmt(teamRcvAtt)} receptions</div></div>
-    <div class="card-sm"><div class="card-title">Perfect %</div>
-      <div class="stat-val big green">${tmR ? pct(tmR.perf_pct) : '—'}</div>
-      <div class="stat-lbl">GP ${tmR ? pct(tmR.gp_pct) : '—'}</div></div>
-  `;
-
-  // Serve table
-  const serveTbody = document.getElementById('serve-tbody');
-  serveTbody.innerHTML = players.filter(p => p.serve_att > 0).map(p => {
+function renderServeTbody(tbodyId, players) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.innerHTML = players.filter(p => p.serve_att > 0).map(p => {
     const sm = serveMetrics(p.serve_ev, p.serve_att);
     return `<tr>
       <td class="gold">#${p.pnum}</td><td>${p.name}</td>
@@ -3816,11 +3891,13 @@ function renderServRcv() {
       <td class="num" style="color:var(--gold)">${pct(sm?.oos_pct)}</td>
       <td class="num">${pct(sm?.over_pct)}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="7" class="empty">No serve data</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="empty">No serve data</td></tr>';
+}
 
-  // Reception table
-  const rcvTbody = document.getElementById('rcv-tbody');
-  rcvTbody.innerHTML = players.filter(p => p.rcv_att > 0).sort((a,b)=>b.rcv_att-a.rcv_att).map(p => {
+function renderRcvTbody(tbodyId, players) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.innerHTML = players.filter(p => p.rcv_att > 0).sort((a,b)=>b.rcv_att-a.rcv_att).map(p => {
     const rm = rcvMetrics(p.rcv_ev, p.rcv_att, p.rPts, p.rCat);
     return `<tr>
       <td class="gold">#${p.pnum}</td><td>${p.name}</td>
@@ -3833,28 +3910,33 @@ function renderServRcv() {
       <td class="num">${pct(rm?.over_pct)}</td>
       <td class="num red">${pct(rm?.err_pct)}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="empty">No reception data</td></tr>';
+  }).join('') || '<tr><td colspan="10" class="empty">No reception data</td></tr>';
+}
 
-  // Serve breakdown chart — include all evals so total matches KPI
+function renderServeDonut(chartId, teamServeEv, label) {
   const serveLabels = ['Ace (#)', 'Good Press (+)', 'Overpass (/)', 'Weak (-)', 'Error (=)'];
   const serveVals   = [
     teamServeEv['#']||0,
     teamServeEv['+']||0,
-    (teamServeEv['/']||0) + (teamServeEv['!']||0),  // combine overpass + any ! evals
+    (teamServeEv['/']||0) + (teamServeEv['!']||0),
     teamServeEv['-']||0,
     teamServeEv['=']||0,
   ];
-  makeChart('chart-serve-evals', 'doughnut', {
+  makeChart(chartId, 'doughnut', {
     labels: serveLabels,
     datasets: [{ data: serveVals,
       backgroundColor:[GREEN,'#aaaaaa','#777777','#444444',RED],
       borderColor:'#1a1a1a', borderWidth:2 }]
   }, {
     scales:{x:{display:false},y:{display:false}},
-    plugins:{legend:{position:'right', labels:{boxWidth:12,font:{size:11}}}}
+    plugins:{
+      title: label ? {display:true, text:label, color:'var(--gold)', font:{size:13}} : {display:false},
+      legend:{position:'right', labels:{boxWidth:12,font:{size:11}}}
+    }
   });
+}
 
-  // Reception breakdown chart — 6 segments so total matches KPI (includes Medium/!)
+function renderRcvDonut(chartId, teamRcvEv) {
   const rcvLabels = ['Perfect (#)', 'Good (+)', 'Medium (!)', 'OoS (-)', 'Overpass (/)', 'Error (=)'];
   const rcvVals   = [
     teamRcvEv['#']||0,
@@ -3864,7 +3946,7 @@ function renderServRcv() {
     teamRcvEv['/']||0,
     teamRcvEv['=']||0,
   ];
-  makeChart('chart-rcv-evals', 'doughnut', {
+  makeChart(chartId, 'doughnut', {
     labels: rcvLabels,
     datasets: [{ data: rcvVals,
       backgroundColor:[GREEN,'#aaaaaa','#888888','#555555','#333333',RED],
@@ -3873,6 +3955,124 @@ function renderServRcv() {
     scales:{x:{display:false},y:{display:false}},
     plugins:{legend:{position:'right', labels:{boxWidth:12,font:{size:11}}}}
   });
+}
+
+function renderServRcv() {
+  syncTypeButtons('sr');
+  const seasonVal  = document.getElementById('sr-season').value;
+  const group      = document.getElementById('sr-group').value;
+  const periodVal  = document.getElementById('sr-period')?.value || 'all';
+  const seasons    = resolveSeasons(seasonVal);
+  const activeSids = buildPeriodSids(seasons, periodVal);
+  if (showEmptyState(activeSids, 'sr-kpi-row')) return;
+
+  const isSplit = srServeType === 'split';
+
+  // Toggle layout views
+  document.getElementById('sr-single-view').style.display = isSplit ? 'none' : '';
+  document.getElementById('sr-split-view').style.display  = isSplit ? '' : 'none';
+
+  // Update serve table/chart titles in single view
+  const serveTableTitle = document.getElementById('serve-table-title');
+  const serveChartTitle = document.getElementById('serve-chart-title');
+  if (serveTableTitle) serveTableTitle.textContent =
+    srServeType === 'float'   ? 'Float Serve (SM) — Stats by Player' :
+    srServeType === 'topspin' ? 'Top Spin (SQ) — Stats by Player' :
+    'Serve Stats by Player';
+  if (serveChartTitle) serveChartTitle.textContent =
+    srServeType === 'float'   ? 'Float Serve — Team Breakdown' :
+    srServeType === 'topspin' ? 'Top Spin — Team Breakdown' :
+    'Serve Breakdown — Team';
+
+  if (isSplit) {
+    // ── SIDE-BY-SIDE MODE ────────────────────────────────────────────────────
+    const floatPlayers   = buildSrPlayerStats(activeSids, seasons, group, 'SM');
+    const topspinPlayers = buildSrPlayerStats(activeSids, seasons, group, 'SQ');
+    const rcvPlayers     = buildSrPlayerStats(activeSids, seasons, group, 'S');
+
+    // KPI: show float + topspin ace/err side by side
+    const floatServeEv = {}, tsServeEv = {};
+    let floatAtt = 0, tsAtt = 0, teamRcvAtt = 0;
+    const teamRcvEv = {};
+    for (const p of floatPlayers) {
+      floatAtt += p.serve_att;
+      for (const [e,n] of Object.entries(p.serve_ev)) floatServeEv[e] = (floatServeEv[e]||0)+n;
+    }
+    for (const p of topspinPlayers) {
+      tsAtt += p.serve_att;
+      for (const [e,n] of Object.entries(p.serve_ev)) tsServeEv[e] = (tsServeEv[e]||0)+n;
+    }
+    for (const p of rcvPlayers) {
+      teamRcvAtt += p.rcv_att;
+      for (const [e,n] of Object.entries(p.rcv_ev)) teamRcvEv[e] = (teamRcvEv[e]||0)+n;
+    }
+    const tmF = serveMetrics(floatServeEv, floatAtt);
+    const tmT = serveMetrics(tsServeEv, tsAtt);
+    const tmR = rcvMetrics(teamRcvEv, teamRcvAtt);
+
+    document.getElementById('sr-kpi-row').innerHTML = `
+      <div class="card-sm"><div class="card-title">Float Ace %</div>
+        <div class="stat-val big green">${tmF ? pct(tmF.ace_pct) : '—'}</div>
+        <div class="stat-lbl">${fmt(floatAtt)} float serves</div></div>
+      <div class="card-sm"><div class="card-title">Float Err %</div>
+        <div class="stat-val big red">${tmF ? pct(tmF.err_pct) : '—'}</div>
+        <div class="stat-lbl">OoS ${tmF ? pct(tmF.oos_pct) : '—'}</div></div>
+      <div class="card-sm"><div class="card-title">Top Spin Ace %</div>
+        <div class="stat-val big green">${tmT ? pct(tmT.ace_pct) : '—'}</div>
+        <div class="stat-lbl">${fmt(tsAtt)} top spin serves</div></div>
+      <div class="card-sm"><div class="card-title">Top Spin Err %</div>
+        <div class="stat-val big red">${tmT ? pct(tmT.err_pct) : '—'}</div>
+        <div class="stat-lbl">OoS ${tmT ? pct(tmT.oos_pct) : '—'}</div></div>
+    `;
+
+    renderServeTbody('serve-tbody-float',   floatPlayers);
+    renderServeTbody('serve-tbody-topspin', topspinPlayers);
+    renderRcvTbody('rcv-tbody-split', rcvPlayers);
+    renderServeDonut('chart-serve-float',   floatServeEv,  null);
+    renderServeDonut('chart-serve-topspin', tsServeEv,     null);
+    renderRcvDonut('chart-rcv-evals-split', teamRcvEv);
+
+  } else {
+    // ── SINGLE MODE (both / float / topspin) ─────────────────────────────────
+    const sKey   = serveSkillKey();
+    const players = buildSrPlayerStats(activeSids, seasons, group, sKey);
+
+    const teamServeEv = {}, teamRcvEv = {};
+    let teamServeAtt = 0, teamRcvAtt = 0;
+    for (const p of players) {
+      teamServeAtt += p.serve_att;
+      teamRcvAtt   += p.rcv_att;
+      for (const [e,n] of Object.entries(p.serve_ev)) teamServeEv[e] = (teamServeEv[e]||0)+n;
+      for (const [e,n] of Object.entries(p.rcv_ev))   teamRcvEv[e]   = (teamRcvEv[e]||0)+n;
+    }
+
+    const tmS = serveMetrics(teamServeEv, teamServeAtt);
+    const tmR = rcvMetrics(teamRcvEv, teamRcvAtt);
+
+    const serveLabel =
+      srServeType === 'float'   ? 'Float Serve (SM)' :
+      srServeType === 'topspin' ? 'Top Spin (SQ)' : 'All Serves';
+
+    document.getElementById('sr-kpi-row').innerHTML = `
+      <div class="card-sm"><div class="card-title">Serve Ace % <span style="font-size:10px;color:var(--text-muted)">${serveLabel}</span></div>
+        <div class="stat-val big green">${tmS ? pct(tmS.ace_pct) : '—'}</div>
+        <div class="stat-lbl">${fmt(teamServeAtt)} serves</div></div>
+      <div class="card-sm"><div class="card-title">Serve Err % <span style="font-size:10px;color:var(--text-muted)">${serveLabel}</span></div>
+        <div class="stat-val big red">${tmS ? pct(tmS.err_pct) : '—'}</div>
+        <div class="stat-lbl">OoS ${tmS ? pct(tmS.oos_pct) : '—'}</div></div>
+      <div class="card-sm"><div class="card-title">Reception AVG</div>
+        <div class="stat-val big" style="color:var(--gold)">${tmR ? tmR.avg.toFixed(2) : '—'}</div>
+        <div class="stat-lbl">${fmt(teamRcvAtt)} receptions</div></div>
+      <div class="card-sm"><div class="card-title">Perfect %</div>
+        <div class="stat-val big green">${tmR ? pct(tmR.perf_pct) : '—'}</div>
+        <div class="stat-lbl">GP ${tmR ? pct(tmR.gp_pct) : '—'}</div></div>
+    `;
+
+    renderServeTbody('serve-tbody', players);
+    renderRcvTbody('rcv-tbody', players);
+    renderServeDonut('chart-serve-evals', teamServeEv, null);
+    renderRcvDonut('chart-rcv-evals', teamRcvEv);
+  }
 
   // Reception AVG trend — respects season + period filters
   const rcvTrBuckets = resolveTrendBuckets(seasons, activeSids, periodVal);
