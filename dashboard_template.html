@@ -514,6 +514,12 @@
         <option value="all">All Seasons</option>
       </select>
     </div>
+    <div class="filter-sep"></div>
+    <div id="rpt-type-filter"><label>Session Type</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setSessionType('match',renderReports)" id="rpt-type-match" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Matches</button>
+      <button onclick="setSessionType('practice',renderReports)" id="rpt-type-practice" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Practices</button>
+      <button onclick="setSessionType('both',renderReports)" id="rpt-type-both" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Both</button>
+    </div></div>
   </div>
 
   <!-- Weekly Trend Section -->
@@ -1546,7 +1552,7 @@ function aggregateSessionStats(sessionIds) {
 function getMonthBuckets(seasonFilter) {
   const use = (seasonFilter && seasonFilter.length) ? seasonFilter : orderedSeasons();
   const byMonth = {};
-  for (const sess of DATA.sessions) {
+  for (const sess of sessionPool()) {
     if (!sess.date || !use.includes(sess.season) || sess.type === 'scout') continue;
     const mo = sess.date.slice(0, 7);
     if (!byMonth[mo]) byMonth[mo] = new Set();
@@ -1608,11 +1614,12 @@ function getTimeBuckets(seasons, bucketType) {
 }
 
 function renderReports() {
+  syncTypeButtons('rpt');
   const seasonVal = document.getElementById('rpt-season').value;
   const seasons   = resolveSeasons(seasonVal);
 
-  // Filter sessions
-  const sessions = DATA.sessions
+  // Filter sessions — respect global session type filter
+  const sessions = sessionPool()
     .filter(s => seasons.includes(s.season) && s.type !== 'scout')
     .sort((a,b) => (a.date||'').localeCompare(b.date||''));
 
