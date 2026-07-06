@@ -761,34 +761,115 @@
         </div>
       </div>
     </div>
-    <!-- Reception stays full-width below in split mode -->
+    <!-- Reception split: Float (left) vs Top Spin (right) -->
+    <div class="mt-16" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="section-title" style="margin-bottom:8px;color:var(--gold)">Reception vs Float (SM)</div>
+        <div class="card">
+          <h3>Float — Reception by Player</h3>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr>
+                <th>#</th><th>Name</th>
+                <th class="num">Att</th><th class="num">AVG</th>
+                <th class="num">Perfect %</th><th class="num">GP %</th>
+                <th class="num">Med %</th><th class="num">OoS %</th>
+                <th class="num">Over %</th><th class="num">Err %</th>
+              </tr></thead>
+              <tbody id="rcv-tbody-float-split"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mt-16">
+          <h3>Float — Team Breakdown</h3>
+          <div class="chart-wrap"><canvas id="chart-rcv-float-split"></canvas></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:8px;color:var(--gold)">Reception vs Top Spin (SQ)</div>
+        <div class="card">
+          <h3>Top Spin — Reception by Player</h3>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr>
+                <th>#</th><th>Name</th>
+                <th class="num">Att</th><th class="num">AVG</th>
+                <th class="num">Perfect %</th><th class="num">GP %</th>
+                <th class="num">Med %</th><th class="num">OoS %</th>
+                <th class="num">Over %</th><th class="num">Err %</th>
+              </tr></thead>
+              <tbody id="rcv-tbody-topspin-split"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mt-16">
+          <h3>Top Spin — Team Breakdown</h3>
+          <div class="chart-wrap"><canvas id="chart-rcv-topspin-split"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trend: Float vs Top Spin on same chart -->
+    <div class="card mt-16">
+      <h3>Reception AVG by Month — Float vs Top Spin</h3>
+      <div class="chart-wrap"><canvas id="chart-rcv-trend-split"></canvas></div>
+    </div>
+
+    <!-- Zone breakdown split -->
+    <div class="section-title mt-20">Receive Zone Breakdown</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;margin-top:-10px">
+      Zone 1 = back right · Zone 5 = back left · Zone 6 = back middle.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="section-title" style="margin-bottom:8px;font-size:12px;color:var(--gold)">vs Float (SM)</div>
+        <div class="card">
+          <h3>Zone AVG — Float</h3>
+          <div id="rcv-zone-team-float-split" style="margin-top:4px"></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:8px;font-size:12px;color:var(--gold)">vs Top Spin (SQ)</div>
+        <div class="card">
+          <h3>Zone AVG — Top Spin</h3>
+          <div id="rcv-zone-team-topspin-split" style="margin-top:4px"></div>
+        </div>
+      </div>
+    </div>
     <div class="grid-2 mt-16">
       <div class="card">
-        <h3>Reception Stats by Player</h3>
+        <h3>Zone by Player — vs Float</h3>
         <div class="table-scroll">
           <table class="data-table">
             <thead><tr>
               <th>#</th><th>Name</th>
-              <th class="num">Att</th>
-              <th class="num">AVG</th>
-              <th class="num">Perfect %</th>
-              <th class="num">GP %</th>
-              <th class="num">Med %</th>
-              <th class="num">OoS %</th>
-              <th class="num">Over %</th>
-              <th class="num">Err %</th>
+              <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
+              <th class="num">Z5 Att</th><th class="num">Z5 AVG</th>
+              <th class="num">Z6 Att</th><th class="num">Z6 AVG</th>
             </tr></thead>
-            <tbody id="rcv-tbody-split"></tbody>
+            <tbody id="zone-tbody-float-split"></tbody>
           </table>
         </div>
       </div>
       <div class="card">
-        <h3>Reception Breakdown — Team</h3>
-        <div class="chart-wrap"><canvas id="chart-rcv-evals-split"></canvas></div>
+        <h3>Zone by Player — vs Top Spin</h3>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr>
+              <th>#</th><th>Name</th>
+              <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
+              <th class="num">Z5 Att</th><th class="num">Z5 AVG</th>
+              <th class="num">Z6 Att</th><th class="num">Z6 AVG</th>
+            </tr></thead>
+            <tbody id="zone-tbody-topspin-split"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
 
+  <!-- Single/filtered mode: trend + zone (hidden in split mode) -->
+  <div id="sr-nonplit-tail">
   <div class="card mt-16">
     <h3>Reception AVG by Month</h3>
     <div class="chart-wrap"><canvas id="chart-rcv-trend"></canvas></div>
@@ -824,6 +905,7 @@
     <h3>Zone AVG Trend by Month</h3>
     <div class="chart-wrap"><canvas id="chart-zone-trend"></canvas></div>
   </div>
+  </div><!-- end sr-nonplit-tail -->
 </div>
 
 <!-- ═══════════════════════════ SETTER TAB ═══════════════════════════ -->
@@ -1396,11 +1478,18 @@ function getISOWeek(dateStr) {
 }
 
 function aggregateSessionStats(sessionIds) {
-  // Gather all player_session entries for these sessions
   const skills = {};
-  const rcv_zones = {};
+  const zones  = { rcv_zones:{}, rcv_zones_q:{}, rcv_zones_m:{} };
   function ensureSkill(s) {
     if (!skills[s]) skills[s] = { attempts:0, evals:{} };
+  }
+  function mergeZoneDict(target, src) {
+    for (const [z, zd] of Object.entries(src||{})) {
+      if (!target[z]) target[z] = { attempts:0, evals:{} };
+      target[z].attempts += zd.attempts||0;
+      for (const [e,n] of Object.entries(zd.evals||{}))
+        target[z].evals[e] = (target[z].evals[e]||0) + n;
+    }
   }
   let totalActions = 0;
   for (const [key, ps] of Object.entries(DATA.player_session)) {
@@ -1411,13 +1500,13 @@ function aggregateSessionStats(sessionIds) {
       skills[sk].attempts += sv.attempts || 0;
       for (const [e,n] of Object.entries(sv.evals || {}))
         skills[sk].evals[e] = (skills[sk].evals[e]||0) + n;
-      // carry pre-scaled pass points and category counts for R
-      if (sk === 'R') {
-        if (sv.rcv_pts != null) skills['R'].rcv_pts = (skills['R'].rcv_pts||0) + sv.rcv_pts;
+      // carry pre-scaled pass points and category counts for R / RQ / RM
+      if (sk === 'R' || sk === 'RQ' || sk === 'RM') {
+        if (sv.rcv_pts != null) skills[sk].rcv_pts = (skills[sk].rcv_pts||0) + sv.rcv_pts;
         if (sv.rcv_cat) {
-          if (!skills['R'].rcv_cat) skills['R'].rcv_cat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
+          if (!skills[sk].rcv_cat) skills[sk].rcv_cat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
           for (const c of ['perf','good','med','oos','over','err'])
-            skills['R'].rcv_cat[c] = (skills['R'].rcv_cat[c]||0) + (sv.rcv_cat[c]||0);
+            skills[sk].rcv_cat[c] = (skills[sk].rcv_cat[c]||0) + (sv.rcv_cat[c]||0);
         }
       }
       // carry combos for A
@@ -1431,15 +1520,11 @@ function aggregateSessionStats(sessionIds) {
         }
       }
     }
-    // aggregate receive zones
-    for (const [z, zd] of Object.entries(ps.rcv_zones || {})) {
-      if (!rcv_zones[z]) rcv_zones[z] = { attempts:0, evals:{} };
-      rcv_zones[z].attempts += zd.attempts||0;
-      for (const [e,n] of Object.entries(zd.evals||{}))
-        rcv_zones[z].evals[e] = (rcv_zones[z].evals[e]||0) + n;
-    }
+    mergeZoneDict(zones.rcv_zones,   ps.rcv_zones   || {});
+    mergeZoneDict(zones.rcv_zones_q, ps.rcv_zones_q || {});
+    mergeZoneDict(zones.rcv_zones_m, ps.rcv_zones_m || {});
   }
-  return { skills, totalActions, rcv_zones };
+  return { skills, totalActions, ...zones };
 }
 
 // Group all non-scout sessions into YYYY-MM buckets.
@@ -3833,8 +3918,8 @@ function renderAttack() {
 
 // ═══════════════════════════ SERVE & RECEIVE TAB ══════════════════════════════
 
-// Build player stats pulling from a specific skill key (S, SQ, SM) + R
-function buildSrPlayerStats(activeSids, seasons, group, sKey) {
+// Build player stats pulling from a specific skill key (S, SQ, SM) + R/RQ/RM
+function buildSrPlayerStats(activeSids, seasons, group, sKey, rKey='R') {
   const playerStats = {};
   function mergeInto(entry, ps) {
     const Sk = ps.skills?.[sKey];
@@ -3843,11 +3928,17 @@ function buildSrPlayerStats(activeSids, seasons, group, sKey) {
       for (const [e,n] of Object.entries(Sk.evals||{}))
         entry.serve_ev[e] = (entry.serve_ev[e]||0)+n;
     }
-    const R = ps.skills?.R;
+    const R = ps.skills?.[rKey];
     if (R) {
       entry.rcv_att += R.attempts||0;
       for (const [e,n] of Object.entries(R.evals||{}))
         entry.rcv_ev[e] = (entry.rcv_ev[e]||0)+n;
+      if (R.rcv_pts != null) entry.rPts = (entry.rPts||0) + R.rcv_pts;
+      if (R.rcv_cat) {
+        if (!entry.rCat) entry.rCat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
+        for (const c of ['perf','good','med','oos','over','err'])
+          entry.rCat[c] = (entry.rCat[c]||0) + (R.rcv_cat[c]||0);
+      }
     }
   }
   if (activeSids) {
@@ -3957,6 +4048,88 @@ function renderRcvDonut(chartId, teamRcvEv) {
   });
 }
 
+const ZONE_LABELS_SR = { '1':'Zone 1 (Back Right)', '5':'Zone 5 (Back Left)', '6':'Zone 6 (Back Middle)' };
+const ZONE_COLORS_SR = { '1': MAROON, '5': '#888888', '6': GOLD };
+
+function renderZoneTeamPanel(zones, containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const hasZones = ['1','5','6'].some(z => zones[z]?.attempts > 0);
+  if (!hasZones) {
+    el.innerHTML = '<div class="empty" style="padding:12px;font-size:12px;color:var(--text-muted)">No zone data</div>';
+    return;
+  }
+  el.innerHTML = ['1','5','6'].map(z => {
+    const zd = zones[z]; if (!zd?.attempts) return '';
+    const ev = zd.evals||{}, att = zd.attempts;
+    const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
+    const gp  = ((ev['#']||0)+(ev['+'||0]||ev['+'||0]||ev['+']||0)+(ev['/']||0))/att*100;
+    const err = (ev['=']||0)/att*100;
+    const bar = Math.min(100,(avg/3)*100);
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <span style="font-size:12px;font-weight:700;color:${ZONE_COLORS_SR[z]}">${ZONE_LABELS_SR[z]}</span>
+        <span style="font-size:10px;color:var(--text-muted)">${fmt(att)} rcv</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div style="flex:1;height:7px;background:var(--surface3);border-radius:4px;overflow:hidden">
+          <div style="width:${bar.toFixed(1)}%;height:100%;background:${ZONE_COLORS_SR[z]};border-radius:4px"></div>
+        </div>
+        <span style="font-size:14px;font-weight:700;color:${ZONE_COLORS_SR[z]};width:32px">${avg.toFixed(2)}</span>
+      </div>
+      <div style="display:flex;gap:12px">
+        <span style="font-size:10px;color:var(--green)">GP ${gp.toFixed(1)}%</span>
+        <span style="font-size:10px;color:var(--text-muted)">Err ${err.toFixed(1)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderZonePlayerTbody(activeSids, seasons, group, zoneKey, tbodyId) {
+  const tbody = document.getElementById(tbodyId); if (!tbody) return;
+  const pzDisplay = {};
+  function mergePz(pnum, season, ps) {
+    if (!playerInGroup(pnum, season, group)) return;
+    const name = getPlayerName(pnum, season);
+    const pid  = `${pnum}|${name}`;
+    if (!pzDisplay[pid]) pzDisplay[pid] = { pnum, name, z1a:0,z1s:0, z5a:0,z5s:0, z6a:0,z6s:0 };
+    const p = pzDisplay[pid];
+    for (const [z, zd] of Object.entries(ps[zoneKey]||{})) {
+      const att = zd.attempts||0, ev = zd.evals||{};
+      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0));
+      if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
+      if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
+      if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
+    }
+  }
+  if (activeSids) {
+    for (const [, ps] of Object.entries(DATA.player_session)) {
+      if (!activeSids.has(ps.session_id)) continue;
+      const pnum   = ps.player_num;
+      const season = DATA.sessions.find(s => s.id === ps.session_id)?.season;
+      if (season) mergePz(pnum, season, ps);
+    }
+  } else {
+    for (const [key, ps] of Object.entries(DATA.player_season)) {
+      const [pnum, season] = key.split('|');
+      if (!seasons.includes(season)) continue;
+      mergePz(pnum, season, ps);
+    }
+  }
+  const rows = Object.values(pzDisplay)
+    .filter(p => p.z1a+p.z5a+p.z6a > 0)
+    .sort((a,b) => (b.z1a+b.z5a+b.z6a)-(a.z1a+a.z5a+a.z6a));
+  tbody.innerHTML = rows.map(p => `<tr>
+    <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+    <td class="num">${p.z1a||'—'}</td>
+    <td class="num gold">${p.z1a?(p.z1s/p.z1a).toFixed(2):'—'}</td>
+    <td class="num">${p.z5a||'—'}</td>
+    <td class="num gold">${p.z5a?(p.z5s/p.z5a).toFixed(2):'—'}</td>
+    <td class="num">${p.z6a||'—'}</td>
+    <td class="num gold">${p.z6a?(p.z6s/p.z6a).toFixed(2):'—'}</td>
+  </tr>`).join('') || '<tr><td colspan="8" class="empty">No zone data</td></tr>';
+}
+
 function renderServRcv() {
   syncTypeButtons('sr');
   const seasonVal  = document.getElementById('sr-season').value;
@@ -3969,8 +4142,9 @@ function renderServRcv() {
   const isSplit = srServeType === 'split';
 
   // Toggle layout views
-  document.getElementById('sr-single-view').style.display = isSplit ? 'none' : '';
-  document.getElementById('sr-split-view').style.display  = isSplit ? '' : 'none';
+  document.getElementById('sr-single-view').style.display  = isSplit ? 'none' : '';
+  document.getElementById('sr-split-view').style.display   = isSplit ? '' : 'none';
+  document.getElementById('sr-nonplit-tail').style.display = isSplit ? 'none' : '';
 
   // Update serve table/chart titles in single view
   const serveTableTitle = document.getElementById('serve-table-title');
@@ -4025,12 +4199,68 @@ function renderServRcv() {
         <div class="stat-lbl">OoS ${tmT ? pct(tmT.oos_pct) : '—'}</div></div>
     `;
 
+    // Serve tables + donuts
     renderServeTbody('serve-tbody-float',   floatPlayers);
     renderServeTbody('serve-tbody-topspin', topspinPlayers);
-    renderRcvTbody('rcv-tbody-split', rcvPlayers);
     renderServeDonut('chart-serve-float',   floatServeEv,  null);
     renderServeDonut('chart-serve-topspin', tsServeEv,     null);
-    renderRcvDonut('chart-rcv-evals-split', teamRcvEv);
+
+    // Reception split: vs Float (RM) / vs Top Spin (RQ)
+    const floatRcvPlayers   = buildSrPlayerStats(activeSids, seasons, group, 'S', 'RM');
+    const topspinRcvPlayers = buildSrPlayerStats(activeSids, seasons, group, 'S', 'RQ');
+    const floatRcvEv = {}, tsRcvEv = {};
+    let floatRcvAtt = 0, tsRcvAtt = 0;
+    for (const p of floatRcvPlayers)   { floatRcvAtt += p.rcv_att; for (const [e,n] of Object.entries(p.rcv_ev)) floatRcvEv[e]=(floatRcvEv[e]||0)+n; }
+    for (const p of topspinRcvPlayers) { tsRcvAtt    += p.rcv_att; for (const [e,n] of Object.entries(p.rcv_ev)) tsRcvEv[e]=(tsRcvEv[e]||0)+n; }
+    renderRcvTbody('rcv-tbody-float-split',   floatRcvPlayers);
+    renderRcvTbody('rcv-tbody-topspin-split', topspinRcvPlayers);
+    renderRcvDonut('chart-rcv-float-split',   floatRcvEv);
+    renderRcvDonut('chart-rcv-topspin-split', tsRcvEv);
+
+    // Trend chart: Float vs Top Spin reception AVG on same chart
+    const rcvTrBuckets = resolveTrendBuckets(seasons, activeSids, periodVal);
+    makeChart('chart-rcv-trend-split', 'line', {
+      labels: rcvTrBuckets.labels,
+      datasets: [
+        { label: 'Float (SM) AVG', data: rcvTrBuckets.sidSets.map(sids => {
+            if (!sids?.size) return null;
+            const { skills } = aggregateSessionStats(sids);
+            const R = skills['RM']; if (!R?.attempts) return null;
+            const ev = R.evals||{};
+            return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+          }),
+          borderColor:'#888888', backgroundColor:'#88888833',
+          tension:0.3, fill:false, pointRadius:5, spanGaps:false },
+        { label: 'Top Spin (SQ) AVG', data: rcvTrBuckets.sidSets.map(sids => {
+            if (!sids?.size) return null;
+            const { skills } = aggregateSessionStats(sids);
+            const R = skills['RQ']; if (!R?.attempts) return null;
+            const ev = R.evals||{};
+            return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+          }),
+          borderColor: GOLD, backgroundColor: GOLD+'33',
+          tension:0.3, fill:false, pointRadius:5, spanGaps:false },
+      ]
+    }, { scales:{y:{ticks:{callback:v=>v.toFixed(2)}}} });
+
+    // Zone breakdown: vs Float (rcv_zones_m) / vs Top Spin (rcv_zones_q)
+    let floatZones = {}, tsZones = {};
+    if (activeSids) {
+      const agg = aggregateSessionStats(activeSids);
+      floatZones = agg.rcv_zones_m || {};
+      tsZones    = agg.rcv_zones_q || {};
+    } else {
+      for (const s of seasons) {
+        const sm = DATA.season_stats[s]?.rcv_zones_m || {};
+        const sq = DATA.season_stats[s]?.rcv_zones_q || {};
+        for (const [z,zd] of Object.entries(sm)) { if (!floatZones[z]) floatZones[z]={attempts:0,evals:{}}; floatZones[z].attempts+=zd.attempts||0; for (const [e,n] of Object.entries(zd.evals||{})) floatZones[z].evals[e]=(floatZones[z].evals[e]||0)+n; }
+        for (const [z,zd] of Object.entries(sq)) { if (!tsZones[z]) tsZones[z]={attempts:0,evals:{}}; tsZones[z].attempts+=zd.attempts||0; for (const [e,n] of Object.entries(zd.evals||{})) tsZones[z].evals[e]=(tsZones[z].evals[e]||0)+n; }
+      }
+    }
+    renderZoneTeamPanel(floatZones, 'rcv-zone-team-float-split');
+    renderZoneTeamPanel(tsZones,    'rcv-zone-team-topspin-split');
+    renderZonePlayerTbody(activeSids, seasons, group, 'rcv_zones_m', 'zone-tbody-float-split');
+    renderZonePlayerTbody(activeSids, seasons, group, 'rcv_zones_q', 'zone-tbody-topspin-split');
 
   } else {
     // ── SINGLE MODE (both / float / topspin) ─────────────────────────────────

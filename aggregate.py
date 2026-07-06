@@ -516,6 +516,16 @@ def main(raw_path, out_path):
         loyola_side   = loyola_side_for_session(s)
         keep_unnamed  = s.get('_keep_unnamed', set())
 
+        # Pre-build rally_serve_tech: map rally_id → opponent serve technique
+        # Scans ALL actions (both sides) so we catch the opponent's serve
+        rally_serve_tech = {}
+        for _a in s.get('actions', []):
+            if _a.get('skill_code') == 'S':
+                _tech = _a.get('technique', '')
+                _rid  = _a.get('rally_id')
+                if _rid and _tech in ('Q', 'M'):
+                    rally_serve_tech[str(_rid)] = _tech
+
         for action in s.get('actions', []):
             pnum = action.get('player_num', '')
             if not pnum:
@@ -561,6 +571,29 @@ def main(raw_path, out_path):
                     rsk['rcv_pts']  = rsk.get('rcv_pts', 0) + pts
                     rsk['rcv_cat']  = rsk.get('rcv_cat', {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0})
                     rsk['rcv_cat'][cat] = rsk['rcv_cat'].get(cat, 0) + 1
+                # Tag reception by opponent serve type (RQ=vs topspin, RM=vs float)
+                rid  = action.get('rally_id')
+                tech = rally_serve_tech.get(str(rid)) if rid else None
+                if tech in ('Q', 'M'):
+                    t_key = 'R' + tech   # 'RQ' or 'RM'
+                    zone  = action.get('end_zone')
+                    for store in (psk, pse, ss):
+                        rsk_t = store['skills'].setdefault(t_key, empty_skill())
+                        rsk_t['attempts'] += 1
+                        rsk_t['evals'][ev_code] = rsk_t['evals'].get(ev_code, 0) + 1
+                        rsk_t['rcv_pts'] = rsk_t.get('rcv_pts', 0) + pts
+                        if 'rcv_cat' not in rsk_t:
+                            rsk_t['rcv_cat'] = {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0}
+                        rsk_t['rcv_cat'][cat] = rsk_t['rcv_cat'].get(cat, 0) + 1
+                        if zone:
+                            zk_typed = 'rcv_zones_q' if tech == 'Q' else 'rcv_zones_m'
+                            if zk_typed not in store:
+                                store[zk_typed] = {}
+                            if str(zone) not in store[zk_typed]:
+                                store[zk_typed][str(zone)] = empty_zone()
+                            store[zk_typed][str(zone)]['attempts'] += 1
+                            store[zk_typed][str(zone)]['evals'][ev_code] = \
+                                store[zk_typed][str(zone)]['evals'].get(ev_code, 0) + 1
 
         # ── Season FBSO ───────────────────────────────────────────────────────
         fbso = session_rally[sid]['fbso']
