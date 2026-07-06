@@ -297,13 +297,16 @@ def parse_scout_code(code):
     rest = code[8:] if len(code) > 8 else ''
     rest_stripped = rest.replace('~', '')
 
-    # Volleymetrics format for receptions: ~~~ZN... where code[9] IS the zone (1-9)
-    # and code[10] is a sub-position digit. e.g. a28RQ+~~~56CW = zone 5, sub-pos 6.
-    # Do NOT treat these as x,y grid coordinates — code[9] is the zone directly.
+    # Volleymetrics format for receptions: ~~~XN... where code[10] (N, the second digit)
+    # determines the zone via groupings:
+    #   Zone 1 (back right) : N in {1, 9, 2}
+    #   Zone 5 (back left)  : N in {5, 7, 4}
+    #   Zone 6 (back middle): N in {3, 6, 8}
+    _VM_ZONE_MAP = {'1':'1','9':'1','2':'1', '5':'5','7':'5','4':'5', '3':'6','6':'6','8':'6'}
     skill = result.get('skill_code', '')
     if (skill == 'R' and len(code) > 10
             and code[8] == '~' and code[9].isdigit() and code[10].isdigit()):
-        result['end_zone'] = code[9]
+        result['end_zone'] = _VM_ZONE_MAP.get(code[10], code[10])
     else:
         # Direction + end zone: letter followed immediately by digit (e.g. H2, B9)
         dir_match = re.search(r'([A-Z])(\d)', rest_stripped)
