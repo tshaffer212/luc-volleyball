@@ -70,6 +70,7 @@ DEFAULT_SETTER_CALLS = {
 def infer_date_from_filename(filename, season_label):
     """
     Try to extract a date from common filename patterns:
+      YYYY-MM-DD ...     → ISO date (highest priority; used by Volleymetrics exports)
       M-D.dvw            → use season year for context
       M-D-YY.dvw         → explicit 2-digit year
       M-DD-YY.dvw        → same
@@ -79,6 +80,15 @@ def infer_date_from_filename(filename, season_label):
     Returns ISO date string or None.
     """
     stem = os.path.splitext(filename)[0]
+
+    # ISO date anywhere in filename (e.g. "&2026-05-03 765748 CSULB-LUC(VM).dvw")
+    iso_m = re.search(r'(\d{4})-(\d{2})-(\d{2})', stem)
+    if iso_m:
+        try:
+            return datetime(int(iso_m.group(1)), int(iso_m.group(2)), int(iso_m.group(3))).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+
     # Strip suffixes like (AM), (1), (2)
     stem_clean = re.sub(r'\s*\(.*\)\s*$', '', stem).strip()
 
@@ -120,6 +130,12 @@ def infer_session_type(filename, is_scout=False):
     if is_scout:
         return 'scout'
     if re.search(r'\bvs\b', filename, re.IGNORECASE):
+        return 'match'
+    # Volleymetrics export pattern: "&YYYY-MM-DD 765748 TEAM-TEAM(VM).dvw"
+    # Detected by "(VM)" suffix or 6-digit numeric ID between date and team names
+    if re.search(r'\(VM\)', filename, re.IGNORECASE):
+        return 'match'
+    if re.search(r'\d{4}-\d{2}-\d{2}\s+\d{5,7}\s+', filename):
         return 'match'
     # Scout-style short names: "NKU1", "Pepp3", "UCSD2" etc.
     if re.match(r'^[A-Za-z]{2,6}\d?\.dvw$', filename):
@@ -167,11 +183,14 @@ def infer_coding_version(season_label):
 # ─── Section parsers ───────────────────────────────────────────────────────────
 
 def parse_date(raw):
-    """Parse DD/MM/YYYY date string."""
-    try:
-        return datetime.strptime(raw.strip(), '%d/%m/%Y').strftime('%Y-%m-%d')
-    except ValueError:
-        return raw.strip() or None
+    """Parse date string — tries DD/MM/YYYY (DataVolley standard) then MM/DD/YYYY (Volleymetrics export)."""
+    raw = raw.strip()
+    for fmt in ('%d/%m/%Y', '%m/%d/%Y'):
+        try:
+            return datetime.strptime(raw, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+    return raw or None
 
 
 def parse_players(lines):
@@ -322,6 +341,8 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
 
     # ── Opponent (for match/scout files) ────────────────────────────────────
     opponent = infer_opponent_from_filename(filename) if inferred_type in ('match', 'scout') else None
+    # If filename gave no opponent but we have team names, derive from teams section
+    # (Volleymetrics filenames don't follow the "vs" convention)
 
     # ── Coding detail level ─────────────────────────────────────────────────
     coding_version = infer_coding_version(season_label)
@@ -348,6 +369,10 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
     match_time = None
     team_name  = 'Loyola University Chicago'
 
+    # ISO date in filename takes highest priority (unambiguous; used by Volleymetrics exports
+    # whose section date may use MM/DD vs DD/MM ambiguously).
+    filename_iso_date = infer_date_from_filename(filename, season_label) if re.search(r'\d{4}-\d{2}-\d{2}', filename) else None
+
     match_lines = sections.get('3MATCH', [])
     if match_lines:
         parts = match_lines[0].split(';')
@@ -359,8 +384,10 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         if len(parts) > 3 and not season_label:
             season_label = parts[3].strip() or season_label
 
-    # Fallback date from filename if not in file content
-    if not match_date:
+    # ISO date from filename overrides ambiguous section date
+    if filename_iso_date:
+        match_date = filename_iso_date
+    elif not match_date:
         match_date = infer_date_from_filename(filename, season_label)
 
     # ── [3TEAMS] ────────────────────────────────────────────────────────────
@@ -378,11 +405,21 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         home_team = hp[1].strip() if len(hp) > 1 else None
         away_team = ap[1].strip() if len(ap) > 1 else None
 
+    # ── Which side is LUC on? ────────────────────────────────────────────
+    # Practice files: LUC is always home. Match files from Volleymetrics may
+    # have LUC as the visitor. Detect by checking team names.
+    LUC_KEYWORDS = ('loyola', 'luc')
+    luc_side = 'home'  # default (all practice files)
+    if home_team and any(k in home_team.lower() for k in LUC_KEYWORDS):
+        luc_side = 'home'
+    elif away_team and any(k in away_team.lower() for k in LUC_KEYWORDS):
+        luc_side = 'away'
+
     # ── [3PLAYERS] ──────────────────────────────────────────────────────────
     home_players = parse_players(sections.get('3PLAYERS-H', []))
     away_players = parse_players(sections.get('3PLAYERS-V', []))
-    # Canonical roster: home side (or fallback to away)
-    players = home_players or away_players
+    # Canonical roster: LUC's side (for backward compat, fallback to whichever exists)
+    players = (home_players if luc_side == 'home' else away_players) or home_players or away_players
 
     # ── [3ATTACKCOMBINATION] ────────────────────────────────────────────────
     attack_combos = parse_attack_combos(sections.get('3ATTACKCOMBINATION', []))
@@ -432,7 +469,10 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         player_num_int = int(player_num) if player_num.isdigit() else None
         player_num_str = str(player_num_int) if player_num_int is not None else player_num
 
-        player_info = players.get(player_num_str, {
+        # Use each side's own roster (critical when LUC is the visitor)
+        action_side  = parsed['team_side']  # 'home' or 'away'
+        side_players = home_players if action_side == 'home' else away_players
+        player_info  = side_players.get(player_num_str, {
             'number':    player_num_int,
             'name':      f"#{player_num}",
             'last_name': f"#{player_num}",
@@ -481,6 +521,19 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
 
         actions.append(action)
 
+    # ── For match files: keep only LUC's actions ────────────────────────────
+    # We don't aggregate opponent stats in the dashboard. Practice files are
+    # always LUC-only (home side), so this filter is a no-op for them.
+    if inferred_type == 'match' and not is_scout:
+        actions = [a for a in actions if a['team_side'] == luc_side]
+
+    # ── Derive opponent from team names if filename didn't supply it ─────────
+    if not opponent and inferred_type in ('match', 'scout'):
+        if luc_side == 'home' and away_team:
+            opponent = away_team
+        elif luc_side == 'away' and home_team:
+            opponent = home_team
+
     session = {
         # Identity
         'file':            filename,
@@ -496,6 +549,7 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         'home_team':       home_team,
         'away_team':       away_team,
         'opponent':        opponent,
+        'luc_side':        luc_side,        # 'home' or 'away'
         # Counts
         'player_count':    len(players),
         'action_count':    len(actions),
