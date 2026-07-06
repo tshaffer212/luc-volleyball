@@ -517,6 +517,8 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
             '_flag2': side_flag_2 or None,
             # Timing
             'timestamp': timestamp,
+            # Rally grouping (fields[12] in DVW — unique per rally within the file)
+            'rally_id': fields[12].strip() if len(fields) > 12 else None,
         }
 
         actions.append(action)

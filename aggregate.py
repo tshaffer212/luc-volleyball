@@ -145,7 +145,7 @@ def compute_call_attacks(actions, loyola_side):
 
 def compute_rally_sequences(actions, loyola_side):
     """
-    Split actions into rallies (a new rally begins at each Serve action) and compute:
+    Split actions into rallies and compute:
 
       1. Per-player dig→kill conversion
          A dig "converts" only if the SAME side that dug the ball kills in that rally.
@@ -155,73 +155,122 @@ def compute_rally_sequences(actions, loyola_side):
       2. Team FBSO (First Ball Sideout)
          For each rally where Loyola is receiving (opponent served), check whether
          the receiving side's FIRST attack in that rally is a kill.
-         In practice every rally has a receiving side — both count since both = Loyola.
+
+    Rally splitting strategy:
+      - If actions have rally_id fields (Volleymetrics match files), group by rally_id.
+        This avoids missing opponent serves (which are filtered out for match files).
+        In these files, LUC receiving rallies are identified by the presence of a
+        Reception action (skill_code=='R') anywhere in the rally.
+      - Otherwise (practice files), split on each Serve action as before.
 
     Returns:
         player_dig : {pnum: {'dig_rallies': int, 'dig_kill_rallies': int}}
         fbso       : {'rcv_rallies': int, 'fbso_kills': int}
     """
-    # ── Split into rallies ───────────────────────────────────────────────────────
-    rallies, current = [], []
-    for a in actions:
-        if a.get('skill_code') == 'S' and current:
+    # ── Decide split strategy ────────────────────────────────────────────────────
+    # Match files (loyola_side != 'both') only contain LUC's actions — opponent
+    # serves are absent, so serve-based splitting fails.  Use linear scan instead.
+    match_mode = (loyola_side != 'both')
+
+    if not match_mode:
+        # Practice mode: split into rallies on each Serve action
+        rallies, current = [], []
+        for a in actions:
+            if a.get('skill_code') == 'S' and current:
+                rallies.append(current)
+                current = []
+            current.append(a)
+        if current:
             rallies.append(current)
-            current = []
-        current.append(a)
-    if current:
-        rallies.append(current)
 
     player_dig = {}   # pnum → {dig_rallies, dig_kill_rallies}
     fbso = {'rcv_rallies': 0, 'fbso_kills': 0}
 
-    for rally in rallies:
-        if not rally:
-            continue
+    if match_mode:
+        # ── Match mode: linear scan over LUC-only actions ────────────────────────
+        # rally_id increments per action (not per rally), so we can't group by it.
+        # Instead we scan linearly:
+        # - Each Reception (R) marks start of a LUC-receiving possession.
+        # - Scan forward from that R to find the first Attack (A) before the next
+        #   R or S (which would start a new possession).
+        # - Dig→kill: a Dig followed (before the next S/R) by a LUC attack kill.
+        n = len(actions)
+        for i, a in enumerate(actions):
+            skill = a.get('skill_code')
 
-        # Serving side = team of the first action (the serve itself)
-        serve_side = rally[0].get('team_side')   # 'home' | 'away'
-        rcv_side   = 'away' if serve_side == 'home' else 'home'
+            # ── Dig → Kill (match) ───────────────────────────────────────────
+            if skill == 'D':
+                pnum = a.get('player_num', '')
+                if pnum:
+                    if pnum not in player_dig:
+                        player_dig[pnum] = {'dig_rallies': 0, 'dig_kill_rallies': 0}
+                    player_dig[pnum]['dig_rallies'] += 1
+                    # Look forward for a LUC kill before next possession boundary
+                    for j in range(i+1, n):
+                        ns = actions[j].get('skill_code')
+                        if ns in ('S', 'R'):
+                            break
+                        if ns == 'A' and actions[j].get('evaluation') == '#':
+                            player_dig[pnum]['dig_kill_rallies'] += 1
+                            break
 
-        # Which sides scored a kill in this rally?
-        sides_killed = {
-            a.get('team_side')
-            for a in rally
-            if a.get('skill_code') == 'A' and a.get('evaluation') == '#'
-        }
+            # ── FBSO (match) ─────────────────────────────────────────────────
+            elif skill == 'R':
+                fbso['rcv_rallies'] += 1
+                # Find first Attack before next R or S
+                for j in range(i+1, n):
+                    ns = actions[j].get('skill_code')
+                    if ns in ('S', 'R'):
+                        break
+                    if ns == 'A':
+                        if actions[j].get('evaluation') == '#':
+                            fbso['fbso_kills'] += 1
+                        break  # only the FIRST attack counts
 
-        # ── Dig → Kill ──────────────────────────────────────────────────────────
-        for a in rally:
-            if a.get('skill_code') != 'D':
+    else:
+        # ── Practice mode: serve-split rallies ───────────────────────────────────
+        for rally in rallies:
+            if not rally:
                 continue
-            a_side = a.get('team_side')
-            # Match mode: only Loyola digs count
-            if loyola_side != 'both' and a_side != loyola_side:
+
+            serve_side = rally[0].get('team_side')   # 'home' | 'away'
+            rcv_side   = 'away' if serve_side == 'home' else 'home'
+
+            sides_killed = {
+                a.get('team_side')
+                for a in rally
+                if a.get('skill_code') == 'A' and a.get('evaluation') == '#'
+            }
+
+            # ── Dig → Kill ──────────────────────────────────────────────────
+            for a in rally:
+                if a.get('skill_code') != 'D':
+                    continue
+                a_side = a.get('team_side')
+                if loyola_side != 'both' and a_side != loyola_side:
+                    continue
+                pnum = a.get('player_num', '')
+                if not pnum:
+                    continue
+                if pnum not in player_dig:
+                    player_dig[pnum] = {'dig_rallies': 0, 'dig_kill_rallies': 0}
+                player_dig[pnum]['dig_rallies'] += 1
+                if a_side in sides_killed:
+                    player_dig[pnum]['dig_kill_rallies'] += 1
+
+            # ── FBSO ────────────────────────────────────────────────────────
+            if loyola_side != 'both' and rcv_side != loyola_side:
                 continue
-            pnum = a.get('player_num', '')
-            if not pnum:
-                continue
-            if pnum not in player_dig:
-                player_dig[pnum] = {'dig_rallies': 0, 'dig_kill_rallies': 0}
-            player_dig[pnum]['dig_rallies'] += 1
-            # Convert only if the SAME side that dug also kills
-            if a_side in sides_killed:
-                player_dig[pnum]['dig_kill_rallies'] += 1
 
-        # ── FBSO ────────────────────────────────────────────────────────────────
-        # In match mode skip rallies where Loyola is serving (not receiving)
-        if loyola_side != 'both' and rcv_side != loyola_side:
-            continue
+            fbso['rcv_rallies'] += 1
 
-        fbso['rcv_rallies'] += 1
-
-        # First attack by the receiving side in this rally
-        first_atk = next(
-            (a for a in rally
-             if a.get('team_side') == rcv_side and a.get('skill_code') == 'A'),
-            None
-        )
-        if first_atk and first_atk.get('evaluation') == '#':
-            fbso['fbso_kills'] += 1
+            first_atk = next(
+                (a for a in rally
+                 if a.get('team_side') == rcv_side and a.get('skill_code') == 'A'),
+                None
+            )
+            if first_atk and first_atk.get('evaluation') == '#':
+                fbso['fbso_kills'] += 1
 
     return player_dig, fbso
 

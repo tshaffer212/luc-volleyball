@@ -591,6 +591,12 @@
       <option value="efficiency" selected>Efficiency</option>
       <option value="error_pct">Error %</option>
     </select></div>
+    <div class="filter-sep"></div>
+    <div id="atk-type-filter"><label>Session Type</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setSessionType('match',renderAttack)" id="atk-type-match" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Matches</button>
+      <button onclick="setSessionType('practice',renderAttack)" id="atk-type-practice" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Practices</button>
+      <button onclick="setSessionType('both',renderAttack)" id="atk-type-both" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Both</button>
+    </div></div>
   </div>
 
   <div class="grid-4" id="atk-kpi-row"></div>
@@ -634,6 +640,12 @@
       <option value="liberos">Liberos</option>
       <option value="middles">Middles</option>
     </select></div>
+    <div class="filter-sep"></div>
+    <div id="sr-type-filter"><label>Session Type</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setSessionType('match',renderServRcv)" id="sr-type-match" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Matches</button>
+      <button onclick="setSessionType('practice',renderServRcv)" id="sr-type-practice" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Practices</button>
+      <button onclick="setSessionType('both',renderServRcv)" id="sr-type-both" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Both</button>
+    </div></div>
   </div>
 
   <div class="grid-4" id="sr-kpi-row"></div>
@@ -740,6 +752,12 @@
     <div><label>Situation</label><br><select id="set-situation" onchange="renderSetter()">
       <option value="all">All Attacks</option>
     </select></div>
+    <div class="filter-sep"></div>
+    <div id="set-type-filter"><label>Session Type</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setSessionType('match',renderSetter)" id="set-type-match" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Matches</button>
+      <button onclick="setSessionType('practice',renderSetter)" id="set-type-practice" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Practices</button>
+      <button onclick="setSessionType('both',renderSetter)" id="set-type-both" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Both</button>
+    </div></div>
   </div>
 
   <div class="grid-4" id="set-kpi-row"></div>
@@ -808,41 +826,34 @@
 
 <!-- ═══════════════════════════ FBSO TAB ═══════════════════════════ -->
 <div id="tab-fbso" class="tab-panel">
-  <div style="background:rgba(200,168,75,0.08);border:1px solid rgba(200,168,75,0.3);border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
-    <span style="font-size:20px">⏳</span>
-    <div>
-      <div style="font-weight:600;color:var(--gold);font-size:13px">Rotation Coding In Progress</div>
-      <div style="font-size:12px;color:var(--text-muted);margin-top:2px">FBSO by rotation will populate automatically once rotation data is added to DVW coding. The structure below shows what will display.</div>
+  <div class="filter-bar">
+    <div><label>Season</label><br><select id="fbso-season" onchange="renderFbso()">
+      <option value="all">All Seasons</option>
+    </select></div>
+  </div>
+
+  <div class="grid-4" id="fbso-kpi-row"></div>
+
+  <div class="grid-2 mt-16">
+    <div class="card">
+      <h3>FBSO % by Match</h3>
+      <div class="chart-wrap"><canvas id="chart-fbso-match"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>FBSO % Trend</h3>
+      <div class="chart-wrap"><canvas id="chart-fbso-trend"></canvas></div>
     </div>
   </div>
 
-  <div class="grid-4">
-    <div class="card-sm"><div class="card-title">FBSO %</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">First Ball Side Out</div></div>
-    <div class="card-sm"><div class="card-title">Sideout %</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">Overall Sideout</div></div>
-    <div class="card-sm"><div class="card-title">S/R Efficiency</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">Serve Receive</div></div>
-    <div class="card-sm"><div class="card-title">In-Sys Rcv %</div><div class="stat-val big" style="color:var(--text-dim)">—</div><div class="stat-lbl">In System Reception</div></div>
-  </div>
-
-  <div class="section-title mt-20">FBSO by Rotation</div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="fbso-rotation-grid">
-  </div>
-
-  <div class="card mt-16">
-    <h3>What will show here</h3>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding:8px 0">
-      <div>
-        <div style="font-size:12px;font-weight:600;color:var(--gold);margin-bottom:8px">Per Rotation</div>
-        <div style="font-size:12px;color:var(--text-muted);line-height:1.8">FBSO %<br>Earned SO %<br>Set Distribution<br>Attack Efficiency<br>Serve Receive Zone</div>
-      </div>
-      <div>
-        <div style="font-size:12px;font-weight:600;color:var(--gold);margin-bottom:8px">By Set Type</div>
-        <div style="font-size:12px;color:var(--text-muted);line-height:1.8">X5 / V5 FBSO %<br>X6 / V6 FBSO %<br>XP / BIC FBSO %<br>Quick (X1/X2/X7) %<br>D-Ball FBSO %</div>
-      </div>
-      <div>
-        <div style="font-size:12px;font-weight:600;color:var(--gold);margin-bottom:8px">Trend Over Time</div>
-        <div style="font-size:12px;color:var(--text-muted);line-height:1.8">FBSO % by week<br>Sideout % by week<br>Rotation strengths<br>Opponent comparison<br>Practice vs Match</div>
-      </div>
-    </div>
+  <div class="section-title mt-20">Match Log</div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr>
+        <th>Date</th><th>Opponent</th><th>Season</th>
+        <th class="num">Rcv Rallies</th><th class="num">FBSO Kills</th><th class="num">FBSO %</th>
+      </tr></thead>
+      <tbody id="fbso-match-log"></tbody>
+    </table>
   </div>
 </div>
 
@@ -1137,11 +1148,7 @@ function showTab(name) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 function init() {
-  // Exclude match sessions — match tab will be built separately
-  DATA.sessions = DATA.sessions.filter(s => s.type !== 'match');
-  // Also exclude their player_session entries
-  const matchSids = new Set();
-  // (sessions already filtered; build a complementary set of valid sids)
+  // All sessions (practice + match) are now included
   const validSids = new Set(DATA.sessions.map(s => s.id));
   for (const key of Object.keys(DATA.player_session)) {
     if (!validSids.has(DATA.player_session[key].session_id))
@@ -1158,7 +1165,7 @@ function init() {
 
   // Populate season dropdowns
   const allSeasons = orderedSeasons();
-  ['team-season-filter','player-season-filter','atk-season','sr-season','set-season','rpt-season'].forEach(id => {
+  ['team-season-filter','player-season-filter','atk-season','sr-season','set-season','rpt-season','fbso-season'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     allSeasons.forEach(s => el.add(new Option(s, s)));
@@ -1197,6 +1204,33 @@ let setterGroupSel   = null;  // 'pins' | 'middles' | 'bic' | null — setter gr
 let setterZoneSel    = null;  // COURT_ZONES id ('z4','z3','z2','z6','z1') | null — zone card filter
 let setterPnumFilter = null;  // pnum string | null — which setter to isolate
 let atkCodeSel     = new Set(); // Set of selected combo codes — attack bar filter
+
+// ── Session type filter ───────────────────────────────────────────────────────
+// 'both' | 'practice' | 'match'  — controlled per-tab via setSessionType()
+let sessionTypeFilter = 'both';
+
+// Returns DATA.sessions filtered to the current type selection
+function sessionPool() {
+  if (sessionTypeFilter === 'both') return DATA.sessions;
+  return DATA.sessions.filter(s => s.type === sessionTypeFilter);
+}
+
+// Update type filter and re-render the current tab
+function setSessionType(type, renderFn) {
+  sessionTypeFilter = type;
+  renderFn();
+}
+
+// Sync type filter button active states for a given tab prefix ('atk'|'sr'|'set')
+function syncTypeButtons(prefix) {
+  ['match','practice','both'].forEach(t => {
+    const btn = document.getElementById(`${prefix}-type-${t}`);
+    if (!btn) return;
+    const active = (sessionTypeFilter === t);
+    btn.style.background = active ? 'var(--maroon)' : 'var(--surface2)';
+    btn.style.color = active ? '#fff' : 'var(--text)';
+  });
+}
 let rptSetterFilter = null;   // setter pnum string | null — Reports attack setter filter
 
 function getISOWeek(dateStr) {
@@ -1270,7 +1304,7 @@ function getMonthBuckets(seasonFilter) {
 // seasons: array of season strings to include.
 function getTimeBuckets(seasons, bucketType) {
   const byBucket = {};
-  for (const sess of DATA.sessions) {
+  for (const sess of sessionPool()) {
     if (!sess.date || !seasons.includes(sess.season)) continue;
     let key;
     if (bucketType === 'season') {
@@ -3257,9 +3291,21 @@ function populatePeriodDropdown(seasonVal, elId) {
 
 // Build the Set of session IDs matching the period value ('all' → null).
 function buildPeriodSids(seasons, periodVal) {
-  if (!periodVal || periodVal === 'all') return null;
+  const pool = sessionPool();
+  // When type filter is active (not 'both'), always return a Set so consumers
+  // use the sids-based aggregation path (which respects the filtered pool).
+  const typeActive = (sessionTypeFilter !== 'both');
+  if (!periodVal || periodVal === 'all') {
+    if (!typeActive) return null; // no filtering needed at all
+    // Type-filter only: all matching sessions in selected seasons
+    const sids = new Set();
+    for (const sess of pool) {
+      if (seasons.includes(sess.season)) sids.add(sess.id);
+    }
+    return sids;
+  }
   const sids = new Set();
-  for (const sess of DATA.sessions) {
+  for (const sess of pool) {
     if (!seasons.includes(sess.season) || !sess.date) continue;
     if (periodVal.startsWith('month:')) {
       if (sess.date.startsWith(periodVal.slice(6))) sids.add(sess.id);
@@ -3282,7 +3328,7 @@ function populateSetPeriod() { populatePeriodDropdown(document.getElementById('s
 // bucketType: 'month' | 'week' | 'day'
 function buildTrendBuckets(sids, bucketType) {
   const byBucket = {};
-  for (const sess of DATA.sessions) {
+  for (const sess of sessionPool()) {
     if (!sids.has(sess.id) || !sess.date) continue;
     let key;
     if (bucketType === 'month') {
@@ -3319,30 +3365,15 @@ function resolveTrendBuckets(seasons, activeSids, periodVal) {
 }
 
 function renderAttack() {
+  syncTypeButtons('atk');
   const seasonVal = document.getElementById('atk-season').value;
   const group     = document.getElementById('atk-group').value;
   const metric    = document.getElementById('atk-metric').value;
   const periodVal = document.getElementById('atk-period')?.value || 'all';
   const seasons   = resolveSeasons(seasonVal);
 
-  // Build session ID set for the selected period
-  let activeSids = null;
-  if (periodVal !== 'all') {
-    activeSids = new Set();
-    for (const sess of DATA.sessions) {
-      if (!seasons.includes(sess.season) || !sess.date) continue;
-      if (periodVal.startsWith('month:')) {
-        if (sess.date.startsWith(periodVal.slice(6))) activeSids.add(sess.id);
-      } else if (periodVal.startsWith('week:')) {
-        const wkStart = periodVal.slice(5);
-        const d = new Date(sess.date);
-        const dow = d.getDay();
-        const mon = new Date(d);
-        mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
-        if (mon.toISOString().slice(0,10) === wkStart) activeSids.add(sess.id);
-      }
-    }
-  }
+  // Build session ID set for the selected period (also applies type filter)
+  const activeSids = buildPeriodSids(seasons, periodVal);
 
   const combos = activeSids
     ? getComboStatsBySessions(activeSids, group)
@@ -3597,6 +3628,7 @@ function renderAttack() {
 
 // ═══════════════════════════ SERVE & RECEIVE TAB ══════════════════════════════
 function renderServRcv() {
+  syncTypeButtons('sr');
   const seasonVal = document.getElementById('sr-season').value;
   const group     = document.getElementById('sr-group').value;
   const periodVal = document.getElementById('sr-period')?.value || 'all';
@@ -4140,6 +4172,7 @@ function getSetterCallStats(seasons) {
 
 // ═══════════════════════════ SETTER TAB ═══════════════════════════════════════
 function renderSetter() {
+  syncTypeButtons('set');
   const seasonVal = document.getElementById('set-season').value;
   const seasons   = resolveSeasons(seasonVal);
 
@@ -4174,7 +4207,7 @@ function renderSetter() {
 
   let activeSids = null;
   if (setterPnumFilter && settersByPlayer[setterPnumFilter]) {
-    const seasonSids = new Set(DATA.sessions.filter(s => seasons.includes(s.season)).map(s => s.id));
+    const seasonSids = new Set(sessionPool().filter(s => seasons.includes(s.season)).map(s => s.id));
     const filtered = [...settersByPlayer[setterPnumFilter].allSids].filter(sid => seasonSids.has(sid));
     activeSids = new Set(filtered);
   }
@@ -4473,29 +4506,103 @@ function renderSetter() {
 
 // ═══════════════════════════ FBSO TAB ════════════════════════════════════════
 function renderFbso() {
-  const grid = document.getElementById('fbso-rotation-grid');
-  grid.innerHTML = [1,2,3,4,5,6].map(r => `
-    <div class="card">
-      <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">Rotation ${r}</div>
-      <div class="stat-grid">
-        <div class="stat-box"><div class="stat-val" style="color:var(--text-dim)">—</div><div class="stat-lbl">FBSO %</div></div>
-        <div class="stat-box"><div class="stat-val" style="color:var(--text-dim)">—</div><div class="stat-lbl">SO %</div></div>
-      </div>
-      <div style="margin-top:10px;font-size:11px;color:var(--text-dim)">
-        Rcv Zone: — &nbsp;|&nbsp; In-Sys: —
-      </div>
-      <div style="margin-top:8px">
-        ${['X5','X6','XP','X1'].map(cc=>`
-          <div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">
-            <span style="color:${COMBO_COLORS[cc]};font-weight:700;font-size:11px;width:24px">${cc}</span>
-            <div style="flex:1;height:4px;background:var(--surface3);border-radius:2px">
-              <div style="width:0%;height:100%;background:${COMBO_COLORS[cc]};border-radius:2px"></div>
-            </div>
-            <span style="font-size:11px;color:var(--text-dim)">—</span>
-          </div>`).join('')}
-      </div>
-    </div>
-  `).join('');
+  const seasonVal = document.getElementById('fbso-season')?.value || 'all';
+  const seasons   = resolveSeasons(seasonVal);
+
+  // Match sessions only, in the selected season(s)
+  const matches = DATA.sessions.filter(s => s.type === 'match' && seasons.includes(s.season));
+  matches.sort((a,b) => (a.date||'').localeCompare(b.date||''));
+
+  // Totals
+  let totalRcv = 0, totalKills = 0;
+  for (const m of matches) { totalRcv += m.fbso_rcv||0; totalKills += m.fbso_kills||0; }
+  const fbsoPct  = totalRcv ? (totalKills/totalRcv*100).toFixed(1) : null;
+
+  // KPI row
+  document.getElementById('fbso-kpi-row').innerHTML = `
+    <div class="card-sm"><div class="card-title">FBSO %</div>
+      <div class="stat-val big" style="color:var(--gold)">${fbsoPct !== null ? fbsoPct+'%' : '—'}</div>
+      <div class="stat-lbl">First Ball Sideout</div></div>
+    <div class="card-sm"><div class="card-title">Rcv Rallies</div>
+      <div class="stat-val big">${fmt(totalRcv)}</div>
+      <div class="stat-lbl">Across ${matches.length} match${matches.length!==1?'es':''}</div></div>
+    <div class="card-sm"><div class="card-title">FBSO Kills</div>
+      <div class="stat-val big" style="color:var(--green)">${fmt(totalKills)}</div>
+      <div class="stat-lbl">First-attack kills</div></div>
+    <div class="card-sm"><div class="card-title">Matches</div>
+      <div class="stat-val big">${matches.length}</div>
+      <div class="stat-lbl">${seasons.length > 1 ? seasons.join(', ') : seasons[0]||'All'}</div></div>
+  `;
+
+  // Per-match bar chart
+  const matchLabels = matches.map(m => {
+    const opp = m.opponent ? m.opponent.replace(/University|College/g,'').trim().split(' ').slice(-1)[0] : 'vs?';
+    const d = m.date ? new Date(m.date) : null;
+    return d ? `${d.toLocaleString('default',{month:'short'})} ${d.getDate()}` : opp;
+  });
+  const matchPcts = matches.map(m => m.fbso_rcv ? +(m.fbso_kills/m.fbso_rcv*100).toFixed(1) : 0);
+
+  makeChart('chart-fbso-match', 'bar', {
+    labels: matchLabels,
+    datasets: [{
+      label: 'FBSO %',
+      data: matchPcts,
+      backgroundColor: matchPcts.map(v => v >= 50 ? GOLD+'cc' : GOLD+'55'),
+      borderColor: GOLD,
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  }, {
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { min:0, max:100, ticks:{ callback: v => v+'%' } },
+      x: { ticks: { font: { size:10 } } }
+    }
+  });
+
+  // Monthly trend chart
+  const byMonth = {};
+  for (const m of matches) {
+    if (!m.date) continue;
+    const mo = m.date.slice(0,7);
+    if (!byMonth[mo]) byMonth[mo] = { rcv:0, kills:0 };
+    byMonth[mo].rcv   += m.fbso_rcv  || 0;
+    byMonth[mo].kills += m.fbso_kills || 0;
+  }
+  const moKeys = Object.keys(byMonth).sort();
+  const moLabels = moKeys.map(k => {
+    const d = new Date(k+'-15');
+    return `${d.toLocaleString('default',{month:'short'})} '${String(d.getFullYear()).slice(2)}`;
+  });
+  makeChart('chart-fbso-trend', 'line', {
+    labels: moLabels,
+    datasets:[{
+      label:'FBSO %',
+      data: moKeys.map(k => byMonth[k].rcv ? +(byMonth[k].kills/byMonth[k].rcv*100).toFixed(1) : null),
+      borderColor: GOLD, backgroundColor: GOLD+'33',
+      tension:0.3, fill:true, pointRadius:5, spanGaps:false,
+    }]
+  }, { scales:{ y:{ min:0, max:100, ticks:{ callback:v=>v+'%' } } } });
+
+  // Match log table
+  const tbody = document.getElementById('fbso-match-log');
+  if (matches.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No match data found — add Volleymetrics DVW files and re-parse.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...matches].reverse().map(m => {
+    const fpct = m.fbso_rcv ? (m.fbso_kills/m.fbso_rcv*100).toFixed(1)+'%' : '—';
+    const color = m.fbso_rcv && (m.fbso_kills/m.fbso_rcv) >= 0.5 ? 'var(--gold)' : 'var(--text)';
+    const opp = m.opponent || '—';
+    return `<tr>
+      <td>${m.date||'—'}</td>
+      <td>${opp}</td>
+      <td style="color:var(--text-muted)">${m.season||'—'}</td>
+      <td class="num">${m.fbso_rcv||0}</td>
+      <td class="num green">${m.fbso_kills||0}</td>
+      <td class="num" style="color:${color};font-weight:600">${fpct}</td>
+    </tr>`;
+  }).join('');
 }
 
 // ─── SORTABLE TABLES (event delegation — works on all dynamically rendered tables) ──
