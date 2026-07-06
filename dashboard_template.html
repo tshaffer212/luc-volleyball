@@ -662,6 +662,7 @@
             <th class="num">Err %</th>
             <th class="num">OGP %</th>
             <th class="num">OoS %</th>
+            <th class="num">Over %</th>
           </tr></thead>
           <tbody id="serve-tbody"></tbody>
         </table>
@@ -677,7 +678,9 @@
             <th class="num">AVG</th>
             <th class="num">Perfect %</th>
             <th class="num">GP %</th>
+            <th class="num">Med %</th>
             <th class="num">OoS %</th>
+            <th class="num">Over %</th>
             <th class="num">Err %</th>
           </tr></thead>
           <tbody id="rcv-tbody"></tbody>
@@ -999,6 +1002,7 @@ function serveMetrics(evals, attempts) {
     err_pct:  +((evals['=']||0)/attempts*100).toFixed(1),
     ogp_pct:  +((evals['+']||0)/attempts*100).toFixed(1),
     oos_pct:  +((evals['-']||0)/attempts*100).toFixed(1),
+    over_pct: +((evals['/']||0)/attempts*100).toFixed(1),
   };
 }
 
@@ -3810,28 +3814,36 @@ function renderServRcv() {
       <td class="num red">${pct(sm?.err_pct)}</td>
       <td class="num">${pct(sm?.ogp_pct)}</td>
       <td class="num" style="color:var(--gold)">${pct(sm?.oos_pct)}</td>
+      <td class="num">${pct(sm?.over_pct)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="empty">No serve data</td></tr>';
 
   // Reception table
   const rcvTbody = document.getElementById('rcv-tbody');
   rcvTbody.innerHTML = players.filter(p => p.rcv_att > 0).sort((a,b)=>b.rcv_att-a.rcv_att).map(p => {
-    const rm = rcvMetrics(p.rcv_ev, p.rcv_att);
+    const rm = rcvMetrics(p.rcv_ev, p.rcv_att, p.rPts, p.rCat);
     return `<tr>
       <td class="gold">#${p.pnum}</td><td>${p.name}</td>
       <td class="num">${p.rcv_att}</td>
       <td class="num gold">${rm?.avg.toFixed(2) || '—'}</td>
       <td class="num green">${pct(rm?.perf_pct)}</td>
       <td class="num">${pct(rm?.gp_pct)}</td>
+      <td class="num">${pct(rm?.med_pct)}</td>
       <td class="num" style="color:var(--gold)">${pct(rm?.oos_pct)}</td>
+      <td class="num">${pct(rm?.over_pct)}</td>
       <td class="num red">${pct(rm?.err_pct)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="8" class="empty">No reception data</td></tr>';
 
-  // Serve breakdown chart
-  const serveLabels = ['Ace (#)', 'Good Press (+)', 'Half (/)', 'Weak (-)', 'Error (=)'];
-  const serveVals   = ['#','+','/','–','='].map(e => teamServeEv[e] || teamServeEv[e==='–'?'-':e] || 0);
-  serveVals[3] = teamServeEv['-']||0;
+  // Serve breakdown chart — include all evals so total matches KPI
+  const serveLabels = ['Ace (#)', 'Good Press (+)', 'Overpass (/)', 'Weak (-)', 'Error (=)'];
+  const serveVals   = [
+    teamServeEv['#']||0,
+    teamServeEv['+']||0,
+    (teamServeEv['/']||0) + (teamServeEv['!']||0),  // combine overpass + any ! evals
+    teamServeEv['-']||0,
+    teamServeEv['=']||0,
+  ];
   makeChart('chart-serve-evals', 'doughnut', {
     labels: serveLabels,
     datasets: [{ data: serveVals,
@@ -3842,13 +3854,20 @@ function renderServRcv() {
     plugins:{legend:{position:'right', labels:{boxWidth:12,font:{size:11}}}}
   });
 
-  // Reception breakdown chart
-  const rcvLabels = ['Perfect (#)', 'Good (+)', 'Half (/)', 'Poor (-)', 'Error (=)'];
-  const rcvVals   = ['#','+','/','-','='].map(e => teamRcvEv[e]||0);
+  // Reception breakdown chart — 6 segments so total matches KPI (includes Medium/!)
+  const rcvLabels = ['Perfect (#)', 'Good (+)', 'Medium (!)', 'OoS (-)', 'Overpass (/)', 'Error (=)'];
+  const rcvVals   = [
+    teamRcvEv['#']||0,
+    teamRcvEv['+']||0,
+    teamRcvEv['!']||0,
+    teamRcvEv['-']||0,
+    teamRcvEv['/']||0,
+    teamRcvEv['=']||0,
+  ];
   makeChart('chart-rcv-evals', 'doughnut', {
     labels: rcvLabels,
     datasets: [{ data: rcvVals,
-      backgroundColor:[GREEN,'#aaaaaa','#777777','#444444',RED],
+      backgroundColor:[GREEN,'#aaaaaa','#888888','#555555','#333333',RED],
       borderColor:'#1a1a1a', borderWidth:2 }]
   }, {
     scales:{x:{display:false},y:{display:false}},
