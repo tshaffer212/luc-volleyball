@@ -1703,13 +1703,22 @@ function renderReports() {
   // ── Session browser ───────────────────────────────────────────────────────
   const listEl = document.getElementById('rpt-session-list');
   listEl.innerHTML = sessions.map(s => {
-    const sel = rptSelected.has(s.id);
-    const d   = s.date ? new Date(s.date+' 12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Unknown';
+    const sel  = rptSelected.has(s.id);
+    const d    = s.date ? new Date(s.date+' 12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Unknown';
+    const isMatch = s.type === 'match';
+    // Clean opponent name: strip "(Men's)" suffix, trim
+    const opp  = isMatch ? (s.opponent||'').replace(/\s*\(Men['’]?s\)/gi,'').trim() || 'Unknown' : null;
+    const side = isMatch ? (s.loyola_side === 'home' ? 'Home' : s.loyola_side === 'away' ? 'Away' : '') : null;
+    const borderCol = sel ? GOLD : (isMatch ? 'var(--maroon)' : 'var(--border)');
     return `<div onclick="toggleRptSession('${s.id}')" style="
-      cursor:pointer; padding:8px 14px; border-radius:8px; border:1px solid ${sel?GOLD:'var(--border)'};
+      cursor:pointer; padding:8px 14px; border-radius:8px; border:1px solid ${borderCol};
       background:${sel?'rgba(254,188,24,0.1)':'var(--surface)'}; user-select:none;
-      display:flex; flex-direction:column; gap:2px; min-width:130px; transition:all 0.15s;">
-      <span style="font-size:13px;font-weight:${sel?'700':'500'};color:${sel?GOLD:'var(--text)'}">${d}</span>
+      display:flex; flex-direction:column; gap:2px; min-width:150px; transition:all 0.15s;">
+      ${isMatch
+        ? `<span style="font-size:13px;font-weight:${sel?'700':'600'};color:${sel?GOLD:'var(--text)'}">vs ${opp}</span>
+           <span style="font-size:10px;color:var(--text-muted)">${d}${side?' · '+side:''}</span>`
+        : `<span style="font-size:13px;font-weight:${sel?'700':'500'};color:${sel?GOLD:'var(--text)'}">${d}</span>`
+      }
       <span style="font-size:10px;color:var(--text-muted)">${s.season}</span>
       <span style="font-size:10px;color:var(--text-dim)">${(s.action_count||0).toLocaleString()} actions</span>
     </div>`;
