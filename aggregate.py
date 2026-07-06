@@ -556,11 +556,16 @@ def main(raw_path, out_path):
                 is_m    = (stype == 'match')
                 pts     = rcv_points(ev_code, is_m)
                 cat     = rcv_category(ev_code, is_m)
+                zone    = action.get('end_zone')
                 for store in (psk, pse, ss):
                     rsk = store['skills'].setdefault('R', empty_skill())
                     rsk['rcv_pts']  = rsk.get('rcv_pts', 0) + pts
                     rsk['rcv_cat']  = rsk.get('rcv_cat', {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0})
                     rsk['rcv_cat'][cat] = rsk['rcv_cat'].get(cat, 0) + 1
+                    # Add pre-scaled pts to the main zone record too
+                    if zone and str(zone) in store.get('rcv_zones', {}):
+                        store['rcv_zones'][str(zone)]['rcv_pts'] = \
+                            store['rcv_zones'][str(zone)].get('rcv_pts', 0) + pts
                 # Tag reception by serve type — technique field on the reception action
                 # encodes the incoming serve type: Q=topspin, M=float, H=jump-float
                 tech = action.get('technique', '')
@@ -570,7 +575,6 @@ def main(raw_path, out_path):
                     tech = 'M' if tech == 'H' else tech
                 if tech in ('Q', 'M'):
                     t_key = 'R' + tech   # 'RQ' or 'RM'
-                    zone  = action.get('end_zone')
                     for store in (psk, pse, ss):
                         rsk_t = store['skills'].setdefault(t_key, empty_skill())
                         rsk_t['attempts'] += 1
@@ -588,6 +592,8 @@ def main(raw_path, out_path):
                             store[zk_typed][str(zone)]['attempts'] += 1
                             store[zk_typed][str(zone)]['evals'][ev_code] = \
                                 store[zk_typed][str(zone)]['evals'].get(ev_code, 0) + 1
+                            store[zk_typed][str(zone)]['rcv_pts'] = \
+                                store[zk_typed][str(zone)].get('rcv_pts', 0) + pts
 
         # ── Season FBSO ───────────────────────────────────────────────────────
         fbso = session_rally[sid]['fbso']

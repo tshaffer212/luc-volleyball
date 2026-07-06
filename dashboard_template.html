@@ -1499,6 +1499,7 @@ function aggregateSessionStats(sessionIds) {
     for (const [z, zd] of Object.entries(src||{})) {
       if (!target[z]) target[z] = { attempts:0, evals:{} };
       target[z].attempts += zd.attempts||0;
+      if (zd.rcv_pts != null) target[z].rcv_pts = (target[z].rcv_pts||0) + zd.rcv_pts;
       for (const [e,n] of Object.entries(zd.evals||{}))
         target[z].evals[e] = (target[z].evals[e]||0) + n;
     }
@@ -1791,6 +1792,7 @@ function buildPlayerGroups(sidFilter) {
       for (const [zk, zv] of Object.entries(ps.rcv_zones||{})) {
         if (!pl.rZones[zk]) pl.rZones[zk] = { attempts:0, evals:{} };
         pl.rZones[zk].attempts += zv.attempts||0;
+        if (zv.rcv_pts != null) pl.rZones[zk].rcv_pts = (pl.rZones[zk].rcv_pts||0) + zv.rcv_pts;
         addEv(pl.rZones[zk].evals, zv.evals);
       }
     }
@@ -1995,11 +1997,6 @@ function buildZoneSheet(groups) {
   const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
   const ZONES = [{ k:'1',label:'Zone 1' }, { k:'6',label:'Zone 6' }, { k:'5',label:'Zone 5' }];
 
-  function zoneAvg(ev, att) {
-    if (!att) return null;
-    return (3*(ev['#']||0) + 2*(ev['+']||0) + 2*(ev['!']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
-  }
-
   function buildTable(players) {
     const PASS_GROUPS = ['OUTSIDES', 'LIBEROS'];
     let rows = '';
@@ -2009,24 +2006,27 @@ function buildZoneSheet(groups) {
       if (!relevant.length) continue;
       rows += `<tr><td colspan="${2+ZONES.length*2+2}" style="${GH}">${gName}</td></tr>`;
       for (const p of relevant) {
-        let totalAtt=0, totalEv={};
+        // Build a merged zone record for the total column
+        const totalZd = { attempts:0, evals:{}, rcv_pts: null };
         for (const z of ZONES) {
           const zd = p.rZones[z.k] || {};
-          totalAtt += zd.attempts||0;
-          for (const [e,n] of Object.entries(zd.evals||{})) totalEv[e]=(totalEv[e]||0)+n;
+          totalZd.attempts += zd.attempts||0;
+          if (zd.rcv_pts != null) totalZd.rcv_pts = (totalZd.rcv_pts||0) + zd.rcv_pts;
+          for (const [e,n] of Object.entries(zd.evals||{})) totalZd.evals[e]=(totalZd.evals[e]||0)+n;
         }
-        const totAvg = zoneAvg(totalEv, totalAtt);
+        if (totalZd.rcv_pts === null) delete totalZd.rcv_pts;
+        const totAvg = zoneAvgFromRecord(totalZd);
         rows += `<tr>
           <td style="color:var(--gold);font-weight:700;font-size:11px">#${p.pnum}</td>
           <td style="white-space:nowrap">${p.name}</td>
           ${ZONES.map(z => {
             const zd = p.rZones[z.k] || {};
             const za = zd.attempts||0;
-            const zavg = zoneAvg(zd.evals||{}, za);
-            return `<td class="num">${za||'—'}</td><td class="num" style="color:${zavg!==null?zavg>2?'var(--green)':zavg<1?'var(--red)':'var(--text)':'var(--text-dim)'}">${zavg!==null?zavg.toFixed(2):'—'}</td>`;
+            const zavg = zoneAvgFromRecord(zd);
+            return `<td class="num">${za||'—'}</td><td class="num" style="color:${zavg!==null?zavg>2.5?'var(--green)':zavg<1.5?'var(--red)':'var(--text)':'var(--text-dim)'}">${zavg!==null?zavg.toFixed(2):'—'}</td>`;
           }).join('')}
-          <td class="num"><strong>${totalAtt||'—'}</strong></td>
-          <td class="num" style="color:${totAvg!==null?totAvg>2?'var(--green)':totAvg<1?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
+          <td class="num"><strong>${totalZd.attempts||'—'}</strong></td>
+          <td class="num" style="color:${totAvg!==null?totAvg>2.5?'var(--green)':totAvg<1.5?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
         </tr>`;
       }
     }
@@ -4063,6 +4063,14 @@ function renderRcvDonut(chartId, teamRcvEv) {
 const ZONE_LABELS_SR = { '1':'Zone 1 (Back Right)', '5':'Zone 5 (Back Left)', '6':'Zone 6 (Back Middle)' };
 const ZONE_COLORS_SR = { '1': MAROON, '5': '#888888', '6': GOLD };
 
+function zoneAvgFromRecord(zd) {
+  if (!zd?.attempts) return null;
+  // Use pre-scaled rcv_pts when available (correct 4-pt match / 3-pt practice weighting)
+  if (zd.rcv_pts != null) return zd.rcv_pts / zd.attempts;
+  const ev = zd.evals||{}, att = zd.attempts;
+  return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
+}
+
 function renderZoneTeamPanel(zones, containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -4074,10 +4082,10 @@ function renderZoneTeamPanel(zones, containerId) {
   el.innerHTML = ['1','5','6'].map(z => {
     const zd = zones[z]; if (!zd?.attempts) return '';
     const ev = zd.evals||{}, att = zd.attempts;
-    const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
-    const gp  = ((ev['#']||0)+(ev['+'||0]||ev['+'||0]||ev['+']||0)+(ev['/']||0))/att*100;
+    const avg = zoneAvgFromRecord(zd);
+    const gp  = ((ev['#']||0)+(ev['+']||0)+(ev['/']||0))/att*100;
     const err = (ev['=']||0)/att*100;
-    const bar = Math.min(100,(avg/3)*100);
+    const bar = Math.min(100,(avg/4)*100);  // 4-pt max for match scale
     return `<div style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <span style="font-size:12px;font-weight:700;color:${ZONE_COLORS_SR[z]}">${ZONE_LABELS_SR[z]}</span>
@@ -4107,8 +4115,9 @@ function renderZonePlayerTbody(activeSids, seasons, group, zoneKey, tbodyId) {
     if (!pzDisplay[pid]) pzDisplay[pid] = { pnum, name, z1a:0,z1s:0, z5a:0,z5s:0, z6a:0,z6s:0 };
     const p = pzDisplay[pid];
     for (const [z, zd] of Object.entries(ps[zoneKey]||{})) {
-      const att = zd.attempts||0, ev = zd.evals||{};
-      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0));
+      const att = zd.attempts||0;
+      const wgt = zd.rcv_pts != null ? zd.rcv_pts
+        : (()=>{ const ev=zd.evals||{}; return 3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0); })();
       if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
       if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
       if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
@@ -4238,8 +4247,9 @@ function renderServRcv() {
             if (!sids?.size) return null;
             const { skills } = aggregateSessionStats(sids);
             const R = skills['RM']; if (!R?.attempts) return null;
-            const ev = R.evals||{};
-            return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+            const avg = R.rcv_pts != null ? R.rcv_pts / R.attempts
+              : (()=>{ const ev=R.evals||{}; return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts; })();
+            return +avg.toFixed(3);
           }),
           borderColor:'#888888', backgroundColor:'#88888833',
           tension:0.3, fill:false, pointRadius:5, spanGaps:false },
@@ -4247,8 +4257,9 @@ function renderServRcv() {
             if (!sids?.size) return null;
             const { skills } = aggregateSessionStats(sids);
             const R = skills['RQ']; if (!R?.attempts) return null;
-            const ev = R.evals||{};
-            return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+            const avg = R.rcv_pts != null ? R.rcv_pts / R.attempts
+              : (()=>{ const ev=R.evals||{}; return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts; })();
+            return +avg.toFixed(3);
           }),
           borderColor: GOLD, backgroundColor: GOLD+'33',
           tension:0.3, fill:false, pointRadius:5, spanGaps:false },
@@ -4335,8 +4346,9 @@ function renderServRcv() {
         if (!sids?.size) return null;
         const { skills } = aggregateSessionStats(sids);
         const R = skills[rKeyForTrend]; if (!R?.attempts) return null;
-        const ev = R.evals||{};
-        return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+        const avg = R.rcv_pts != null ? R.rcv_pts / R.attempts
+          : (()=>{ const ev=R.evals||{}; return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts; })();
+        return +avg.toFixed(3);
       }),
       borderColor: GOLD, backgroundColor: GOLD+'33',
       tension:0.3, fill:true, pointRadius:5, spanGaps:false,
@@ -4379,8 +4391,9 @@ function renderServRcv() {
     const p = pzDisplay[pid];
     for (const [z, zd] of Object.entries(ps[zKey]||{})) {
       const att = zd.attempts||0;
-      const ev  = zd.evals||{};
-      const wgt = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0));
+      // Use rcv_pts when available for correct match/practice scale weighting
+      const wgt = zd.rcv_pts != null ? zd.rcv_pts
+        : (()=>{ const ev=zd.evals||{}; return 3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0); })();
       if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
       if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
       if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
@@ -4422,13 +4435,8 @@ function renderServRcv() {
     const zData = agg[zKey] || {};
     ['1','5','6'].forEach(z => {
       const zd = zData[z];
-      if (zd?.attempts) {
-        const ev = zd.evals||{};
-        const avg = (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/zd.attempts;
-        zoneMonthData[z].push(+avg.toFixed(3));
-      } else {
-        zoneMonthData[z].push(null);
-      }
+      const avg = zoneAvgFromRecord(zd);
+      zoneMonthData[z].push(avg != null ? +avg.toFixed(3) : null);
     });
   }
   makeChart('chart-zone-trend', 'line', {
