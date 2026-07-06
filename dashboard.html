@@ -4281,16 +4281,22 @@ function renderServRcv() {
     const players = buildSrPlayerStats(activeSids, seasons, group, sKey, rKey);
 
     const teamServeEv = {}, teamRcvEv = {};
-    let teamServeAtt = 0, teamRcvAtt = 0;
+    let teamServeAtt = 0, teamRcvAtt = 0, teamRPts = null, teamRCat = null;
     for (const p of players) {
       teamServeAtt += p.serve_att;
       teamRcvAtt   += p.rcv_att;
+      if (p.rPts != null) teamRPts = (teamRPts||0) + p.rPts;
+      if (p.rCat) {
+        if (!teamRCat) teamRCat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
+        for (const c of ['perf','good','med','oos','over','err'])
+          teamRCat[c] = (teamRCat[c]||0) + (p.rCat[c]||0);
+      }
       for (const [e,n] of Object.entries(p.serve_ev)) teamServeEv[e] = (teamServeEv[e]||0)+n;
       for (const [e,n] of Object.entries(p.rcv_ev))   teamRcvEv[e]   = (teamRcvEv[e]||0)+n;
     }
 
     const tmS = serveMetrics(teamServeEv, teamServeAtt);
-    const tmR = rcvMetrics(teamRcvEv, teamRcvAtt);
+    const tmR = rcvMetrics(teamRcvEv, teamRcvAtt, teamRPts, teamRCat);
 
     const serveLabel =
       srServeType === 'float'   ? 'Float Serve (SM)' :
