@@ -183,14 +183,23 @@ def infer_coding_version(season_label):
 # ─── Section parsers ───────────────────────────────────────────────────────────
 
 def parse_date(raw):
-    """Parse date string — tries DD/MM/YYYY (DataVolley standard) then MM/DD/YYYY (Volleymetrics export)."""
+    """Parse date string — tries DD/MM/YYYY (DataVolley standard) then MM/DD/YYYY (Volleymetrics export).
+    If the first successful parse yields a future date, the alternate format is tried instead."""
     raw = raw.strip()
+    today = datetime.today().strftime('%Y-%m-%d')
+    candidates = []
     for fmt in ('%d/%m/%Y', '%m/%d/%Y'):
         try:
-            return datetime.strptime(raw, fmt).strftime('%Y-%m-%d')
+            candidates.append(datetime.strptime(raw, fmt).strftime('%Y-%m-%d'))
         except ValueError:
             pass
-    return raw or None
+    if not candidates:
+        return raw or None
+    # Prefer any candidate that is not in the future; fall back to first if all are future
+    for c in candidates:
+        if c <= today:
+            return c
+    return candidates[0]
 
 
 def parse_players(lines):

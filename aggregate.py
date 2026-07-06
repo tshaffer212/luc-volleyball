@@ -49,6 +49,26 @@ def empty_skill():
 def empty_zone():
     return {'attempts': 0, 'evals': {e: 0 for e in EVALS}}
 
+def rcv_points(ev_code, is_match=False):
+    """Return pass-rating points for an evaluation code.
+    Match (4-pt):    #=4, +=3, !=2, -=1, /=0.5, ==0
+    Practice (3-pt): #=3, +=2, -=1, /=0.5, ==0  (! not used)
+    """
+    if is_match:
+        return {'#': 4, '+': 3, '!': 2, '-': 1, '/': 0.5}.get(ev_code, 0)
+    else:
+        return {'#': 3, '+': 2, '-': 1, '/': 0.5}.get(ev_code, 0)
+
+def rcv_category(ev_code, is_match=False):
+    """Map an eval code to a pass category.
+    Match:    #=perf(4pt), +=good(3pt), !=med(2pt), -=oos(1pt), /=over, ==err
+    Practice: #=perf(3pt), +=good(2pt), -=oos(1pt), /=over, ==err  (no med)
+    """
+    if is_match:
+        return {'#': 'perf', '+': 'good', '!': 'med', '-': 'oos', '/': 'over', '=': 'err'}.get(ev_code, 'err')
+    else:
+        return {'#': 'perf', '+': 'good', '-': 'oos', '/': 'over', '=': 'err'}.get(ev_code, 'err')
+
 def add_action(skill_stats, action, zone_stats=None):
     s = action.get('skill_code','')
     if s not in ('S','R','E','A','B','D','F','O'):
@@ -77,20 +97,36 @@ def add_action(skill_stats, action, zone_stats=None):
             zone_stats[zk]['attempts'] += 1
             zone_stats[zk]['evals'][ev] = zone_stats[zk]['evals'].get(ev, 0) + 1
 
-def derive_zones(zone_stats):
+def derive_zones(zone_stats, is_match=False):
     """Add rcv AVG, GP%, err% to each zone bucket (in-place)."""
     for zs in zone_stats.values():
         att = zs['attempts']
         ev  = zs['evals']
         if att:
-            avg = (3*(ev.get('#',0)) + 2*(ev.get('+',0)) + (ev.get('-',0)) + 0.5*(ev.get('/',0))) / att
-            gp  = (ev.get('#',0) + ev.get('+',0) + ev.get('/',0)) / att * 100
-            err = ev.get('=',0) / att * 100
+            if is_match:
+                avg  = (4*(ev.get('#',0)) + 3*(ev.get('+',0)) + 2*(ev.get('!',0)) + (ev.get('-',0)) + 0.5*(ev.get('/',0))) / att
+                good = ev.get('#',0) + ev.get('+',0)
+                med  = ev.get('!',0)
+            else:
+                avg  = (3*(ev.get('#',0)) + 2*(ev.get('+',0)) + (ev.get('-',0)) + 0.5*(ev.get('/',0))) / att
+                good = ev.get('#',0)
+                med  = ev.get('+',0)
+            oos  = ev.get('-',0)
+            over = ev.get('/',0)
+            err  = ev.get('=',0)
+            gp   = good / att * 100
+            med_pct  = med  / att * 100
+            oos_pct  = oos  / att * 100
+            over_pct = over / att * 100
+            err_pct  = err  / att * 100
         else:
-            avg = gp = err = 0
-        zs['avg']     = round(avg, 3)
-        zs['gp_pct']  = round(gp, 1)
-        zs['err_pct'] = round(err, 1)
+            avg = gp = med_pct = oos_pct = over_pct = err_pct = 0
+        zs['avg']      = round(avg, 3)
+        zs['gp_pct']   = round(gp, 1)
+        zs['med_pct']  = round(med_pct, 1)
+        zs['oos_pct']  = round(oos_pct, 1)
+        zs['over_pct'] = round(over_pct, 1)
+        zs['err_pct']  = round(err_pct, 1)
 
 VALID_K_CODES = {'K1', 'K2', 'K7'}
 
@@ -503,6 +539,20 @@ def main(raw_path, out_path):
             pse['actions'] += 1
             add_action(pse['skills'], action, pse['rcv_zones'])
 
+            # Accumulate pre-scaled pass points and category counts so the
+            # dashboard can compute correct averages and breakdowns across
+            # mixed match/practice sessions.
+            if action.get('skill_code') == 'R':
+                ev_code = action.get('evaluation', '')
+                is_m    = (stype == 'match')
+                pts     = rcv_points(ev_code, is_m)
+                cat     = rcv_category(ev_code, is_m)
+                for store in (psk, pse, ss):
+                    rsk = store['skills'].setdefault('R', empty_skill())
+                    rsk['rcv_pts']  = rsk.get('rcv_pts', 0) + pts
+                    rsk['rcv_cat']  = rsk.get('rcv_cat', {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0})
+                    rsk['rcv_cat'][cat] = rsk['rcv_cat'].get(cat, 0) + 1
+
         # ── Season FBSO ───────────────────────────────────────────────────────
         fbso = session_rally[sid]['fbso']
         ss['fbso_rcv']   += fbso['rcv_rallies']
@@ -526,17 +576,20 @@ def main(raw_path, out_path):
             pse['dig_kill_rallies']  = pse.get('dig_kill_rallies',  0) + dstats['dig_kill_rallies']
             pse['dig_total_rallies'] = pse.get('dig_total_rallies', 0) + dstats['dig_rallies']
 
+    # Build sid → is_match lookup for zone derivation
+    sid_is_match = {f"{s['season']}|{s['file']}": (s.get('type') == 'match') for s in sessions_raw}
+
     # Derive metrics
     for ss in season_stats.values():
         derive(ss['skills'])
-        derive_zones(ss['rcv_zones'])
-    for ps in player_session.values():
+        derive_zones(ss['rcv_zones'])   # season zones mix types; use neutral formula
+    for (pn, sid), ps in player_session.items():
         derive(ps['skills'])
-        derive_zones(ps['rcv_zones'])
+        derive_zones(ps['rcv_zones'], is_match=sid_is_match.get(sid, False))
     for pse in player_season.values():
         pse['sessions'] = len(pse['sessions'])
         derive(pse['skills'])
-        derive_zones(pse['rcv_zones'])
+        derive_zones(pse['rcv_zones'])  # season zones mix types; use neutral formula
 
     # Serialize dicts
     ps_out  = {f"{pn}|{sid}": {'player_num':pn,'session_id':sid,**v}

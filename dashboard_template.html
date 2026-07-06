@@ -1002,26 +1002,47 @@ function serveMetrics(evals, attempts) {
   };
 }
 
-// Derive reception stats from eval counts (weight system: #=3P, +=2P, -=1P, /=0.5P overpass, ==0P error)
-function rcvMetrics(evals, attempts) {
+// Derive reception stats. Uses precomputed rcv_pts (avg) and rcv_cat (category %) when available.
+// Match (4-pt):    #=perf, +=good, !=med, -=oos, /=over, ==err
+// Practice (3-pt): #=perf, +=good, -=oos, /=over, ==err  (no med)
+function rcvMetrics(evals, attempts, rcv_pts, rcv_cat) {
   if (!evals || !attempts) return null;
-  const perf  = evals['#']||0;
-  const good  = evals['+']||0;
-  const poor  = evals['-']||0;
-  const over  = evals['/']||0;
-  const err   = evals['=']||0;
-  const avg   = (3*perf + 2*good + 1*poor + 0.5*over) / attempts;  // overpass = 0.5P
+  let avg;
+  if (rcv_pts != null) {
+    avg = rcv_pts / attempts;
+  } else {
+    const perf = evals['#']||0, good = evals['+']||0, poor = evals['-']||0, over = evals['/']||0;
+    avg = (3*perf + 2*good + poor + 0.5*over) / attempts;
+  }
+  let perf_pct, gp_pct, med_pct, oos_pct, over_pct, err_pct;
+  if (rcv_cat) {
+    perf_pct = (rcv_cat.perf||0) / attempts * 100;
+    gp_pct   = (rcv_cat.good||0) / attempts * 100;
+    med_pct  = (rcv_cat.med ||0) / attempts * 100;
+    oos_pct  = (rcv_cat.oos ||0) / attempts * 100;
+    over_pct = (rcv_cat.over||0) / attempts * 100;
+    err_pct  = (rcv_cat.err ||0) / attempts * 100;
+  } else {
+    // Fallback: practice mapping
+    perf_pct = (evals['#']||0) / attempts * 100;
+    gp_pct   = (evals['+']||0) / attempts * 100;
+    med_pct  = 0;
+    oos_pct  = (evals['-']||0) / attempts * 100;
+    over_pct = (evals['/']||0) / attempts * 100;
+    err_pct  = (evals['=']||0) / attempts * 100;
+  }
   return {
     attempts,
     avg:      +avg.toFixed(3),
-    perf_pct: +(perf/attempts*100).toFixed(1),
-    gp_pct:   +((perf+good)/attempts*100).toFixed(1),
-    oos_pct:  +(poor/attempts*100).toFixed(1),
-    over_pct: +(over/attempts*100).toFixed(1),
-    err_pct:  +(err/attempts*100).toFixed(1),
+    perf_pct: +perf_pct.toFixed(1),
+    gp_pct:   +gp_pct.toFixed(1),
+    med_pct:  +med_pct.toFixed(1),
+    oos_pct:  +oos_pct.toFixed(1),
+    over_pct: +over_pct.toFixed(1),
+    err_pct:  +err_pct.toFixed(1),
   };
 }
-const EVAL_NAMES = {'#':'Kill/Ace/Perfect', '+':'Positive', '/':'Half-Positive', '-':'Negative', '=':'Error', '!':'Overpass'};
+const EVAL_NAMES = {'#':'Perfect', '+':'Good/Positive', '!':'Medium', '-':'OOS/Negative', '/':'Overpass', '=':'Error'};
 const POS_NAMES  = {'1':'Libero', '2':'Outside', '3':'Opposite', '4':'Middle', '5':'Setter', '6':'Def. Spec'};
 const SEASONS_SORTED = ['Fall 2025','Spring 2025','Fall 2026','Spring 2026'];
 
@@ -1215,10 +1236,28 @@ function sessionPool() {
   return DATA.sessions.filter(s => s.type === sessionTypeFilter);
 }
 
-// Update type filter and re-render the current tab
+// Update type filter and re-render the current tab.
+// Always repopulates period dropdowns first so stale options (months/weeks with
+// no data for the new type) are removed before rendering.
 function setSessionType(type, renderFn) {
   sessionTypeFilter = type;
+  populateAtkPeriod();
+  populateSrPeriod();
+  populateSetPeriod();
   renderFn();
+}
+
+// Returns true and renders a "no data" overlay if activeSids is an empty Set.
+// Pass the canvas IDs that should be blanked out.
+function showEmptyState(activeSids, kpiEl, msg) {
+  if (activeSids === null || activeSids.size > 0) return false;
+  const label = msg || 'No sessions match the current filters.';
+  // Blank KPI row
+  if (kpiEl) {
+    const el = document.getElementById(kpiEl);
+    if (el) el.innerHTML = `<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--text-muted);font-size:13px">${label}</div>`;
+  }
+  return true;
 }
 
 // Sync type filter button active states for a given tab prefix ('atk'|'sr'|'set')
@@ -1256,6 +1295,15 @@ function aggregateSessionStats(sessionIds) {
       skills[sk].attempts += sv.attempts || 0;
       for (const [e,n] of Object.entries(sv.evals || {}))
         skills[sk].evals[e] = (skills[sk].evals[e]||0) + n;
+      // carry pre-scaled pass points and category counts for R
+      if (sk === 'R') {
+        if (sv.rcv_pts != null) skills['R'].rcv_pts = (skills['R'].rcv_pts||0) + sv.rcv_pts;
+        if (sv.rcv_cat) {
+          if (!skills['R'].rcv_cat) skills['R'].rcv_cat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
+          for (const c of ['perf','good','med','oos','over','err'])
+            skills['R'].rcv_cat[c] = (skills['R'].rcv_cat[c]||0) + (sv.rcv_cat[c]||0);
+        }
+      }
       // carry combos for A
       if (sk === 'A' && sv.combos) {
         if (!skills['A'].combos) skills['A'].combos = {};
@@ -1372,6 +1420,7 @@ function renderReports() {
   });
   const rcvAvg = monthMetric(sk => {
     const R = sk['R']; if (!R?.attempts) return null;
+    if (R.rcv_pts != null) return +(R.rcv_pts / R.attempts).toFixed(3);
     const ev = R.evals||{};
     return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
   });
@@ -1520,6 +1569,12 @@ function buildPlayerGroups(sidFilter) {
     if (sk.S) { pl.sAtt += sk.S.attempts||0; addEv(pl.sEv, sk.S.evals); }
     if (sk.R) {
       pl.rAtt += sk.R.attempts||0; addEv(pl.rEv, sk.R.evals);
+      if (sk.R.rcv_pts != null) pl.rPts = (pl.rPts||0) + sk.R.rcv_pts;
+      if (sk.R.rcv_cat) {
+        if (!pl.rCat) pl.rCat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
+        for (const c of ['perf','good','med','oos','over','err'])
+          pl.rCat[c] = (pl.rCat[c]||0) + (sk.R.rcv_cat[c]||0);
+      }
       for (const [zk, zv] of Object.entries(ps.rcv_zones||{})) {
         if (!pl.rZones[zk]) pl.rZones[zk] = { attempts:0, evals:{} };
         pl.rZones[zk].attempts += zv.attempts||0;
@@ -1569,9 +1624,11 @@ function xint(n) {
   if (!n) return '—';
   return String(n);
 }
-// Reception AVG: #=3P, +=2P, -=1P, /=0.5P (overpass), ==0P
-function rcvAvg(ev, att) {
+// Reception AVG: uses pre-scaled rcv_pts (match=4pt, practice=3pt scale) when available.
+// Falls back to practice-scale formula.
+function rcvAvg(ev, att, rcv_pts) {
   if (!att) return null;
+  if (rcv_pts != null) return rcv_pts / att;
   return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
 }
 // Serve AVG: #=3P (ace), +=2P, /=2P (overpass good for server), -=1P, ==0P
@@ -1597,11 +1654,17 @@ function buildServeRcvSheet(groups) {
   const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
 
   function totalize(players, sk) {
-    const ev = {}, pl = { pnum:'*', name:'GROUP TOTAL', sEv:{}, sAtt:0, rEv:{}, rAtt:0 };
+    const ev = {}, pl = { pnum:'*', name:'GROUP TOTAL', sEv:{}, sAtt:0, rEv:{}, rAtt:0, rPts:null, rCat:null };
     for (const p of players) {
       pl.sAtt += p.sAtt; pl.rAtt += p.rAtt;
       for (const [e,n] of Object.entries(p.sEv)) pl.sEv[e] = (pl.sEv[e]||0)+n;
       for (const [e,n] of Object.entries(p.rEv)) pl.rEv[e] = (pl.rEv[e]||0)+n;
+      if (p.rPts != null) pl.rPts = (pl.rPts||0) + p.rPts;
+      if (p.rCat) {
+        if (!pl.rCat) pl.rCat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
+        for (const c of ['perf','good','med','oos','over','err'])
+          pl.rCat[c] = (pl.rCat[c]||0) + (p.rCat[c]||0);
+      }
     }
     return pl;
   }
@@ -1632,27 +1695,24 @@ function buildServeRcvSheet(groups) {
 
   function rRow(p, bold=false) {
     const ev = p.rEv, att = p.rAtt;
-    const perf=ev['#']||0, tp=ev['+'||0]||ev['+']||0, op=ev['/']||0, poor=ev['-']||0, err=ev['='||0]||ev['=']||0;
-    const avg = rcvAvg(ev, att);
+    const m = rcvMetrics(ev, att, p.rPts, p.rCat);
+    const avg = m ? m.avg : null;
     const B = bold ? 'font-weight:700;' : '';
     const ns  = `style="${B}text-align:right;font-variant-numeric:tabular-nums"`;
     const gns = `style="${B}text-align:right;color:var(--green)"`;
+    const mns = `style="${B}text-align:right;color:var(--gold)"`;
     const rns = `style="${B}text-align:right;color:var(--red)"`;
-    const ans = `style="${B}text-align:right;color:var(--gold)"`;
-    if (!att) return `<td colspan="12" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
+    const dns = `style="${B}text-align:right;color:var(--text-dim)"`;
+    if (!att) return `<td colspan="8" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
     return `
       <td ${ns}>${att}</td>
-      <td ${ans}>${avg!==null?avg.toFixed(2):'—'}</td>
-      <td ${gns}>${perf||'—'}</td>
-      <td ${ns}>${tp||'—'}</td>
-      <td ${ns}>${op||'—'}</td>
-      <td ${ns}>${poor||'—'}</td>
-      <td ${rns}>${err||'—'}</td>
-      <td ${gns}>${att?xpct(perf/att):'—'}</td>
-      <td ${ns}>${att?xpct(tp/att):'—'}</td>
-      <td ${ns}>${att?xpct(op/att):'—'}</td>
-      <td ${ns}>${att?xpct(poor/att):'—'}</td>
-      <td ${rns}>${att?xpct(err/att):'—'}</td>`;
+      <td ${mns}>${avg!==null?avg.toFixed(2):'—'}</td>
+      <td ${gns}>${m?xpct(m.perf_pct/100):'—'}</td>
+      <td ${gns}>${m?xpct(m.gp_pct/100):'—'}</td>
+      <td ${mns}>${m&&m.med_pct?xpct(m.med_pct/100):'—'}</td>
+      <td ${rns}>${m?xpct(m.oos_pct/100):'—'}</td>
+      <td ${dns}>${m?xpct(m.over_pct/100):'—'}</td>
+      <td ${rns}>${m?xpct(m.err_pct/100):'—'}</td>`;
   }
 
   const allPlayers = POS_GROUP_ORDER.flatMap(g => groups[g]||[]);
@@ -1702,7 +1762,7 @@ function buildServeRcvSheet(groups) {
   }
 
   const sCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Ace</th><th class="num">Err</th><th class="num">2P</th><th class="num">1P</th><th class="num">OP</th><th class="num">Ace%</th><th class="num">Err%</th><th class="num">OGP%</th><th class="num">OoS%</th>`;
-  const rCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Perf</th><th class="num">2P</th><th class="num">1P</th><th class="num">OP</th><th class="num">Err</th><th class="num">Perf%</th><th class="num">2P%</th><th class="num">1P%</th><th class="num">OP%</th><th class="num">Err%</th>`;
+  const rCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Good%</th><th class="num">Med%</th><th class="num">OOS%</th><th class="num">Over%</th><th class="num">Err%</th>`;
 
   return `<div style="display:flex;flex-direction:column;gap:20px">
     <div style="font-size:11px;color:var(--text-dim);padding:4px 0">
@@ -1724,7 +1784,7 @@ function buildZoneSheet(groups) {
 
   function zoneAvg(ev, att) {
     if (!att) return null;
-    return (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
+    return (3*(ev['#']||0) + 2*(ev['+']||0) + 2*(ev['!']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
   }
 
   function buildTable(players) {
@@ -2244,7 +2304,7 @@ function renderRptDetail() {
   const A=skills['A']||{}, R=skills['R']||{}, S=skills['S']||{};
   const Aatt=A.attempts||0, Ratt=R.attempts||0, Satt=S.attempts||0;
   const atkEffVal = Aatt ? ((((A.evals||{})['#']||0)-((A.evals||{})['=']||0))/Aatt*100).toFixed(1)+'%' : '—';
-  const rcvAvgVal = Ratt ? rcvAvg(R.evals||{}, Ratt).toFixed(2) : '—';
+  const rcvAvgVal = Ratt ? rcvAvg(R.evals||{}, Ratt, R.rcv_pts).toFixed(2) : '—';
   const aceVal    = Satt ? (((S.evals||{})['#']||0)/Satt*100).toFixed(1)+'%' : '—';
   const errVal    = Satt ? (((S.evals||{})['=']||0)/Satt*100).toFixed(1)+'%' : '—';
 
@@ -3243,13 +3303,14 @@ function getComboStats(seasons, group) {
 // ── Shared period-filter helpers ─────────────────────────────────────────────
 
 // Populate a period dropdown (Month / Week optgroups) from the selected seasons.
+// Uses sessionPool() so options only reflect the active session type filter.
 function populatePeriodDropdown(seasonVal, elId) {
   const seasons = resolveSeasons(seasonVal);
   const el = document.getElementById(elId);
   if (!el) return;
   const curVal = el.value;
   el.innerHTML = '<option value="all">All Season</option>';
-  const sessions = DATA.sessions.filter(s => seasons.includes(s.season) && s.date);
+  const sessions = sessionPool().filter(s => seasons.includes(s.season) && s.date);
 
   const monthKeys = [...new Set(sessions.map(s => s.date.slice(0,7)))].sort();
   if (monthKeys.length) {
@@ -3374,6 +3435,7 @@ function renderAttack() {
 
   // Build session ID set for the selected period (also applies type filter)
   const activeSids = buildPeriodSids(seasons, periodVal);
+  if (showEmptyState(activeSids, 'atk-kpi-row')) return;
 
   const combos = activeSids
     ? getComboStatsBySessions(activeSids, group)
@@ -3456,6 +3518,7 @@ function renderAttack() {
     const posGrp = playerInGroup(pnum, season, 'pins') ? 'pins'
                  : playerInGroup(pnum, season, 'middles') ? 'middles' : 'other';
     const existing = playerData.find(p => p.pnum === pnum);
+    const aSkill = psEntry.skills.A;
     if (existing) {
       for (const cc of allCodes) {
         const cv = psEntry.skills?.A?.combos?.[cc];
@@ -3465,9 +3528,15 @@ function renderAttack() {
         existing.combos[cc].kills    += cv.evals?.['#']||0;
         existing.combos[cc].errors   += cv.evals?.['=']||0;
       }
-      existing.totalAtt += psEntry.skills.A.attempts||0;
+      existing.totalAtt    += aSkill.attempts||0;
+      existing.totalKills  += aSkill.evals?.['#']||0;
+      existing.totalErrors += aSkill.evals?.['=']||0;
     } else {
-      const entry = { pnum, name, season, posGrp, totalAtt: psEntry.skills?.A?.attempts||0, combos: {} };
+      const entry = { pnum, name, season, posGrp,
+        totalAtt:    aSkill.attempts||0,
+        totalKills:  aSkill.evals?.['#']||0,
+        totalErrors: aSkill.evals?.['=']||0,
+        combos: {} };
       for (const cc of allCodes) {
         const cv = psEntry.skills?.A?.combos?.[cc];
         if (cv) entry.combos[cc] = { attempts: cv.attempts||0, kills: cv.evals?.['#']||0, errors: cv.evals?.['=']||0 };
@@ -3496,16 +3565,32 @@ function renderAttack() {
   }
   playerData.sort((a,b) => b.totalAtt - a.totalAtt);
 
-  // Build a position-filtered table for a given set of players and combo codes
+  // Build a position-filtered table for a given set of players and combo codes.
+  // Automatically appends an "Other" column for any attacks not covered by the
+  // predefined combo codes (e.g. Volleymetrics-only codes like XM, VP, V8, PP).
   function buildAtkPlayerTable(data, codes, title) {
     if (!data.length || !codes.length) return '';
-    const colSpan = 3 + codes.length;
+    // Compute "other" attacks (totalAtt minus all known combos) per player
+    const otherAtts = data.map(p => {
+      const known = codes.reduce((s, cc) => s + (p.combos[cc]?.attempts || 0), 0);
+      return Math.max(0, p.totalAtt - known);
+    });
+    const hasOther = otherAtts.some(v => v > 0);
+    const colSpan = 3 + codes.length + (hasOther ? 1 : 0);
     const headerCells = codes.map(cc => `<th class="num" title="${cc}"
       style="${atkCodeSel.has(cc) ? 'background:'+MAROON+'55;color:var(--gold)' : ''}">${COMBO_NAMES[cc]||cc}</th>`).join('');
-    const rows = data.map(p => `<tr>
+    const otherHeader = hasOther ? `<th class="num" title="Uncategorised combo codes">Other</th>` : '';
+    const rows = data.map((p, idx) => {
+      let totalStatVal = '';
+      if (p.totalAtt) {
+        if (metric === 'kill_pct')    totalStatVal = `<span style="color:var(--green);margin-right:4px">${(p.totalKills/p.totalAtt*100).toFixed(0)}%</span>`;
+        else if (metric === 'efficiency') totalStatVal = `<span style="color:var(--gold);margin-right:4px">${((p.totalKills-p.totalErrors)/p.totalAtt*100).toFixed(0)}%</span>`;
+        else if (metric === 'error_pct')  totalStatVal = `<span style="color:var(--red);margin-right:4px">${(p.totalErrors/p.totalAtt*100).toFixed(0)}%</span>`;
+      }
+      return `<tr>
       <td class="gold">#${p.pnum}</td>
       <td>${p.name}</td>
-      <td class="num">${p.totalAtt}</td>
+      <td class="num">${totalStatVal}<span style="font-size:11px;color:var(--text-dim)">${p.totalAtt}</span></td>
       ${codes.map(cc => {
         const cv = p.combos[cc];
         const hiCol = atkCodeSel.has(cc) ? 'background:'+MAROON+'22;' : '';
@@ -3523,12 +3608,16 @@ function renderAttack() {
         }
         return `<td class="num" style="${hiCol}color:${color}" title="${cv.attempts} att">${val}<span style="font-size:10px;color:var(--text-dim);margin-left:3px">${cv.attempts}</span></td>`;
       }).join('')}
-    </tr>`).join('');
+      ${hasOther ? (otherAtts[idx] > 0
+        ? `<td class="num" style="color:var(--text-dim)" title="Attacks using combo codes not mapped to a column">${otherAtts[idx]}</td>`
+        : `<td class="num" style="color:var(--text-dim)">—</td>`) : ''}
+    </tr>`;
+    }).join('');
     return `<div style="margin-bottom:20px">
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">${title}</div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>#</th><th>Player</th><th class="num">Total Att</th>${headerCells}</tr></thead>
+          <thead><tr><th>#</th><th>Player</th><th class="num">Total Att</th>${headerCells}${otherHeader}</tr></thead>
           <tbody>${rows || '<tr><td colspan="${colSpan}" class="empty">No data</td></tr>'}</tbody>
         </table>
       </div>
@@ -3551,7 +3640,7 @@ function renderAttack() {
     if (periodVal.startsWith('week:')) {
       // Week selected → one point per session within that week
       const wkStart = periodVal.slice(5);
-      const wkSess = DATA.sessions.filter(sess => {
+      const wkSess = sessionPool().filter(sess => {
         if (!sess.date || !seasons.includes(sess.season)) return false;
         const d = new Date(sess.date);
         const dow = d.getDay();
@@ -3565,7 +3654,7 @@ function renderAttack() {
     } else {
       // Month selected → one point per week within that month
       const mo = periodVal.slice(6);
-      const moSess = DATA.sessions.filter(s => s.date?.startsWith(mo) && seasons.includes(s.season));
+      const moSess = sessionPool().filter(s => s.date?.startsWith(mo) && seasons.includes(s.season));
       const weekMap = {}, weekOrder = [];
       for (const sess of moSess) {
         const d = new Date(sess.date), dow = d.getDay();
@@ -3634,6 +3723,7 @@ function renderServRcv() {
   const periodVal = document.getElementById('sr-period')?.value || 'all';
   const seasons   = resolveSeasons(seasonVal);
   const activeSids = buildPeriodSids(seasons, periodVal);
+  if (showEmptyState(activeSids, 'sr-kpi-row')) return;
 
   // Helper to add serve/receive skill data into a playerStats entry
   function mergeSkills(entry, ps) {
@@ -4217,6 +4307,9 @@ function renderSetter() {
       ? new Set([...activeSids].filter(sid => periodSids.has(sid)))
       : periodSids;
   }
+
+  // ── Empty-state guard ────────────────────────────────────────────────────────
+  if (showEmptyState(activeSids, 'set-kpi-row')) return;
 
   // ── Aggregate combos (session-filtered when a setter is selected) ───────────
   const pinCombos  = activeSids ? getComboStatsBySessions(activeSids,'pins')    : getComboStats(seasons,'pins');
