@@ -297,23 +297,36 @@ def parse_scout_code(code):
     rest = code[8:] if len(code) > 8 else ''
     rest_stripped = rest.replace('~', '')
 
-    # Direction + end zone: letter followed immediately by digit (e.g. H2, B9)
-    dir_match = re.search(r'([A-Z])(\d)', rest_stripped)
-    if dir_match:
-        result['direction'] = dir_match.group(1)
-        result['end_zone']  = dir_match.group(2)
-
-        # Start zone: digit before direction pair, possibly preceded by blocker count
-        pre_dir = rest_stripped[:dir_match.start()]
-        zones = re.findall(r'\d', pre_dir)
-        if zones:
-            result['start_zone']   = zones[0]
-            result['num_blockers'] = int(zones[1]) if len(zones) > 1 else None
+    # Volleymetrics coordinate format for receptions: code[8]='~', code[9-10]=XY digits
+    # e.g. a28RQ/~~~59DW~~00F — receive at grid position (5,9)
+    # Map XY → DataVolley zone: back row (y≥5): x<4→5, x<7→6, else→1
+    #                            front row (y<5): x<4→4, x<7→3, else→2
+    skill = result.get('skill_code', '')
+    if (skill == 'R' and len(code) > 10
+            and code[8] == '~' and code[9].isdigit() and code[10].isdigit()):
+        rx, ry = int(code[9]), int(code[10])
+        if ry >= 5:
+            result['end_zone'] = '5' if rx < 4 else ('6' if rx < 7 else '1')
+        else:
+            result['end_zone'] = '4' if rx < 4 else ('3' if rx < 7 else '2')
     else:
-        # Serves / receptions: trailing digit = end zone
-        zone_match = re.search(r'(\d+)$', rest_stripped)
-        if zone_match:
-            result['end_zone'] = zone_match.group(1)
+        # Direction + end zone: letter followed immediately by digit (e.g. H2, B9)
+        dir_match = re.search(r'([A-Z])(\d)', rest_stripped)
+        if dir_match:
+            result['direction'] = dir_match.group(1)
+            result['end_zone']  = dir_match.group(2)
+
+            # Start zone: digit before direction pair, possibly preceded by blocker count
+            pre_dir = rest_stripped[:dir_match.start()]
+            zones = re.findall(r'\d', pre_dir)
+            if zones:
+                result['start_zone']   = zones[0]
+                result['num_blockers'] = int(zones[1]) if len(zones) > 1 else None
+        else:
+            # Serves / receptions: trailing digit = end zone
+            zone_match = re.search(r'(\d+)$', rest_stripped)
+            if zone_match:
+                result['end_zone'] = zone_match.group(1)
 
     return result
 
@@ -343,10 +356,11 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         season_label = 'Unknown Season'
 
     # ── Session type ────────────────────────────────────────────────────────
-    if session_type:
+    # Always run infer_session_type first so VM match files are never
+    # mis-classified as practice even when --type practice is passed.
+    inferred_type = infer_session_type(filename, is_scout=is_scout)
+    if session_type and inferred_type != 'match':
         inferred_type = session_type
-    else:
-        inferred_type = infer_session_type(filename, is_scout=is_scout)
 
     # ── Opponent (for match/scout files) ────────────────────────────────────
     opponent = infer_opponent_from_filename(filename) if inferred_type in ('match', 'scout') else None

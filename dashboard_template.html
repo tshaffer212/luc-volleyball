@@ -1446,7 +1446,7 @@ function renderReports() {
     datasets:[{ label:'Reception AVG', data:rcvAvg,
       borderColor:GOLD, backgroundColor:GOLD+'33',
       tension:0.3, fill:true, pointRadius:4, spanGaps:false }]
-  },{ scales:{ y:{ min:1.5, max:3, ticks:{ callback:v=>v.toFixed(2) } } } });
+  },{ scales:{ y:{ ticks:{ callback:v=>v.toFixed(2) } } } });
 
   makeChart('chart-wk-srv','line',{
     labels: shortLabels,
@@ -3872,7 +3872,7 @@ function renderServRcv() {
       tension:0.3, fill:true, pointRadius:5, spanGaps:false,
     }]
   }, {
-    scales:{y:{min:1.5, max:3, ticks:{callback:v=>v.toFixed(2)}}}
+    scales:{y:{ticks:{callback:v=>v.toFixed(2)}}}
   });
 
   // ── Receive Zone Breakdown ────────────────────────────────────────────────
@@ -4046,7 +4046,7 @@ function renderServRcv() {
       tension:0.3, fill:false, pointRadius:5, spanGaps:false,
     }))
   }, {
-    scales:{y:{min:1.5, max:3, ticks:{callback:v=>v.toFixed(2)}}}
+    scales:{y:{ticks:{callback:v=>v.toFixed(2)}}}
   });
 }
 
