@@ -1929,6 +1929,18 @@ function buildSetterBreakdownTable(setterAtk) {
   }
   if (!allAtkNums.size) return '<div class="empty">No setter data available</div>';
 
+  // Season-aware player lookup: check each selected session's season in order
+  function rptPlayer(num) {
+    for (const sid of rptSelected) {
+      const sess = DATA.sessions.find(s => s.id === sid);
+      if (sess?.season) {
+        const p = DATA.players_by_season?.[sess.season]?.[String(num)];
+        if (p) return p;
+      }
+    }
+    return DATA.players[String(num)] || null;
+  }
+
   // Collect active combo codes (only those with data under current filter)
   const callCodes = new Set();
   for (const anm of allAtkNums) {
@@ -1946,7 +1958,7 @@ function buildSetterBreakdownTable(setterAtk) {
   }
 
   function playerRow(anm) {
-    const p = DATA.players[anm];
+    const p = rptPlayer(anm);
     const name = p ? (p.last_name && p.last_name !== anm ? p.last_name : (p.name||`#${anm}`)) : `#${anm}`;
     const merged = getAttackerMerged(anm, setterAtk);
     let row = `<tr><td style="font-weight:600">#${anm}</td><td style="white-space:nowrap">${name}</td>`;
@@ -2013,7 +2025,7 @@ function buildSetterBreakdownTable(setterAtk) {
   const allShown=[];
   for (const {key,code,lib} of POS_GROUPS) {
     const nums=[...allAtkNums].filter(n=>{
-      const p=DATA.players[n]; if(!p) return false;
+      const p=rptPlayer(n); if(!p) return false;
       return lib?(p.is_libero||p.position_code==='1'):p.position_code===code;
     }).sort((a,b)=>+a-+b);
     allShown.push(...nums);
@@ -2046,10 +2058,22 @@ function buildSetterBreakdownTable(setterAtk) {
 function buildSetterBreakdownPanel(setterAtk) {
   _cachedSetterAtk = setterAtk;
 
+  // ── Season-aware player lookup for selected sessions ──────────────────────
+  function rptPlayerForPanel(num) {
+    for (const sid of rptSelected) {
+      const sess = DATA.sessions.find(s => s.id === sid);
+      if (sess?.season) {
+        const p = DATA.players_by_season?.[sess.season]?.[String(num)];
+        if (p) return p;
+      }
+    }
+    return DATA.players[String(num)] || null;
+  }
+
   // ── Setter selector ───────────────────────────────────────────────────────
   const setterNums = Object.keys(setterAtk).filter(s => {
     if (s === 'OVR') return false;
-    const p = DATA.players[s];
+    const p = rptPlayerForPanel(s);
     return p && (p.position_code === '5' || p.is_libero || p.position_code === '1');
   }).sort((a,b) => +a-+b);
 
@@ -2057,7 +2081,7 @@ function buildSetterBreakdownPanel(setterAtk) {
     <span style="font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:.8px;margin-right:4px">SETTER:</span>
     <button class="setter-sel-btn${setterSelected==='all'?' active':''}" data-snm="all" onclick="toggleSetterSelect('all')">All</button>`;
   for (const snm of setterNums) {
-    const p = DATA.players[snm];
+    const p = rptPlayerForPanel(snm);
     const label = p ? `#${snm} ${p.last_name||p.name||snm}` : `#${snm}`;
     selHtml += `<button class="setter-sel-btn${setterSelected===snm?' active':''}" data-snm="${snm}" onclick="toggleSetterSelect('${snm}')">${label}</button>`;
   }
@@ -2092,8 +2116,13 @@ function buildMatchOverviewPanel(sessionIds) {
   for (const ps of Object.values(DATA.player_session)) {
     if (!sessionIds.has(ps.session_id)) continue;
     const pnum = ps.player_num;
-    if (!pnum || !DATA.players[pnum]) continue;
+    if (!pnum) continue;
+    const sess = DATA.sessions.find(s => s.id === ps.session_id);
+    const season = sess?.season;
+    const pinfo = getPlayerInfo(pnum, season);
+    if (!pinfo) continue;
     if (!pstats[pnum]) pstats[pnum]={
+      season,  // store season for display lookups
       S:{att:0,ace:0,err:0,pos:0,neg:0,over:0},
       R:{att:0,pts:0,perf:0,good:0,med:0,oos:0,over:0,err:0},
       A:{att:0,k:0,e:0},
@@ -2149,12 +2178,12 @@ function buildMatchOverviewPanel(sessionIds) {
   ];
   function grpNums(code,lib) {
     return Object.keys(pstats).filter(n=>{
-      const p=DATA.players[n]; if(!p) return false;
+      const p=getPlayerInfo(n, pstats[n].season); if(!p) return false;
       return lib?(p.is_libero||p.position_code==='1'):p.position_code===code;
     }).sort((a,b)=>+a-+b);
   }
   function pName(n) {
-    const p=DATA.players[n];
+    const p=getPlayerInfo(n, pstats[n].season);
     return p?(p.last_name&&p.last_name!==n?p.last_name:(p.name||`#${n}`)):`#${n}`;
   }
   const grpHdr=(lbl,span)=>`<tr style="background:var(--maroon);color:#fff"><td colspan="${span}" style="font-weight:700;font-size:12px;padding:6px 8px;letter-spacing:.5px">${lbl}</td></tr>`;
