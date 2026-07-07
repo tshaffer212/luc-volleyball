@@ -449,8 +449,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
     setter_calls = parse_setter_calls(sections.get('3SETTERCALL', []))
 
     # ── [3SCOUT] ────────────────────────────────────────────────────────────
-    actions     = []
-    scout_lines = sections.get('3SCOUT', [])
+    actions          = []
+    scout_lines      = sections.get('3SCOUT', [])
+    current_rally_seq = 0   # increments each time a rally-end marker ('p') is seen
 
     for idx, line in enumerate(scout_lines):
         if not line or line[0] not in ('*', 'a'):
@@ -460,6 +461,13 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         code_str = fields[0]
 
         if len(code_str) < 4:
+            continue
+
+        # ── Rally-end / substitution marker: '*p__:__' or 'ap__:__' ─────
+        # These have 'p' at char 1 and a ':' in chars 2-5.  They are NOT
+        # skill actions, but they mark the boundary between rallies.
+        if code_str[1] == 'p' and len(code_str) >= 5 and ':' in code_str[2:6]:
+            current_rally_seq += 1
             continue
 
         parsed = parse_scout_code(code_str)
@@ -480,8 +488,6 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
                     break
 
         # ── Side flags (fields 1-2): used for setter_call_code in future ─
-        # e.g. 'p' = setter call position, 'r' = ? , 's' = ?
-        # Currently stored as raw for future decoding
         side_flag_1 = fields[1].strip() if len(fields) > 1 else None
         side_flag_2 = fields[2].strip() if len(fields) > 2 else None
 
@@ -504,6 +510,58 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
 
         eval_code  = parsed['evaluation']
         combo_code = parsed['combo_code']
+
+        # ── Rotation / set / lineup from DVW fields ───────────────────────
+        # Field layout (Volleymetrics & standard practice DVW):
+        #   [9]  = set number (1-5)
+        #   [10] = home rotation (1-6)
+        #   [11] = away rotation (1-6)
+        #   [13] = action sequence counter (unique per event)
+        #   [15..20] = home lineup (player nums at positions 1-6)
+        #   [21..26] = away lineup
+        set_num    = None
+        rot_h      = None
+        rot_v      = None
+        action_seq = None
+        luc_lineup = None
+
+        if len(fields) > 9:
+            try: set_num = int(fields[9].strip())
+            except: pass
+        if len(fields) > 10:
+            try: rot_h = int(fields[10].strip())
+            except: pass
+        if len(fields) > 11:
+            try: rot_v = int(fields[11].strip())
+            except: pass
+        if len(fields) > 13:
+            s = fields[13].strip()
+            try: action_seq = int(s) if s else None
+            except: action_seq = s or None
+
+        luc_rot = rot_h if luc_side == 'home' else rot_v
+
+        # Lineup: positions 1-6 as player jersey numbers
+        lu_start = 15 if luc_side == 'home' else 21
+        if len(fields) > lu_start + 5:
+            try:
+                nums = [int(fields[lu_start + i].strip()) for i in range(6)
+                        if fields[lu_start + i].strip().isdigit()]
+                if len(nums) == 6:
+                    luc_lineup = nums
+            except:
+                pass
+
+        # ── Result code: chars 15-16 of code_str ('+1'/'-1'/'00') ────────
+        # '+1' = home won rally, '-1' = away won rally, '00' = rally continues
+        result_raw = code_str[15:17] if len(code_str) >= 17 else None
+        if result_raw and result_raw in ('+1', '-1', '+2', '-2', '00'):
+            if luc_side == 'home':
+                luc_won_rally = True if result_raw in ('+1', '+2') else (False if result_raw in ('-1', '-2') else None)
+            else:
+                luc_won_rally = True if result_raw in ('-1', '-2') else (False if result_raw in ('+1', '+2') else None)
+        else:
+            luc_won_rally = None   # rally continues or unknown
 
         action = {
             # Identity
@@ -529,17 +587,23 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
             'end_zone':      parsed.get('end_zone'),
             'direction':     parsed.get('direction'),
             'num_blockers':  parsed.get('num_blockers'),
-            # Setter / rotation (placeholder — populated as coding matures)
-            'setter_call_code':  None,   # TODO: extract from code flags when available
-            'setter_call_name':  None,
-            'rotation':          None,   # TODO: extract from rotation markers
+            # Setter call (K-code from setter's combo_code field)
+            'setter_call_code': combo_code if skill_code == 'E' else None,
+            'setter_call_name': setter_calls.get(combo_code, DEFAULT_SETTER_CALLS.get(combo_code)) if (skill_code == 'E' and combo_code) else None,
+            # Rotation / set / rally context
+            'set_number':   set_num,
+            'rotation':     luc_rot,
+            'luc_lineup':   luc_lineup,
+            'rally_seq':    current_rally_seq,  # rally counter (increments on p-markers)
+            'action_seq':   action_seq,          # raw DVW action sequence number
+            'luc_won_rally': luc_won_rally,      # True/False/None (None = rally ongoing)
             # Raw flags for future decoding
             '_flag1': side_flag_1 or None,
             '_flag2': side_flag_2 or None,
             # Timing
             'timestamp': timestamp,
-            # Rally grouping (fields[12] in DVW — unique per rally within the file)
-            'rally_id': fields[12].strip() if len(fields) > 12 else None,
+            # Rally id = action sequence number (fixed from prior bug where fields[12] was used)
+            'rally_id': action_seq,
         }
 
         actions.append(action)

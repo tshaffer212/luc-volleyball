@@ -338,6 +338,137 @@ def derive(skill_stats):
             cs['error_pct']  = round(cs['evals'].get('=',0) / ca * 100, 1) if ca else 0
             cs['efficiency'] = round((cs['evals'].get('#',0)-cs['evals'].get('=',0))/ca*100,1) if ca else 0
 
+CLOSE_K_CODES = {'K1', 'K2', 'KC'}   # front quick / back quick → close-route attacks
+GAP_K_CODES   = {'K7', 'KM', 'KP', 'KE', 'KD'}   # gap / shoot sets
+
+
+def compute_match_rotation_stats(actions):
+    """
+    Build rotation-based match report tables from LUC-only match actions.
+
+    Returns dict with:
+      rotation_atk       — all LUC attacks grouped by LUC rotation × combo code
+      rotation_atk_close — same, filtered to rallies where setter called a close K-code
+      rotation_atk_gap   — same, filtered to rallies where setter called a gap K-code
+      setter_atk         — all LUC attacks grouped by setter × attacker × combo code
+      setter_fbso        — attacks that follow any reception (in-system FBSO)
+      setter_fbso_perfect— attacks that follow a perfect (#) reception
+    """
+    by_rally = defaultdict(list)
+    for a in actions:
+        by_rally[a.get('rally_seq', 0)].append(a)
+
+    def ea():
+        return {'k': 0, 'e': 0, 'b': 0, 'a': 0}
+
+    def add_atk(bucket, ev):
+        bucket['a'] += 1
+        if ev == '#':   bucket['k'] += 1
+        elif ev == '=': bucket['e'] += 1
+        else:           bucket['b'] += 1
+
+    rot_atk       = defaultdict(lambda: defaultdict(ea))
+    rot_atk_close = defaultdict(lambda: defaultdict(ea))
+    rot_atk_gap   = defaultdict(lambda: defaultdict(ea))
+
+    # {setter_num: {attacker_num: {combo_code: {k,e,b,a}}}}
+    setter_atk        = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
+    setter_fbso       = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
+    setter_fbso_perf  = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
+
+    for rs, rally in sorted(by_rally.items()):
+        rot = None
+        for a in rally:
+            r = a.get('rotation')
+            if r is not None:
+                rot = str(r)
+                break
+
+        # Reception quality this rally
+        rcv_ev = next((a.get('evaluation','') for a in rally if a.get('skill_code') == 'R'), None)
+        has_rcv  = rcv_ev is not None
+        perf_rcv = (rcv_ev == '#')
+
+        # Each setter action → find next attack in same rally
+        for i, a in enumerate(rally):
+            if a.get('skill_code') != 'E':
+                continue
+            setter_num = a.get('player_num', '')
+            if not setter_num:
+                continue
+
+            k_code   = a.get('combo_code') or ''
+            is_close = k_code in CLOSE_K_CODES
+            is_gap   = k_code in GAP_K_CODES
+
+            next_atk = next((b for b in rally[i+1:] if b.get('skill_code') == 'A'), None)
+            if not next_atk:
+                continue
+
+            atk_num = next_atk.get('player_num', '')
+            cc      = next_atk.get('combo_code') or 'OVR'
+            ev      = next_atk.get('evaluation', '')
+
+            # ── Attack by Rotation ──────────────────────────────────────────────
+            if rot:
+                add_atk(rot_atk[rot][cc], ev)
+                if cc != 'OVR':
+                    add_atk(rot_atk[rot]['OVR'], ev)
+                if is_close:
+                    add_atk(rot_atk_close[rot][cc], ev)
+                    if cc != 'OVR':
+                        add_atk(rot_atk_close[rot]['OVR'], ev)
+                elif is_gap:
+                    add_atk(rot_atk_gap[rot][cc], ev)
+                    if cc != 'OVR':
+                        add_atk(rot_atk_gap[rot]['OVR'], ev)
+
+            if not setter_num or not atk_num:
+                continue
+
+            # ── Attack by Setter (all attacks) ──────────────────────────────────
+            add_atk(setter_atk[setter_num][atk_num][cc], ev)
+            if cc != 'OVR':
+                add_atk(setter_atk[setter_num][atk_num]['OVR'], ev)
+            add_atk(setter_atk[setter_num]['OVR'][cc], ev)
+            if cc != 'OVR':
+                add_atk(setter_atk[setter_num]['OVR']['OVR'], ev)
+
+            # ── Setter FBSO — any reception ──────────────────────────────────────
+            if has_rcv:
+                add_atk(setter_fbso[setter_num][atk_num][cc], ev)
+                if cc != 'OVR':
+                    add_atk(setter_fbso[setter_num][atk_num]['OVR'], ev)
+                add_atk(setter_fbso[setter_num]['OVR'][cc], ev)
+                if cc != 'OVR':
+                    add_atk(setter_fbso[setter_num]['OVR']['OVR'], ev)
+
+            # ── Setter FBSO — perfect pass (#) only ─────────────────────────────
+            if perf_rcv:
+                add_atk(setter_fbso_perf[setter_num][atk_num][cc], ev)
+                if cc != 'OVR':
+                    add_atk(setter_fbso_perf[setter_num][atk_num]['OVR'], ev)
+                add_atk(setter_fbso_perf[setter_num]['OVR'][cc], ev)
+                if cc != 'OVR':
+                    add_atk(setter_fbso_perf[setter_num]['OVR']['OVR'], ev)
+
+    def ser_rot(d):
+        return {r: {cc: dict(v) for cc, v in combos.items()} for r, combos in d.items()}
+
+    def ser_setter(d):
+        return {s: {a: {cc: dict(v) for cc, v in combos.items()} for a, combos in atks.items()}
+                for s, atks in d.items()}
+
+    return {
+        'rotation_atk':        ser_rot(rot_atk),
+        'rotation_atk_close':  ser_rot(rot_atk_close),
+        'rotation_atk_gap':    ser_rot(rot_atk_gap),
+        'setter_atk':          ser_setter(setter_atk),
+        'setter_fbso':         ser_setter(setter_fbso),
+        'setter_fbso_perfect': ser_setter(setter_fbso_perf),
+    }
+
+
 def main(raw_path, out_path):
     print(f"Loading {raw_path} ...", file=sys.stderr)
     with open(raw_path) as f:
@@ -445,7 +576,8 @@ def main(raw_path, out_path):
         acts   = s.get('actions', [])
         dig, fbso = compute_rally_sequences(acts, ls)
         ca = compute_call_attacks(acts, ls)
-        session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca}
+        rot_stats = compute_match_rotation_stats(acts) if s.get('type') == 'match' else None
+        session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca, 'rot_stats': rot_stats}
         # Accumulate setter-call → attack outcome per season
         for k_code, combos in ca.items():
             for atk_cc, cv in combos.items():
@@ -474,6 +606,7 @@ def main(raw_path, out_path):
             'fbso_rcv':       fbso['rcv_rallies'],
             'fbso_kills':     fbso['fbso_kills'],
             'call_attacks':   session_rally[sid]['call_atk'],
+            'match_rot_stats': session_rally[sid]['rot_stats'],  # None for practice
         })
 
     # ── Aggregation accumulators ──────────────────────────────────────────────
