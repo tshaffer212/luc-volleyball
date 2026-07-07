@@ -322,6 +322,10 @@
   .rpt-sub-tab { padding: 8px 18px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; border-radius: 6px; font-size: 13px; font-weight: 500; transition: all 0.15s; }
   .rpt-sub-tab:hover { color: var(--text); border-color: var(--gold); }
   .rpt-sub-tab.active { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+  /* Setter breakdown bucket filter buttons */
+  .setter-bucket-btn { padding: 5px 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: .3px; transition: all 0.15s; }
+  .setter-bucket-btn:hover { color: var(--text); border-color: var(--gold); }
+  .setter-bucket-btn.active { background: var(--maroon); color: #fff; border-color: var(--maroon); }
 
   /* Auth overlay */
   #auth-overlay {
@@ -572,7 +576,6 @@
       <button id="rpt-subtab-rot"    class="rpt-sub-tab" style="display:none" onclick="showRptTab('rot')">Attack by Rotation</button>
       <button id="rpt-subtab-routes" class="rpt-sub-tab" style="display:none" onclick="showRptTab('routes')">Routes (Close/Gap)</button>
       <button id="rpt-subtab-setter" class="rpt-sub-tab" style="display:none" onclick="showRptTab('setter')">Setter Breakdown</button>
-      <button id="rpt-subtab-fbso-match" class="rpt-sub-tab" style="display:none" onclick="showRptTab('fbso-match')">Setter FBSO</button>
     </div>
     <div id="rpt-panel-servrcv"   class="card" style="padding:12px;overflow-x:auto"></div>
     <div id="rpt-panel-attack"    class="card" style="padding:12px;overflow-x:auto;display:none"></div>
@@ -1763,6 +1766,13 @@ const CALL_LABELS = {
 };
 const CALL_ORDER = ['X5','V5','X6','V6','XP','X8','X1','X2','X7','OVR'];
 const ROT_SETTER_ZONE = {'1':'Z1','2':'Z6','3':'Z5','4':'Z4','5':'Z3','6':'Z2'};
+const BUCKET_LABELS = {
+  all:'All Sets', perf:'Perfect Pass (#)', good:'3-Point Pass (+)',
+  med:'2-Point Pass (!)', oos:'1-Point Pass (-)', fbso:'FBSO', transition:'Transition'
+};
+const BUCKET_ORDER = ['all','perf','good','med','oos','fbso','transition'];
+let setterBucketFilter = new Set(['all']);
+let _cachedSetterAtk   = null;
 
 // ── Match report data helpers ─────────────────────────────────────────────────
 function mergeAtkBucket(t, s) {
@@ -1780,28 +1790,30 @@ function mergeRotDict(target, src) {
   }
 }
 function mergeSetterAtkDict(target, src) {
+  // src: {setter: {attacker: {bucket: {combo: {k,e,b,a}}}}}
   for (const [snm, attackers] of Object.entries(src||{})) {
     if (!target[snm]) target[snm] = {};
-    for (const [anm, calls] of Object.entries(attackers||{})) {
+    for (const [anm, buckets] of Object.entries(attackers||{})) {
       if (!target[snm][anm]) target[snm][anm] = {};
-      for (const [cc, bucket] of Object.entries(calls||{})) {
-        if (!target[snm][anm][cc]) target[snm][anm][cc] = {k:0,e:0,b:0,a:0};
-        mergeAtkBucket(target[snm][anm][cc], bucket);
+      for (const [bkt, calls] of Object.entries(buckets||{})) {
+        if (!target[snm][anm][bkt]) target[snm][anm][bkt] = {};
+        for (const [cc, bucket] of Object.entries(calls||{})) {
+          if (!target[snm][anm][bkt][cc]) target[snm][anm][bkt][cc] = {k:0,e:0,b:0,a:0};
+          mergeAtkBucket(target[snm][anm][bkt][cc], bucket);
+        }
       }
     }
   }
 }
 function aggregateMatchRotStats(sessionIds) {
-  const c = {rotation_atk:{},rotation_atk_close:{},rotation_atk_gap:{},setter_atk:{},setter_fbso:{},setter_fbso_perfect:{}};
+  const c = {rotation_atk:{},rotation_atk_close:{},rotation_atk_gap:{},setter_atk:{}};
   for (const sid of sessionIds) {
     const mrs = DATA.sessions.find(s=>s.id===sid)?.match_rot_stats;
     if (!mrs) continue;
     mergeRotDict(c.rotation_atk,       mrs.rotation_atk       ||{});
     mergeRotDict(c.rotation_atk_close, mrs.rotation_atk_close ||{});
     mergeRotDict(c.rotation_atk_gap,   mrs.rotation_atk_gap   ||{});
-    mergeSetterAtkDict(c.setter_atk,          mrs.setter_atk         ||{});
-    mergeSetterAtkDict(c.setter_fbso,         mrs.setter_fbso        ||{});
-    mergeSetterAtkDict(c.setter_fbso_perfect, mrs.setter_fbso_perfect||{});
+    mergeSetterAtkDict(c.setter_atk, mrs.setter_atk ||{});
   }
   return c;
 }
@@ -1855,130 +1867,157 @@ function buildRotationAtkPanel(rotData, closeData, gapData, title, showRoutes) {
   return html;
 }
 
-function buildSetterAtkTable(setterData, title) {
-  // setterData: {setter_num: {attacker_num: {call_code: {k,e,b,a}}}}
-  const setters = Object.keys(setterData).filter(s => s !== 'OVR').sort((a,b)=>+a-+b);
-  if (!setters.length) return `<div class="empty">No setter data available</div>`;
-  let html = `<h3 style="margin:0 0 14px">${title}</h3>`;
-
-  // For each setter, show a table of attacker × call breakdown
-  for (const snm of setters) {
-    const atks = setterData[snm];
-    const setterName = playerName(snm);
-    // Collect all non-OVR attackers
-    const attackers = Object.keys(atks).filter(a=>a!=='OVR').sort((a,b)=>+a-+b);
-    // Collect all non-OVR call codes that appear
-    const callCodes = new Set();
-    for (const a of attackers)
-      for (const cc of Object.keys(atks[a]||{}))
-        if (cc !== 'OVR') callCodes.add(cc);
-    const ccs = CALL_ORDER.filter(c => callCodes.has(c) && c !== 'OVR');
-    if (!ccs.length && !attackers.length) continue;
-    ccs.push('OVR');
-
-    html += `<div style="margin-bottom:20px">
-      <div style="font-size:12px;font-weight:700;color:var(--maroon);margin-bottom:6px">
-        Setter #${snm} — ${setterName}</div>
-      <div style="overflow-x:auto"><table class="xlsx-tbl"><thead><tr>
-        <th>#</th><th>Attacker</th>`;
-    for (const cc of ccs)
-      html += `<th class="num" colspan="${cc==='OVR'?4:4}" style="min-width:140px">${cc==='OVR'?'OVERALL':cc} — ${CALL_LABELS[cc]||''}</th>`;
-    html += `</tr><tr><th></th><th></th>`;
-    for (const cc of ccs) html += `<th class="num">K</th><th class="num">E</th><th class="num">A</th><th class="num" style="color:var(--gold)">Eff%</th>`;
-    html += `</tr></thead><tbody>`;
-
-    for (const anm of attackers) {
-      const aName = playerName(anm);
-      html += `<tr><td style="font-weight:600">#${anm}</td><td style="white-space:nowrap">${aName}</td>`;
-      for (const cc of ccs) {
-        const b = (atks[anm]||{})[cc]||{};
-        const k=b.k||0, e=b.e||0, a=b.a||0;
-        html += `<td class="num">${k}</td><td class="num">${e}</td><td class="num">${a}</td><td class="num">${fmtEff(k,e,a)}</td>`;
-      }
-      html += `</tr>`;
+// ── Setter bucket-filter helpers ──────────────────────────────────────────────
+function toggleSetterBucket(bkt) {
+  if (bkt === 'all') {
+    setterBucketFilter = new Set(['all']);
+  } else {
+    setterBucketFilter.delete('all');
+    if (setterBucketFilter.has(bkt)) {
+      setterBucketFilter.delete(bkt);
+      if (!setterBucketFilter.size) setterBucketFilter = new Set(['all']);
+    } else {
+      setterBucketFilter.add(bkt);
     }
-    // Team total row (OVR)
-    const totals = atks['OVR']||{};
-    html += `<tr style="font-weight:700;background:rgba(141,0,52,.08)">
-      <td colspan="2">TOTAL</td>`;
-    for (const cc of ccs) {
-      const b = (totals[cc])||{};
-      // sum across all attackers for this cc
-      let k=0,e=0,a=0;
-      for (const anm of attackers) { const bb=(atks[anm]||{})[cc]||{}; k+=bb.k||0; e+=bb.e||0; a+=bb.a||0; }
-      html += `<td class="num">${k}</td><td class="num">${e}</td><td class="num">${a}</td><td class="num">${fmtEff(k,e,a)}</td>`;
-    }
-    html += `</tr></tbody></table></div></div>`;
   }
+  document.querySelectorAll('.setter-bucket-btn').forEach(btn => {
+    btn.classList.toggle('active', setterBucketFilter.has(btn.dataset.bkt));
+  });
+  const el = document.getElementById('setter-breakdown-table');
+  if (el && _cachedSetterAtk) el.innerHTML = buildSetterBreakdownTable(_cachedSetterAtk);
+}
+
+function getSetterBucketMerged(setterNum, atkNum, setterAtk) {
+  // Merge selected buckets for setter→attacker into {cc: {k,e,b,a}}
+  const merged = {};
+  const atkData = (setterAtk[setterNum]||{})[atkNum]||{};
+  for (const bkt of setterBucketFilter) {
+    for (const [cc, v] of Object.entries(atkData[bkt]||{})) {
+      if (!merged[cc]) merged[cc] = {k:0,e:0,b:0,a:0};
+      merged[cc].k += v.k||0; merged[cc].e += v.e||0;
+      merged[cc].b += v.b||0; merged[cc].a += v.a||0;
+    }
+  }
+  return merged;
+}
+
+function buildSetterBreakdownTable(setterAtk) {
+  // Rows = setters/liberos (distributors), columns = attack combo codes they set
+  const allNums = Object.keys(setterAtk).filter(s => s !== 'OVR');
+  if (!allNums.length) return '<div class="empty">No setter data available</div>';
+
+  // Group by position: position_code '5' = setter, '1' or is_libero = libero
+  const setterNums = allNums.filter(n => { const p=DATA.players[n]; return p && p.position_code==='5'; }).sort((a,b)=>+a-+b);
+  const liberoNums = allNums.filter(n => { const p=DATA.players[n]; return p && (p.is_libero || p.position_code==='1'); }).sort((a,b)=>+a-+b);
+  const shownNums  = [...setterNums, ...liberoNums];
+
+  // Collect active combo codes
+  const callCodes = new Set();
+  for (const snm of shownNums) {
+    const merged = getSetterBucketMerged(snm, 'OVR', setterAtk);
+    for (const cc of Object.keys(merged)) if (cc !== 'OVR') callCodes.add(cc);
+  }
+  const ccs = CALL_ORDER.filter(c => callCodes.has(c) && c !== 'OVR');
+  if (!ccs.length) return '<div class="empty">No attack data for selected filter</div>';
+
+  const colSpan = 2 + (ccs.length + 1) * 4;
+
+  function statCells(merged, cc) {
+    const b = merged[cc]||{};
+    const k=b.k||0, e=b.e||0, a=b.a||0;
+    const kd = k||'—', ed = e||'—', ad = a||'—';
+    return `<td class="num">${kd}</td><td class="num">${ed}</td><td class="num">${ad}</td><td class="num">${fmtEff(k,e,a)}</td>`;
+  }
+
+  function playerRow(snm) {
+    const p = DATA.players[snm];
+    const name = p ? (p.last_name && p.last_name !== snm ? p.last_name : (p.name||`#${snm}`)) : `#${snm}`;
+    const merged = getSetterBucketMerged(snm, 'OVR', setterAtk);
+    let row = `<tr><td style="font-weight:600">#${snm}</td><td style="white-space:nowrap">${name}</td>`;
+    for (const cc of ccs) row += statCells(merged, cc);
+    // TOTAL col from OVR bucket
+    const ovr = merged['OVR']||{};
+    const k=ovr.k||0, e=ovr.e||0, a=ovr.a||0;
+    row += `<td class="num" style="font-weight:600">${k||'—'}</td><td class="num" style="font-weight:600">${e||'—'}</td><td class="num" style="font-weight:600">${a||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(k,e,a)}</td>`;
+    row += '</tr>';
+    return row;
+  }
+
+  function subtotalRow(nums, label) {
+    const totals = {}; let gK=0,gE=0,gA=0;
+    for (const snm of nums) {
+      const m = getSetterBucketMerged(snm, 'OVR', setterAtk);
+      for (const cc of ccs) {
+        if (!totals[cc]) totals[cc]={k:0,e:0,a:0};
+        const b=m[cc]||{}; totals[cc].k+=b.k||0; totals[cc].e+=b.e||0; totals[cc].a+=b.a||0;
+      }
+      const ovr=m['OVR']||{}; gK+=ovr.k||0; gE+=ovr.e||0; gA+=ovr.a||0;
+    }
+    let row = `<tr style="background:rgba(141,0,52,.07);font-style:italic;font-size:11px">
+      <td colspan="2" style="font-weight:700;color:var(--maroon);padding:5px 12px">* ${label}</td>`;
+    for (const cc of ccs) {
+      const t=totals[cc]||{};
+      row += `<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.a||0)}</td>`;
+    }
+    row += `<td class="num" style="font-weight:700">${gK||'—'}</td><td class="num" style="font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(gK,gE,gA)}</td>`;
+    row += '</tr>';
+    return row;
+  }
+
+  function groupSection(nums, label) {
+    if (!nums.length) return '';
+    let s = `<tr style="background:var(--maroon);color:#fff">
+      <td colspan="${colSpan}" style="font-weight:700;font-size:12px;padding:6px 8px;letter-spacing:.5px">${label}</td></tr>`;
+    for (const n of nums) s += playerRow(n);
+    s += subtotalRow(nums, label);
+    return s;
+  }
+
+  // Build header
+  let html = '<div style="overflow-x:auto"><table class="xlsx-tbl"><thead>';
+  html += '<tr><th>#</th><th>PLAYER</th>';
+  for (const cc of ccs)
+    html += `<th class="num" colspan="4" style="text-align:center;background:rgba(141,0,52,.2);font-size:11px;color:var(--gold)">${CALL_LABELS[cc]||cc}</th>`;
+  html += `<th class="num" colspan="4" style="text-align:center;background:rgba(141,0,52,.35);font-size:11px;color:var(--gold)">TOTAL</th>`;
+  html += '</tr><tr><th></th><th></th>';
+  for (let i = 0; i <= ccs.length; i++)
+    html += '<th class="num">K</th><th class="num">E</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
+  html += '</tr></thead><tbody>';
+
+  html += groupSection(setterNums, 'SETTERS');
+  html += groupSection(liberoNums, 'LIBEROS');
+
+  // Team total
+  const teamTotals = {}; let tK=0,tE=0,tA=0;
+  for (const snm of shownNums) {
+    const m = getSetterBucketMerged(snm, 'OVR', setterAtk);
+    for (const cc of ccs) {
+      if (!teamTotals[cc]) teamTotals[cc]={k:0,e:0,a:0};
+      const b=m[cc]||{}; teamTotals[cc].k+=b.k||0; teamTotals[cc].e+=b.e||0; teamTotals[cc].a+=b.a||0;
+    }
+    const ovr=m['OVR']||{}; tK+=ovr.k||0; tE+=ovr.e||0; tA+=ovr.a||0;
+  }
+  html += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
+    <td colspan="2" style="padding:6px 8px">TEAM TOTAL</td>`;
+  for (const cc of ccs) {
+    const t=teamTotals[cc]||{};
+    html += `<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.a||0)}</td>`;
+  }
+  html += `<td class="num">${tK||'—'}</td><td class="num">${tE||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(tK,tE,tA)}</td>`;
+  html += '</tr></tbody></table></div>';
   return html;
 }
 
-function buildSetterFBSOTable(setterFbso, setterFbsoPerfect) {
-  const setters = [...new Set([...Object.keys(setterFbso), ...Object.keys(setterFbsoPerfect)])].filter(s=>s!=='OVR').sort((a,b)=>+a-+b);
-  if (!setters.length) return '<div class="empty">No FBSO data available</div>';
-
-  const SH2 = `style="background:var(--maroon);color:#fff;font-size:11px;padding:6px 8px"`;
-  let html = `<h3 style="margin:0 0 14px">Setter FBSO — In System vs Perfect Pass</h3>`;
-
-  for (const snm of setters) {
-    const inSys = setterFbso[snm]||{};
-    const perf  = setterFbsoPerfect[snm]||{};
-    const setterName = playerName(snm);
-    const attackers = [...new Set([...Object.keys(inSys), ...Object.keys(perf)])].filter(a=>a!=='OVR').sort((a,b)=>+a-+b);
-    if (!attackers.length) continue;
-
-    const callCodes = new Set();
-    for (const a of attackers)
-      for (const d of [inSys, perf])
-        for (const cc of Object.keys((d[a])||{}))
-          if (cc !== 'OVR') callCodes.add(cc);
-    const ccs = CALL_ORDER.filter(c => callCodes.has(c) && c !== 'OVR');
-    if (!ccs.length) continue;
-
-    html += `<div style="margin-bottom:24px">
-      <div style="font-size:12px;font-weight:700;color:var(--maroon);margin-bottom:6px">
-        Setter #${snm} — ${setterName}</div>
-      <div style="overflow-x:auto"><table class="xlsx-tbl"><thead>
-        <tr><th rowspan="3">#</th><th rowspan="3">Attacker</th>`;
-
-    for (const cc of ccs) {
-      html += `<th colspan="8" ${SH2} style="text-align:center">${cc} — ${CALL_LABELS[cc]||''}</th>`;
-    }
-    html += `</tr><tr>`;
-    for (const cc of ccs) {
-      html += `<th colspan="4" style="background:rgba(141,0,52,.1);font-size:10px;text-align:center">In System</th>
-               <th colspan="4" style="background:rgba(254,188,24,.15);font-size:10px;text-align:center">Perfect Pass</th>`;
-    }
-    html += `</tr><tr>`;
-    for (const cc of ccs) {
-      html += `<th class="num">K</th><th class="num">E</th><th class="num">A</th><th class="num" style="color:var(--gold)">Eff%</th>`.repeat(2);
-    }
-    html += `</tr></thead><tbody>`;
-
-    for (const anm of attackers) {
-      const aName = playerName(anm);
-      html += `<tr><td style="font-weight:600">#${anm}</td><td style="white-space:nowrap">${aName}</td>`;
-      for (const cc of ccs) {
-        for (const d of [inSys, perf]) {
-          const b = (d[anm]||{})[cc]||{};
-          const k=b.k||0, e=b.e||0, a=b.a||0;
-          html += `<td class="num">${k}</td><td class="num">${e}</td><td class="num">${a}</td><td class="num">${fmtEff(k,e,a)}</td>`;
-        }
-      }
-      html += `</tr>`;
-    }
-    // Totals
-    html += `<tr style="font-weight:700;background:rgba(141,0,52,.08)"><td colspan="2">TOTAL</td>`;
-    for (const cc of ccs) {
-      for (const d of [inSys, perf]) {
-        let k=0,e=0,a=0;
-        for (const anm of attackers) { const b=(d[anm]||{})[cc]||{}; k+=b.k||0; e+=b.e||0; a+=b.a||0; }
-        html += `<td class="num">${k}</td><td class="num">${e}</td><td class="num">${a}</td><td class="num">${fmtEff(k,e,a)}</td>`;
-      }
-    }
-    html += `</tr></tbody></table></div></div>`;
+function buildSetterBreakdownPanel(setterAtk) {
+  _cachedSetterAtk = setterAtk;
+  let filterHtml = `<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+    <span style="font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:.8px;margin-right:4px">FILTER:</span>`;
+  for (const bkt of BUCKET_ORDER) {
+    const active = setterBucketFilter.has(bkt) ? ' active' : '';
+    filterHtml += `<button class="setter-bucket-btn${active}" data-bkt="${bkt}" onclick="toggleSetterBucket('${bkt}')">${BUCKET_LABELS[bkt]}</button>`;
   }
-  return html;
+  filterHtml += '</div>';
+  return filterHtml + `<div id="setter-breakdown-table">${buildSetterBreakdownTable(setterAtk)}</div>`;
 }
 
 function playerName(num) {
@@ -1991,12 +2030,12 @@ function renderMatchRotationReport() {
   const rotEl    = document.getElementById('rpt-panel-rot');
   const routeEl  = document.getElementById('rpt-panel-routes');
   const setterEl = document.getElementById('rpt-panel-setter');
-  const fbsoEl   = document.getElementById('rpt-panel-fbso-match');
 
-  rotEl.innerHTML    = buildRotationAtkPanel(mrs.rotation_atk, null, null, 'LUC Attack by Rotation', false);
-  routeEl.innerHTML  = buildRotationAtkPanel(null, mrs.rotation_atk_close, mrs.rotation_atk_gap, 'LUC Attack by Rotation — Close vs Gap Routes', true);
-  setterEl.innerHTML = buildSetterAtkTable(mrs.setter_atk, 'Attack by Setter (All Attacks)');
-  fbsoEl.innerHTML   = buildSetterFBSOTable(mrs.setter_fbso, mrs.setter_fbso_perfect);
+  rotEl.innerHTML   = buildRotationAtkPanel(mrs.rotation_atk, null, null, 'LUC Attack by Rotation', false);
+  routeEl.innerHTML = buildRotationAtkPanel(null, mrs.rotation_atk_close, mrs.rotation_atk_gap, 'LUC Attack by Rotation — Close vs Gap Routes', true);
+
+  setterBucketFilter = new Set(['all']); // reset filter on re-render
+  setterEl.innerHTML = '<h3 style="margin:0 0 14px">Setter Breakdown</h3>' + buildSetterBreakdownPanel(mrs.setter_atk);
 }
 
 function showRptTab(tab) {

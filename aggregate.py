@@ -371,10 +371,9 @@ def compute_match_rotation_stats(actions):
     rot_atk_close = defaultdict(lambda: defaultdict(ea))
     rot_atk_gap   = defaultdict(lambda: defaultdict(ea))
 
-    # {setter_num: {attacker_num: {combo_code: {k,e,b,a}}}}
-    setter_atk        = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
-    setter_fbso       = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
-    setter_fbso_perf  = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
+    # {setter_num: {atk_num: {bucket: {combo_code: {k,e,b,a}}}}}
+    # buckets: 'all' | 'fbso' | 'perf'(#) | 'good'(+) | 'med'(!) | 'oos'(-) | 'transition'
+    setter_atk = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(ea))))
 
     for rs, rally in sorted(by_rally.items()):
         rot = None
@@ -386,8 +385,7 @@ def compute_match_rotation_stats(actions):
 
         # Reception quality this rally
         rcv_ev = next((a.get('evaluation','') for a in rally if a.get('skill_code') == 'R'), None)
-        has_rcv  = rcv_ev is not None
-        perf_rcv = (rcv_ev == '#')
+        has_rcv = rcv_ev is not None
 
         # Each setter action → find next attack in same rally
         for i, a in enumerate(rally):
@@ -426,46 +424,41 @@ def compute_match_rotation_stats(actions):
             if not setter_num or not atk_num:
                 continue
 
-            # ── Attack by Setter (all attacks) ──────────────────────────────────
-            add_atk(setter_atk[setter_num][atk_num][cc], ev)
-            if cc != 'OVR':
-                add_atk(setter_atk[setter_num][atk_num]['OVR'], ev)
-            add_atk(setter_atk[setter_num]['OVR'][cc], ev)
-            if cc != 'OVR':
-                add_atk(setter_atk[setter_num]['OVR']['OVR'], ev)
-
-            # ── Setter FBSO — any reception ──────────────────────────────────────
+            # ── Attack by Setter — bucketed by reception quality ──────────────
+            quality_buckets = ['all']
             if has_rcv:
-                add_atk(setter_fbso[setter_num][atk_num][cc], ev)
-                if cc != 'OVR':
-                    add_atk(setter_fbso[setter_num][atk_num]['OVR'], ev)
-                add_atk(setter_fbso[setter_num]['OVR'][cc], ev)
-                if cc != 'OVR':
-                    add_atk(setter_fbso[setter_num]['OVR']['OVR'], ev)
+                quality_buckets.append('fbso')
+                if   rcv_ev == '#': quality_buckets.append('perf')
+                elif rcv_ev == '+': quality_buckets.append('good')
+                elif rcv_ev == '!': quality_buckets.append('med')
+                elif rcv_ev == '-': quality_buckets.append('oos')
+            else:
+                quality_buckets.append('transition')
 
-            # ── Setter FBSO — perfect pass (#) only ─────────────────────────────
-            if perf_rcv:
-                add_atk(setter_fbso_perf[setter_num][atk_num][cc], ev)
+            for bkt in quality_buckets:
+                add_atk(setter_atk[setter_num][atk_num][bkt][cc], ev)
                 if cc != 'OVR':
-                    add_atk(setter_fbso_perf[setter_num][atk_num]['OVR'], ev)
-                add_atk(setter_fbso_perf[setter_num]['OVR'][cc], ev)
+                    add_atk(setter_atk[setter_num][atk_num][bkt]['OVR'], ev)
+                add_atk(setter_atk[setter_num]['OVR'][bkt][cc], ev)
                 if cc != 'OVR':
-                    add_atk(setter_fbso_perf[setter_num]['OVR']['OVR'], ev)
+                    add_atk(setter_atk[setter_num]['OVR'][bkt]['OVR'], ev)
 
     def ser_rot(d):
         return {r: {cc: dict(v) for cc, v in combos.items()} for r, combos in d.items()}
 
-    def ser_setter(d):
-        return {s: {a: {cc: dict(v) for cc, v in combos.items()} for a, combos in atks.items()}
-                for s, atks in d.items()}
+    def ser_setter_v2(d):
+        return {
+            s: {a: {bkt: {cc: dict(v) for cc, v in cc_map.items()}
+                    for bkt, cc_map in bkt_map.items()}
+                for a, bkt_map in atks.items()}
+            for s, atks in d.items()
+        }
 
     return {
-        'rotation_atk':        ser_rot(rot_atk),
-        'rotation_atk_close':  ser_rot(rot_atk_close),
-        'rotation_atk_gap':    ser_rot(rot_atk_gap),
-        'setter_atk':          ser_setter(setter_atk),
-        'setter_fbso':         ser_setter(setter_fbso),
-        'setter_fbso_perfect': ser_setter(setter_fbso_perf),
+        'rotation_atk':       ser_rot(rot_atk),
+        'rotation_atk_close': ser_rot(rot_atk_close),
+        'rotation_atk_gap':   ser_rot(rot_atk_gap),
+        'setter_atk':         ser_setter_v2(setter_atk),
     }
 
 
