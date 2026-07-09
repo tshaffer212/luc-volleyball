@@ -2191,46 +2191,38 @@ function buildMatchOverviewPanel(sessionIds) {
   const totRow=(cells)=>`<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2" style="padding:6px 8px">TEAM TOTAL</td>${cells}</tr>`;
   function pct(n,d) { return d?(n/d*100).toFixed(1)+'%':'---'; }
 
-  // ── Season match averages for KPI tickers ────────────────────────────────
-  // Collect seasons from selected sessions, then aggregate ALL match sessions in those seasons
-  const selSeasons = new Set();
+  // ── Opponent KPIs from opp_stats (aggregated across selected sessions) ──────
+  let oppA=0,oppAk=0,oppAe=0,oppSAtt=0,oppSAce=0,oppSErr=0,oppRAtt=0,oppRPts=0;
+  let oppMatchCount=0;
   for (const sid of sessionIds) {
     const se = DATA.sessions.find(s => s.id === sid);
-    if (se?.season) selSeasons.add(se.season);
+    if (!se?.opp_stats) continue;
+    const o = se.opp_stats;
+    oppA    += o.A?.att||0; oppAk += o.A?.k||0; oppAe += o.A?.e||0;
+    oppSAtt += o.S?.att||0; oppSAce += o.S?.ace||0; oppSErr += o.S?.err||0;
+    oppRAtt += o.R?.att||0; oppRPts += o.R?.pts||0;
+    oppMatchCount++;
   }
-  let avgK=0,avgE=0,avgA=0,avgSAtt=0,avgSAce=0,avgSErr=0,avgRAtt=0,avgRPts=0,avgFbsoRcv=0,avgFbsoKills=0;
-  const avgMatchSids = new Set();
-  for (const ps of Object.values(DATA.player_session)) {
-    const se = DATA.sessions.find(s => s.id === ps.session_id);
-    if (!se || se.type !== 'match' || !selSeasons.has(se.season)) continue;
-    avgMatchSids.add(ps.session_id);
-    const sk = ps.skills||{};
-    if (sk.A&&sk.A.attempts>0) { avgA+=sk.A.attempts; avgK+=sk.A.evals?.['#']||0; avgE+=sk.A.evals?.['=']||0; }
-    if (sk.S&&sk.S.attempts>0) { avgSAtt+=sk.S.attempts; avgSAce+=sk.S.evals?.['#']||0; avgSErr+=sk.S.evals?.['=']||0; }
-    if (sk.R&&sk.R.attempts>0) { avgRAtt+=sk.R.attempts; avgRPts+=sk.R.rcv_pts||0; }
-  }
-  for (const sid of avgMatchSids) {
-    const se = DATA.sessions.find(s => s.id === sid);
-    if (se) { avgFbsoRcv+=se.fbso_rcv||0; avgFbsoKills+=se.fbso_kills||0; }
-  }
-  const nMatches = avgMatchSids.size;
-  const avgAtkEff   = avgA      ? (avgK-avgE)/avgA*100    : null;
-  const avgAcePct   = avgSAtt   ? avgSAce/avgSAtt*100     : null;
-  const avgSrvErrPct= avgSAtt   ? avgSErr/avgSAtt*100     : null;
-  const avgPassAvg  = avgRAtt   ? avgRPts/avgRAtt         : null;
-  const avgFbsoPct  = avgFbsoRcv? avgFbsoKills/avgFbsoRcv*100 : null;
+  const hasOpp = oppMatchCount > 0;
+  const oppAtkEff    = hasOpp && oppA    ? (oppAk-oppAe)/oppA*100   : null;
+  const oppAcePct    = hasOpp && oppSAtt ? oppSAce/oppSAtt*100      : null;
+  const oppSrvErrPct = hasOpp && oppSAtt ? oppSErr/oppSAtt*100      : null;
+  const oppPassAvg   = hasOpp && oppRAtt ? oppRPts/oppRAtt          : null;
 
-  function kpiTicker(lucRaw, avgRaw, higherBetter) {
-    if (avgRaw === null || lucRaw === null) return '';
-    const diff = lucRaw - avgRaw;
-    const tol = Math.abs(avgRaw) * 0.005; // 0.5% tolerance
+  // label: single match → "opp", multiple → "Nm opp"
+  const oppLbl = oppMatchCount === 1 ? 'opp' : `${oppMatchCount}m opp`;
+
+  function kpiTicker(lucRaw, oppRaw, higherBetter) {
+    if (oppRaw === null || lucRaw === null) return '';
+    const diff = lucRaw - oppRaw;
+    const tol = Math.abs(oppRaw) * 0.005;
     const arrow = Math.abs(diff) < tol ? '→' : diff > 0 ? '▲' : '▼';
     const isBetter = Math.abs(diff) < tol ? null : (higherBetter ? diff > 0 : diff < 0);
     const color = isBetter === null ? 'var(--text-muted)' : isBetter ? 'var(--green)' : 'var(--red)';
-    const avgFmt = typeof avgRaw === 'number'
-      ? (Math.abs(avgRaw) < 10 ? avgRaw.toFixed(2) : avgRaw.toFixed(1)+'%')
-      : avgRaw;
-    return `<div style="font-size:9px;color:${color};margin-top:2px;font-weight:700">${arrow} ${avgFmt} <span style="font-weight:400;color:var(--text-dim)">${nMatches}m avg</span></div>`;
+    const fmt = typeof oppRaw === 'number'
+      ? (Math.abs(oppRaw) < 10 ? oppRaw.toFixed(2) : oppRaw.toFixed(1)+'%')
+      : oppRaw;
+    return `<div style="font-size:9px;color:${color};margin-top:2px;font-weight:700">${arrow} ${fmt} <span style="font-weight:400;color:var(--text-dim)">${oppLbl}</span></div>`;
   }
 
   // ── Summary bar ───────────────────────────────────────────────────────────
@@ -2244,11 +2236,11 @@ function buildMatchOverviewPanel(sessionIds) {
   const passAvg= lucPassAvg!==null ? lucPassAvg.toFixed(2) : '---';
 
   const kpis = [
-    {lbl:'ATK EFF',   val:atkEff,              ticker:kpiTicker(lucAtkEff,    avgAtkEff,    true)},
-    {lbl:'FBSO%',     val:fbsoPct,             ticker:kpiTicker(lucFbsoPct,   avgFbsoPct,   true)},
-    {lbl:'PASS AVG',  val:passAvg,             ticker:kpiTicker(lucPassAvg,   avgPassAvg,   true)},
-    {lbl:'SRV ERR%',  val:pct(tSErr,tSAtt),   ticker:kpiTicker(lucSrvErrPct, avgSrvErrPct, false)},
-    {lbl:'ACE%',      val:pct(tSAce,tSAtt),   ticker:kpiTicker(lucAcePct,    avgAcePct,    true)},
+    {lbl:'ATK EFF',   val:atkEff,            ticker:kpiTicker(lucAtkEff,    oppAtkEff,    true)},
+    {lbl:'FBSO%',     val:fbsoPct,           ticker:kpiTicker(lucFbsoPct,   null,         true)},
+    {lbl:'PASS AVG',  val:passAvg,           ticker:kpiTicker(lucPassAvg,   oppPassAvg,   true)},
+    {lbl:'SRV ERR%',  val:pct(tSErr,tSAtt), ticker:kpiTicker(lucSrvErrPct, oppSrvErrPct, false)},
+    {lbl:'ACE%',      val:pct(tSAce,tSAtt), ticker:kpiTicker(lucAcePct,    oppAcePct,    true)},
   ];
   let html=`<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:24px;padding:14px 18px;background:rgba(141,0,52,.1);border-radius:8px;border:1px solid rgba(141,0,52,.25)">
     ${kpis.map(({lbl,val,ticker})=>`<div style="text-align:center;min-width:72px">
