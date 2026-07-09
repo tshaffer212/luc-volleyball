@@ -2198,7 +2198,7 @@ function buildMatchOverviewPanel(sessionIds) {
     const se = DATA.sessions.find(s => s.id === sid);
     if (se?.season) selSeasons.add(se.season);
   }
-  let avgK=0,avgE=0,avgA=0,avgSAtt=0,avgSErr=0,avgRAtt=0,avgRPts=0,avgFbsoRcv=0,avgFbsoKills=0;
+  let avgK=0,avgE=0,avgA=0,avgSAtt=0,avgSAce=0,avgSErr=0,avgRAtt=0,avgRPts=0,avgFbsoRcv=0,avgFbsoKills=0;
   const avgMatchSids = new Set();
   for (const ps of Object.values(DATA.player_session)) {
     const se = DATA.sessions.find(s => s.id === ps.session_id);
@@ -2206,7 +2206,7 @@ function buildMatchOverviewPanel(sessionIds) {
     avgMatchSids.add(ps.session_id);
     const sk = ps.skills||{};
     if (sk.A&&sk.A.attempts>0) { avgA+=sk.A.attempts; avgK+=sk.A.evals?.['#']||0; avgE+=sk.A.evals?.['=']||0; }
-    if (sk.S&&sk.S.attempts>0) { avgSAtt+=sk.S.attempts; avgSErr+=sk.S.evals?.['=']||0; }
+    if (sk.S&&sk.S.attempts>0) { avgSAtt+=sk.S.attempts; avgSAce+=sk.S.evals?.['#']||0; avgSErr+=sk.S.evals?.['=']||0; }
     if (sk.R&&sk.R.attempts>0) { avgRAtt+=sk.R.attempts; avgRPts+=sk.R.rcv_pts||0; }
   }
   for (const sid of avgMatchSids) {
@@ -2214,9 +2214,10 @@ function buildMatchOverviewPanel(sessionIds) {
     if (se) { avgFbsoRcv+=se.fbso_rcv||0; avgFbsoKills+=se.fbso_kills||0; }
   }
   const nMatches = avgMatchSids.size;
-  const avgAtkEff   = avgA      ? (avgK-avgE)/avgA*100 : null;
-  const avgSrvErrPct= avgSAtt   ? avgSErr/avgSAtt*100  : null;
-  const avgPassAvg  = avgRAtt   ? avgRPts/avgRAtt       : null;
+  const avgAtkEff   = avgA      ? (avgK-avgE)/avgA*100    : null;
+  const avgAcePct   = avgSAtt   ? avgSAce/avgSAtt*100     : null;
+  const avgSrvErrPct= avgSAtt   ? avgSErr/avgSAtt*100     : null;
+  const avgPassAvg  = avgRAtt   ? avgRPts/avgRAtt         : null;
   const avgFbsoPct  = avgFbsoRcv? avgFbsoKills/avgFbsoRcv*100 : null;
 
   function kpiTicker(lucRaw, avgRaw, higherBetter) {
@@ -2233,20 +2234,21 @@ function buildMatchOverviewPanel(sessionIds) {
   }
 
   // ── Summary bar ───────────────────────────────────────────────────────────
-  const lucAtkEff   = tA ? (tK-tE)/tA*100 : null;
-  const lucSrvErrPct= tSAtt ? tSErr/tSAtt*100 : null;
-  const lucPassAvg  = tRAtt ? tRPts/tRAtt : null;
+  const lucAtkEff   = tA    ? (tK-tE)/tA*100              : null;
+  const lucAcePct   = tSAtt ? tSAce/tSAtt*100             : null;
+  const lucSrvErrPct= tSAtt ? tSErr/tSAtt*100             : null;
+  const lucPassAvg  = tRAtt ? tRPts/tRAtt                 : null;
   const lucFbsoPct  = teamFbsoRcv ? teamFbsoKills/teamFbsoRcv*100 : null;
   const atkEff = lucAtkEff!==null ? lucAtkEff.toFixed(1)+'%' : '---';
   const fbsoPct= lucFbsoPct!==null? lucFbsoPct.toFixed(1)+'%' : '---';
   const passAvg= lucPassAvg!==null ? lucPassAvg.toFixed(2) : '---';
 
   const kpis = [
-    {lbl:'ATK EFF',   val:atkEff,           ticker:kpiTicker(lucAtkEff,    avgAtkEff,    true)},
-    {lbl:'FBSO%',     val:fbsoPct,           ticker:kpiTicker(lucFbsoPct,   avgFbsoPct,   true)},
-    {lbl:'PASS AVG',  val:passAvg,           ticker:kpiTicker(lucPassAvg,   avgPassAvg,   true)},
-    {lbl:'SRV ERR%',  val:pct(tSErr,tSAtt),  ticker:kpiTicker(lucSrvErrPct, avgSrvErrPct, false)},
-    {lbl:'ACES',      val:tSAce||'0',        ticker:''},
+    {lbl:'ATK EFF',   val:atkEff,              ticker:kpiTicker(lucAtkEff,    avgAtkEff,    true)},
+    {lbl:'FBSO%',     val:fbsoPct,             ticker:kpiTicker(lucFbsoPct,   avgFbsoPct,   true)},
+    {lbl:'PASS AVG',  val:passAvg,             ticker:kpiTicker(lucPassAvg,   avgPassAvg,   true)},
+    {lbl:'SRV ERR%',  val:pct(tSErr,tSAtt),   ticker:kpiTicker(lucSrvErrPct, avgSrvErrPct, false)},
+    {lbl:'ACE%',      val:pct(tSAce,tSAtt),   ticker:kpiTicker(lucAcePct,    avgAcePct,    true)},
   ];
   let html=`<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:24px;padding:14px 18px;background:rgba(141,0,52,.1);border-radius:8px;border:1px solid rgba(141,0,52,.25)">
     ${kpis.map(({lbl,val,ticker})=>`<div style="text-align:center;min-width:72px">

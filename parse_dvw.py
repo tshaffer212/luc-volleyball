@@ -608,11 +608,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
 
         actions.append(action)
 
-    # ── For match files: keep only LUC's actions ────────────────────────────
-    # We don't aggregate opponent stats in the dashboard. Practice files are
-    # always LUC-only (home side), so this filter is a no-op for them.
-    if inferred_type == 'match' and not is_scout:
-        actions = [a for a in actions if a['team_side'] == luc_side]
+    # NOTE: We keep ALL actions (both LUC and opponent) in match files so that
+    # aggregate.py can compute opponent stats (opp_stats). The aggregation layer
+    # filters to loyola_side when computing per-player stats.
 
     # ── Derive opponent from team names if filename didn't supply it ─────────
     if not opponent and inferred_type in ('match', 'scout'):
