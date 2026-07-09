@@ -579,6 +579,7 @@
       <button id="rpt-subtab-routes"         class="rpt-sub-tab" style="display:none" onclick="showRptTab('routes')">Routes (Close/Gap)</button>
       <button id="rpt-subtab-setter"         class="rpt-sub-tab" style="display:none" onclick="showRptTab('setter')">Setter Breakdown</button>
       <button id="rpt-subtab-match-overview" class="rpt-sub-tab" style="display:none" onclick="showRptTab('match-overview')">Overview</button>
+      <button id="rpt-subtab-zones"          class="rpt-sub-tab" style="display:none" onclick="showRptTab('zones')">Shot Charts</button>
     </div>
     <div id="rpt-panel-servrcv"        class="card" style="padding:12px;overflow-x:auto"></div>
     <div id="rpt-panel-attack"         class="card" style="padding:12px;overflow-x:auto;display:none"></div>
@@ -587,6 +588,7 @@
     <div id="rpt-panel-routes"         class="card" style="padding:12px;overflow-x:auto;display:none"></div>
     <div id="rpt-panel-setter"         class="card" style="padding:12px;overflow-x:auto;display:none"></div>
     <div id="rpt-panel-match-overview" class="card" style="padding:12px;overflow-x:auto;display:none"></div>
+    <div id="rpt-panel-zones"          class="card" style="padding:12px;overflow-x:auto;display:none"></div>
     <div id="rpt-panel-fbso-match"     class="card" style="padding:12px;overflow-x:auto;display:none"></div>
   </div>
 </div>
@@ -2335,22 +2337,219 @@ function buildMatchOverviewPanel(sessionIds) {
   return html;
 }
 
+// ── Shot Charts (court visuals) ───────────────────────────────────────────────
+const ZONE_SRC = { // LUC's side (bottom half of court SVG, y=110→200)
+  '4':{x:32,y:133},'3':{x:75,y:133},'2':{x:118,y:133},
+  '5':{x:32,y:178},'6':{x:75,y:178},'1':{x:118,y:178},'?':{x:75,y:155},
+};
+const ZONE_DST = { // Opponent's side (top half, from LUC's perspective, y=10→100)
+  '4':{x:32,y:82},'3':{x:75,y:82},'2':{x:118,y:82},
+  '5':{x:32,y:37},'6':{x:75,y:37},'1':{x:118,y:37},'?':{x:75,y:60},
+};
+
+function courtSVG(shots, title, subtitle) {
+  // shots: [{sz,ez,k,e,o}]
+  const W=150, H=210;
+  const arrowId = `arr-${Math.random().toString(36).slice(2,7)}`;
+
+  // Build lines
+  let lines = '';
+  for (const s of shots) {
+    const from = ZONE_SRC[s.sz] || ZONE_SRC['?'];
+    const to   = ZONE_DST[s.ez] || ZONE_DST['?'];
+    const total = s.k + s.e + s.o;
+    if (!total) continue;
+    const kFrac = s.k / total, eFrac = s.e / total;
+    // Dominant color
+    const color = kFrac >= 0.5 ? '#22c55e' : eFrac >= 0.5 ? '#ef4444' : '#aaa';
+    const opacity = 0.25 + Math.min(s.k + s.o + s.e, 20) / 20 * 0.65;
+    const strokeW = 1 + Math.min(total, 15) / 15 * 2.5;
+    lines += `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"
+      stroke="${color}" stroke-width="${strokeW.toFixed(1)}" stroke-opacity="${opacity.toFixed(2)}"
+      marker-end="url(#${arrowId})" />`;
+    // Dot at destination sized by count
+    const r = 3 + Math.min(total, 20) / 20 * 5;
+    lines += `<circle cx="${to.x}" cy="${to.y}" r="${r.toFixed(1)}"
+      fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="0.8" stroke-opacity="0.5"/>`;
+  }
+
+  const totShots = shots.reduce((s,x)=>s+x.k+x.e+x.o,0);
+  const totK     = shots.reduce((s,x)=>s+x.k,0);
+  const eff      = totShots ? ((totK - shots.reduce((s,x)=>s+x.e,0))/totShots*100).toFixed(0) : '—';
+
+  return `<div style="text-align:center;display:inline-block;margin:8px">
+    <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:.5px;margin-bottom:2px">${title}</div>
+    ${subtitle?`<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${subtitle}</div>`:''}
+    <svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="${arrowId}" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+          <path d="M0,0 L5,2.5 L0,5 Z" fill="context-stroke" fill-opacity="0.7"/>
+        </marker>
+      </defs>
+      <!-- Court background -->
+      <rect x="10" y="10" width="130" height="190" fill="#c8a97a" rx="2"/>
+      <!-- Opponent half -->
+      <rect x="10" y="10" width="130" height="95" fill="#c8a97a"/>
+      <!-- LUC half (slightly tinted) -->
+      <rect x="10" y="105" width="130" height="95" fill="#d4b98a"/>
+      <!-- Net -->
+      <line x1="10" y1="105" x2="140" y2="105" stroke="#fff" stroke-width="2.5"/>
+      <!-- Attack lines (dashed) -->
+      <line x1="10" y1="72" x2="140" y2="72" stroke="rgba(255,255,255,0.4)" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="10" y1="138" x2="140" y2="138" stroke="rgba(255,255,255,0.4)" stroke-width="1" stroke-dasharray="4,3"/>
+      <!-- Column dividers -->
+      <line x1="53" y1="10" x2="53" y2="200" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="97" y1="10" x2="97" y2="200" stroke="rgba(255,255,255,0.25)" stroke-width="1" stroke-dasharray="3,3"/>
+      <!-- Mid row dividers -->
+      <line x1="10" y1="52" x2="140" y2="52" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="2,4"/>
+      <line x1="10" y1="158" x2="140" y2="158" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="2,4"/>
+      <!-- Court outline -->
+      <rect x="10" y="10" width="130" height="190" fill="none" stroke="#fff" stroke-width="1.5"/>
+      <!-- Zone labels (opponent side) -->
+      <text x="32" y="98" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">4</text>
+      <text x="75" y="98" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">3</text>
+      <text x="118" y="98" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">2</text>
+      <text x="32" y="51" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">5</text>
+      <text x="75" y="51" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">6</text>
+      <text x="118" y="51" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">1</text>
+      <!-- LUC label -->
+      <text x="75" y="207" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.55)">LUC</text>
+      <!-- Shots -->
+      ${lines}
+    </svg>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:2px">${totShots} att · ${totK}K · ${eff}% eff</div>
+  </div>`;
+}
+
+function buildZoneChartsPanel(sessionIds) {
+  // Aggregate zone_charts across selected sessions
+  const atkAgg = {}; // combo → {'sz>ez': {k,e,o}}
+  const srvAgg = {};  // 'sz>ez': {ace,err,o}
+
+  for (const sid of sessionIds) {
+    const se = DATA.sessions.find(s => s.id === sid);
+    if (!se?.zone_charts) continue;
+    const zc = se.zone_charts;
+    // Attacks
+    for (const [cc, shots] of Object.entries(zc.atk || {})) {
+      if (!atkAgg[cc]) atkAgg[cc] = {};
+      for (const [key, v] of Object.entries(shots)) {
+        if (!atkAgg[cc][key]) atkAgg[cc][key] = {k:0,e:0,o:0};
+        atkAgg[cc][key].k += v.k||0;
+        atkAgg[cc][key].e += v.e||0;
+        atkAgg[cc][key].o += v.o||0;
+      }
+    }
+    // Serves
+    for (const [key, v] of Object.entries(zc.srv || {})) {
+      if (!srvAgg[key]) srvAgg[key] = {ace:0,err:0,o:0};
+      srvAgg[key].ace += v.ace||0;
+      srvAgg[key].err += v.err||0;
+      srvAgg[key].o   += v.o||0;
+    }
+  }
+
+  const hasAtk = Object.keys(atkAgg).length > 0;
+  const hasSrv = Object.keys(srvAgg).length > 0;
+  if (!hasAtk && !hasSrv) {
+    return '<p style="color:var(--text-muted);padding:12px">No zone data available for selected sessions. Zone data is coded in Volleymetrics match files.</p>';
+  }
+
+  // Convert aggregated maps → shot arrays for courtSVG
+  function toShots(shotMap) {
+    return Object.entries(shotMap).map(([key, v]) => {
+      const [sz, ez] = key.split('>');
+      return {sz, ez, k:v.k||0, e:v.e||0, o:v.o||v.ace||0};
+    });
+  }
+
+  const CALL_ORDER = ['X5','V5','X6','V6','XP','X8','X1','X2','X7'];
+  const COMBO_NAMES = {
+    X5:'Go (OH)',V5:'Go (OH Fast)',X6:'31 (Mid)',V6:'1 (Mid Fast)',
+    XP:'Pipe',X8:'Back Row (OH)',X1:'Back-1',X2:'Back-2',X7:'Back-7',OVR:'Other',
+    XM:'Slide',VP:'Pipe Fast',V8:'Back Row Fast',
+  };
+
+  let html = '';
+
+  // ── Attack section ──
+  if (hasAtk) {
+    html += `<div style="margin:0 0 20px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:11px;font-weight:800;color:var(--gold);letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap">ATTACKING — Shot Charts</span>
+      <div style="flex:1;height:1px;background:linear-gradient(90deg,var(--maroon) 0%,transparent 100%)"></div>
+    </div>`;
+    // Legend
+    html += `<div style="font-size:10px;color:var(--text-muted);margin-bottom:14px;display:flex;gap:16px;align-items:center">
+      <span><span style="display:inline-block;width:22px;height:2px;background:#22c55e;vertical-align:middle;margin-right:4px"></span>Kill dominant</span>
+      <span><span style="display:inline-block;width:22px;height:2px;background:#ef4444;vertical-align:middle;margin-right:4px"></span>Error dominant</span>
+      <span><span style="display:inline-block;width:22px;height:2px;background:#aaa;vertical-align:middle;margin-right:4px"></span>In play</span>
+      <span style="margin-left:4px;color:var(--text-dim)">Line thickness &amp; opacity scale with attempt count</span>
+    </div>`;
+    html += `<div style="display:flex;flex-wrap:wrap;gap:4px">`;
+    const orderedCombos = [
+      ...CALL_ORDER.filter(c => atkAgg[c]),
+      ...Object.keys(atkAgg).filter(c => !CALL_ORDER.includes(c)).sort()
+    ];
+    for (const cc of orderedCombos) {
+      const shots = toShots(atkAgg[cc]);
+      const total = shots.reduce((s,x)=>s+x.k+x.e+x.o,0);
+      if (total < 3) continue;
+      html += courtSVG(shots, COMBO_NAMES[cc] || cc, null);
+    }
+    html += `</div>`;
+  }
+
+  // ── Serve section ──
+  if (hasSrv) {
+    html += `<div style="margin:28px 0 20px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:11px;font-weight:800;color:var(--gold);letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap">SERVING — Shot Chart</span>
+      <div style="flex:1;height:1px;background:linear-gradient(90deg,var(--maroon) 0%,transparent 100%)"></div>
+    </div>`;
+    const srvShots = Object.entries(srvAgg).map(([key, v]) => {
+      const [sz, ez] = key.split('>');
+      return {sz, ez, k:v.ace||0, e:v.err||0, o:v.o||0};
+    });
+    const total = srvShots.reduce((s,x)=>s+x.k+x.e+x.o,0);
+    // Legend for serves
+    html += `<div style="font-size:10px;color:var(--text-muted);margin-bottom:14px;display:flex;gap:16px;align-items:center">
+      <span><span style="display:inline-block;width:22px;height:2px;background:#22c55e;vertical-align:middle;margin-right:4px"></span>Ace dominant</span>
+      <span><span style="display:inline-block;width:22px;height:2px;background:#ef4444;vertical-align:middle;margin-right:4px"></span>Error dominant</span>
+      <span><span style="display:inline-block;width:22px;height:2px;background:#aaa;vertical-align:middle;margin-right:4px"></span>In play</span>
+    </div>`;
+    if (total >= 3) {
+      html += `<div style="display:flex;flex-wrap:wrap;gap:4px">`;
+      html += courtSVG(srvShots, 'All Serves', `${total} serves`);
+      html += `</div>`;
+    } else {
+      html += `<p style="color:var(--text-muted)">Insufficient serve zone data.</p>`;
+    }
+  }
+
+  return html;
+}
+
 function renderMatchRotationReport() {
   const mrs = aggregateMatchRotStats(rptSelected);
   const rotEl      = document.getElementById('rpt-panel-rot');
   const routeEl    = document.getElementById('rpt-panel-routes');
   const setterEl   = document.getElementById('rpt-panel-setter');
   const overviewEl = document.getElementById('rpt-panel-match-overview');
+  const zonesEl    = document.getElementById('rpt-panel-zones');
 
   rotEl.innerHTML   = buildRotationAtkPanel(mrs.rotation_atk, null, null, 'LUC Attack by Rotation', false);
   routeEl.innerHTML = buildRotationAtkPanel(null, mrs.rotation_atk_close, mrs.rotation_atk_gap, 'LUC Attack by Rotation — Close vs Gap Routes', true);
 
-  // Reset setter filters on re-render
   setterBucketFilter = new Set(['all']);
   setterSelected     = 'all';
   setterEl.innerHTML = '<h3 style="margin:0 0 14px">Setter Breakdown</h3>' + buildSetterBreakdownPanel(mrs.setter_atk);
 
   overviewEl.innerHTML = '<h3 style="margin:0 0 14px">Match Overview</h3>' + buildMatchOverviewPanel(rptSelected);
+
+  const sessionIds = [...rptSelected];
+  const hasZones = sessionIds.some(sid => DATA.sessions.find(s=>s.id===sid)?.zone_charts);
+  const zonesBtn = document.getElementById('rpt-subtab-zones');
+  if (zonesBtn) zonesBtn.style.display = hasZones ? '' : 'none';
+  if (zonesEl) zonesEl.innerHTML = buildZoneChartsPanel(sessionIds);
 }
 
 function showRptTab(tab) {
@@ -3178,7 +3377,7 @@ function renderRptDetail() {
   // ── Toggle match vs practice sub-tabs ──────────────────────────────────────
   const isMatchFilter = (sessionTypeFilter === 'match');
   const practiceTabs  = ['servrcv','attack','overview'];
-  const matchTabs     = ['rot','routes','setter','match-overview','fbso-match'];
+  const matchTabs     = ['rot','routes','setter','match-overview','zones','fbso-match'];
   practiceTabs.forEach(t => {
     const btn = document.getElementById(`rpt-subtab-${t}`);
     if (btn) btn.style.display = isMatchFilter ? 'none' : '';

@@ -626,6 +626,50 @@ def main(raw_path, out_path):
                 opp['FBSO']['kills'] += 1
         return opp
 
+    def compute_zone_charts(session, loyola_side):
+        """
+        Aggregate attack and serve zone shot data for court visuals.
+        Returns dict with:
+          atk: {combo_code: {'sz>ez': {k,e,o}}}
+          srv: {'sz>ez': {ace,err,o}}
+        Only LUC actions counted. Filters out zone '0' / None (uncoded).
+        """
+        NORM = {'7':'5','8':'6','9':'1'}  # extended back-row zones → canonical
+        atk = {}
+        srv = {}
+        for action in session.get('actions', []):
+            side = action.get('team_side')
+            if loyola_side != 'both' and side != loyola_side:
+                continue
+            sc = action.get('skill_code')
+            ev = action.get('evaluation', '')
+            sz = NORM.get(action.get('start_zone',''), action.get('start_zone')) or ''
+            ez = NORM.get(action.get('end_zone',''),   action.get('end_zone'))   or ''
+            if not ez or ez == '0':
+                continue
+            if sc == 'A':
+                cc = action.get('combo_code')
+                if not cc:
+                    continue
+                key = f"{sz or '?'}>{ez}"
+                if cc not in atk:
+                    atk[cc] = {}
+                if key not in atk[cc]:
+                    atk[cc][key] = {'k':0,'e':0,'o':0}
+                if ev == '#':   atk[cc][key]['k'] += 1
+                elif ev == '=': atk[cc][key]['e'] += 1
+                else:           atk[cc][key]['o'] += 1
+            elif sc == 'S':
+                key = f"{sz or '?'}>{ez}"
+                if key not in srv:
+                    srv[key] = {'ace':0,'err':0,'o':0}
+                if ev == '#':   srv[key]['ace'] += 1
+                elif ev == '=': srv[key]['err'] += 1
+                else:           srv[key]['o']   += 1
+        if not atk and not srv:
+            return None
+        return {'atk': atk, 'srv': srv}
+
     sessions_index = []
     for s in sessions_raw:
         sid  = f"{s['season']}|{s['file']}"
@@ -652,6 +696,7 @@ def main(raw_path, out_path):
                          if s.get('type') == 'match' and
                             any(a.get('team_side') != ls for a in s.get('actions', []))
                          else None,
+            'zone_charts': compute_zone_charts(s, ls),
         })
 
     # ── Aggregation accumulators ──────────────────────────────────────────────
