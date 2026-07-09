@@ -2452,10 +2452,7 @@ function courtSVG(shots, title, isSrv=false) {
 }
 
 const SHOT_CHART_COMBOS = ['X5','V5','X6','V6','XP','X8','X1','X2','X7'];
-const COMBO_NAMES = {
-  X5:'Go (OH)',V5:'Go (OH Fast)',X6:'31 (Mid)',V6:'1 (Mid Fast)',
-  XP:'Pipe',X8:'Back Row (OH)',X1:'Back-1',X2:'Back-2',X7:'Back-7',
-};
+// COMBO_NAMES already declared globally above — reuse it here
 
 function buildZoneChartsPanel(sessionIds) {
   // Collect individual shot arrays across selected sessions
