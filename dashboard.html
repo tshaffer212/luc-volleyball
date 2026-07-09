@@ -3419,7 +3419,8 @@ function renderTeam() {
 
   // Chart: skill distribution (filtered season)
   const skills = agg.skills;
-  const skillKeys = Object.keys(skills).filter(k => skills[k].attempts > 0);
+  const BASIC_SKILLS = new Set(['S','R','A','B','D','E']);
+  const skillKeys = Object.keys(skills).filter(k => skills[k].attempts > 0 && BASIC_SKILLS.has(k));
   makeChart('chart-team-skills', 'doughnut', {
     labels: skillKeys.map(k => SKILL_NAMES[k] || k),
     datasets: [{
