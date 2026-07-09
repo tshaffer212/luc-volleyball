@@ -2191,16 +2191,81 @@ function buildMatchOverviewPanel(sessionIds) {
   const totRow=(cells)=>`<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2" style="padding:6px 8px">TEAM TOTAL</td>${cells}</tr>`;
   function pct(n,d) { return d?(n/d*100).toFixed(1)+'%':'---'; }
 
+  // ── Season match averages for KPI tickers ────────────────────────────────
+  // Collect seasons from selected sessions, then aggregate ALL match sessions in those seasons
+  const selSeasons = new Set();
+  for (const sid of sessionIds) {
+    const se = DATA.sessions.find(s => s.id === sid);
+    if (se?.season) selSeasons.add(se.season);
+  }
+  let avgK=0,avgE=0,avgA=0,avgSAtt=0,avgSErr=0,avgRAtt=0,avgRPts=0,avgFbsoRcv=0,avgFbsoKills=0;
+  const avgMatchSids = new Set();
+  for (const ps of Object.values(DATA.player_session)) {
+    const se = DATA.sessions.find(s => s.id === ps.session_id);
+    if (!se || se.type !== 'match' || !selSeasons.has(se.season)) continue;
+    avgMatchSids.add(ps.session_id);
+    const sk = ps.skills||{};
+    if (sk.A&&sk.A.attempts>0) { avgA+=sk.A.attempts; avgK+=sk.A.evals?.['#']||0; avgE+=sk.A.evals?.['=']||0; }
+    if (sk.S&&sk.S.attempts>0) { avgSAtt+=sk.S.attempts; avgSErr+=sk.S.evals?.['=']||0; }
+    if (sk.R&&sk.R.attempts>0) { avgRAtt+=sk.R.attempts; avgRPts+=sk.R.rcv_pts||0; }
+  }
+  for (const sid of avgMatchSids) {
+    const se = DATA.sessions.find(s => s.id === sid);
+    if (se) { avgFbsoRcv+=se.fbso_rcv||0; avgFbsoKills+=se.fbso_kills||0; }
+  }
+  const nMatches = avgMatchSids.size;
+  const avgAtkEff   = avgA      ? (avgK-avgE)/avgA*100 : null;
+  const avgSrvErrPct= avgSAtt   ? avgSErr/avgSAtt*100  : null;
+  const avgPassAvg  = avgRAtt   ? avgRPts/avgRAtt       : null;
+  const avgFbsoPct  = avgFbsoRcv? avgFbsoKills/avgFbsoRcv*100 : null;
+
+  function kpiTicker(lucRaw, avgRaw, higherBetter) {
+    if (avgRaw === null || lucRaw === null) return '';
+    const diff = lucRaw - avgRaw;
+    const tol = Math.abs(avgRaw) * 0.005; // 0.5% tolerance
+    const arrow = Math.abs(diff) < tol ? '→' : diff > 0 ? '▲' : '▼';
+    const isBetter = Math.abs(diff) < tol ? null : (higherBetter ? diff > 0 : diff < 0);
+    const color = isBetter === null ? 'var(--text-muted)' : isBetter ? 'var(--green)' : 'var(--red)';
+    const avgFmt = typeof avgRaw === 'number'
+      ? (Math.abs(avgRaw) < 10 ? avgRaw.toFixed(2) : avgRaw.toFixed(1)+'%')
+      : avgRaw;
+    return `<div style="font-size:9px;color:${color};margin-top:2px;font-weight:700">${arrow} ${avgFmt} <span style="font-weight:400;color:var(--text-dim)">${nMatches}m avg</span></div>`;
+  }
+
   // ── Summary bar ───────────────────────────────────────────────────────────
-  const atkEff=tA?((tK-tE)/tA*100).toFixed(1)+'%':'---';
-  const fbsoPct=teamFbsoRcv?(teamFbsoKills/teamFbsoRcv*100).toFixed(1)+'%':'---';
-  const passAvg=tRAtt?(tRPts/tRAtt).toFixed(2):'---';
-  let html=`<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px;padding:12px;background:rgba(141,0,52,.1);border-radius:8px;border:1px solid rgba(141,0,52,.25)">
-    ${[['ATK EFF',atkEff],['FBSO%',fbsoPct],['PASS AVG',passAvg],['SRV ERR%',pct(tSErr,tSAtt)],['ACES',tSAce||'0']].map(([l,v])=>`<div style="text-align:center;min-width:70px"><div style="font-size:22px;font-weight:900;color:var(--gold)">${v}</div><div style="font-size:10px;color:var(--text-muted);letter-spacing:.5px">${l}</div></div>`).join('')}
+  const lucAtkEff   = tA ? (tK-tE)/tA*100 : null;
+  const lucSrvErrPct= tSAtt ? tSErr/tSAtt*100 : null;
+  const lucPassAvg  = tRAtt ? tRPts/tRAtt : null;
+  const lucFbsoPct  = teamFbsoRcv ? teamFbsoKills/teamFbsoRcv*100 : null;
+  const atkEff = lucAtkEff!==null ? lucAtkEff.toFixed(1)+'%' : '---';
+  const fbsoPct= lucFbsoPct!==null? lucFbsoPct.toFixed(1)+'%' : '---';
+  const passAvg= lucPassAvg!==null ? lucPassAvg.toFixed(2) : '---';
+
+  const kpis = [
+    {lbl:'ATK EFF',   val:atkEff,           ticker:kpiTicker(lucAtkEff,    avgAtkEff,    true)},
+    {lbl:'FBSO%',     val:fbsoPct,           ticker:kpiTicker(lucFbsoPct,   avgFbsoPct,   true)},
+    {lbl:'PASS AVG',  val:passAvg,           ticker:kpiTicker(lucPassAvg,   avgPassAvg,   true)},
+    {lbl:'SRV ERR%',  val:pct(tSErr,tSAtt),  ticker:kpiTicker(lucSrvErrPct, avgSrvErrPct, false)},
+    {lbl:'ACES',      val:tSAce||'0',        ticker:''},
+  ];
+  let html=`<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:24px;padding:14px 18px;background:rgba(141,0,52,.1);border-radius:8px;border:1px solid rgba(141,0,52,.25)">
+    ${kpis.map(({lbl,val,ticker})=>`<div style="text-align:center;min-width:72px">
+      <div style="font-size:22px;font-weight:900;color:var(--gold)">${val}</div>
+      ${ticker}
+      <div style="font-size:9px;color:var(--text-muted);letter-spacing:.6px;margin-top:3px;text-transform:uppercase">${lbl}</div>
+    </div>`).join('')}
   </div>`;
 
+  // ── Section header helper ─────────────────────────────────────────────────
+  function sHdr(lbl, first=false) {
+    return `<div style="margin:${first?'0':'28px'} 0 10px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:11px;font-weight:800;color:var(--gold);letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap">${lbl}</span>
+      <div style="flex:1;height:1px;background:linear-gradient(90deg,var(--maroon) 0%,transparent 100%)"></div>
+    </div>`;
+  }
+
   // ── Attacking ─────────────────────────────────────────────────────────────
-  html+=`<h4 style="margin:0 0 8px;font-size:13px;font-weight:700;color:var(--maroon);letter-spacing:.5px;text-transform:uppercase">Attacking</h4>`;
+  html+=sHdr('Attacking', true);
   html+=`<div style="overflow-x:auto;margin-bottom:24px"><table class="xlsx-tbl"><thead><tr><th>#</th><th>PLAYER</th><th class="num">K</th><th class="num">E</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th><th class="num">K%</th></tr></thead><tbody>`;
   for (const {key,code,lib} of POS_GROUPS) {
     const nums=grpNums(code,lib).filter(n=>pstats[n].A.att>0);
@@ -2217,7 +2282,7 @@ function buildMatchOverviewPanel(sessionIds) {
   html+='</tbody></table></div>';
 
   // ── Serving ───────────────────────────────────────────────────────────────
-  html+=`<h4 style="margin:0 0 8px;font-size:13px;font-weight:700;color:var(--maroon);letter-spacing:.5px;text-transform:uppercase">Serving</h4>`;
+  html+=sHdr('Serving');
   html+=`<div style="overflow-x:auto;margin-bottom:24px"><table class="xlsx-tbl"><thead><tr><th>#</th><th>PLAYER</th><th class="num">ATT</th><th class="num">ACE</th><th class="num">ERR</th><th class="num">+ SRV</th><th class="num">- SRV</th><th class="num">OVP</th><th class="num">A%</th><th class="num">E%</th></tr></thead><tbody>`;
   for (const {key,code,lib} of POS_GROUPS) {
     const nums=grpNums(code,lib).filter(n=>pstats[n].S.att>0);
@@ -2235,7 +2300,7 @@ function buildMatchOverviewPanel(sessionIds) {
   html+='</tbody></table></div>';
 
   // ── Receiving ─────────────────────────────────────────────────────────────
-  html+=`<h4 style="margin:0 0 8px;font-size:13px;font-weight:700;color:var(--maroon);letter-spacing:.5px;text-transform:uppercase">Receiving</h4>`;
+  html+=sHdr('Receiving');
   html+=`<div style="overflow-x:auto;margin-bottom:24px"><table class="xlsx-tbl"><thead><tr><th>#</th><th>PLAYER</th><th class="num">ATT</th><th class="num">AVG</th><th class="num"># Perf</th><th class="num">+ Good</th><th class="num">! Med</th><th class="num">- OoS</th><th class="num">/ OVP</th><th class="num">ERR</th><th class="num">ERR%</th></tr></thead><tbody>`;
   for (const {key,code,lib} of POS_GROUPS) {
     const nums=grpNums(code,lib).filter(n=>pstats[n].R.att>0);
@@ -2259,7 +2324,7 @@ function buildMatchOverviewPanel(sessionIds) {
   const ZONE_NAMES={'1':'Z1 (BR)','6':'Z6 (BC)','5':'Z5 (BL)','4':'Z4 (FL)','3':'Z3 (FC)','2':'Z2 (FR)'};
   const activeZones=['1','6','5','4','3','2','7','8','9'].filter(z=>teamZones[z]?.att>0);
   if (activeZones.length) {
-    html+=`<h4 style="margin:0 0 8px;font-size:13px;font-weight:700;color:var(--maroon);letter-spacing:.5px;text-transform:uppercase">Receive by Zone</h4>`;
+    html+=sHdr('Receive by Zone');
     html+=`<div style="overflow-x:auto"><table class="xlsx-tbl"><thead><tr><th>ZONE</th><th class="num">ATT</th><th class="num">AVG</th><th class="num">PERF (#)</th><th class="num">PERF%</th><th class="num">ERR%</th></tr></thead><tbody>`;
     for (const z of activeZones) {
       const zd=teamZones[z];

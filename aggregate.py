@@ -580,10 +580,39 @@ def main(raw_path, out_path):
                 acc['errors']   += cv['errors']
 
     # ── Session index ─────────────────────────────────────────────────────────
+    def compute_opp_stats(session, loyola_side):
+        """Aggregate opponent team ATK/SRV/RCV totals for a match session."""
+        if loyola_side == 'both':
+            return None
+        opp = {
+            'A': {'att': 0, 'k': 0, 'e': 0},
+            'S': {'att': 0, 'ace': 0, 'err': 0},
+            'R': {'att': 0, 'pts': 0},
+        }
+        for action in session.get('actions', []):
+            side = action.get('team_side')
+            if side == loyola_side:
+                continue  # skip LUC actions
+            sc = action.get('skill_code', '')
+            ev = action.get('evaluation', '')
+            if sc == 'A':
+                opp['A']['att'] += 1
+                if ev == '#':   opp['A']['k'] += 1
+                elif ev == '=': opp['A']['e'] += 1
+            elif sc == 'S':
+                opp['S']['att'] += 1
+                if ev == '#':   opp['S']['ace'] += 1
+                elif ev == '=': opp['S']['err'] += 1
+            elif sc == 'R':
+                opp['R']['att'] += 1
+                opp['R']['pts'] += rcv_points(ev, is_match=True)
+        return opp
+
     sessions_index = []
     for s in sessions_raw:
         sid  = f"{s['season']}|{s['file']}"
         fbso = session_rally[sid]['fbso']
+        ls   = loyola_side_for_session(s)
         sessions_index.append({
             'id':             sid,
             'file':           s['file'],
@@ -595,11 +624,16 @@ def main(raw_path, out_path):
             'away_team':      s.get('away_team'),
             'action_count':   s.get('action_count', 0),
             'coding_version': s.get('coding_version', 'basic'),
-            'loyola_side':    loyola_side_for_session(s),
+            'loyola_side':    ls,
             'fbso_rcv':       fbso['rcv_rallies'],
             'fbso_kills':     fbso['fbso_kills'],
             'call_attacks':   session_rally[sid]['call_atk'],
             'match_rot_stats': session_rally[sid]['rot_stats'],  # None for practice
+            # opp_stats: only populated when the file contains both teams' actions
+            'opp_stats': compute_opp_stats(s, ls)
+                         if s.get('type') == 'match' and
+                            any(a.get('team_side') != ls for a in s.get('actions', []))
+                         else None,
         })
 
     # ── Aggregation accumulators ──────────────────────────────────────────────
