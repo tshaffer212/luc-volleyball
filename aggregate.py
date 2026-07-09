@@ -581,15 +581,17 @@ def main(raw_path, out_path):
 
     # ── Session index ─────────────────────────────────────────────────────────
     def compute_opp_stats(session, loyola_side):
-        """Aggregate opponent team ATK/SRV/RCV totals for a match session."""
+        """Aggregate opponent team ATK/SRV/RCV/FBSO totals for a match session."""
         if loyola_side == 'both':
             return None
         opp = {
-            'A': {'att': 0, 'k': 0, 'e': 0},
-            'S': {'att': 0, 'ace': 0, 'err': 0},
-            'R': {'att': 0, 'pts': 0},
+            'A':    {'att': 0, 'k': 0, 'e': 0},
+            'S':    {'att': 0, 'ace': 0, 'err': 0},
+            'R':    {'att': 0, 'pts': 0},
+            'FBSO': {'rcv': 0, 'kills': 0},
         }
-        for action in session.get('actions', []):
+        actions = session.get('actions', [])
+        for action in actions:
             side = action.get('team_side')
             if side == loyola_side:
                 continue  # skip LUC actions
@@ -606,6 +608,22 @@ def main(raw_path, out_path):
             elif sc == 'R':
                 opp['R']['att'] += 1
                 opp['R']['pts'] += rcv_points(ev, is_match=True)
+
+        # Opponent FBSO: group by rally_seq, find rallies where opp received,
+        # then check if opp's first attack in that rally was a kill.
+        from collections import defaultdict
+        rally_groups = defaultdict(list)
+        for a in actions:
+            rally_groups[a.get('rally_seq', 0)].append(a)
+        for rs in sorted(rally_groups):
+            rally = rally_groups[rs]
+            opp_acts = [a for a in rally if a.get('team_side') != loyola_side]
+            if not any(a.get('skill_code') == 'R' for a in opp_acts):
+                continue
+            opp['FBSO']['rcv'] += 1
+            first_atk = next((a for a in opp_acts if a.get('skill_code') == 'A'), None)
+            if first_atk and first_atk.get('evaluation') == '#':
+                opp['FBSO']['kills'] += 1
         return opp
 
     sessions_index = []
