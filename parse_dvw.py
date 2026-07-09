@@ -276,16 +276,18 @@ def parse_scout_code(code):
         return None
 
     result = {
-        'team_side':    'home' if code[0] == '*' else 'away',
-        'player_num':   code[1:3],
-        'skill_code':   code[3] if len(code) > 3 else '~',
-        'technique':    code[4] if len(code) > 4 else '~',
-        'evaluation':   code[5] if len(code) > 5 else '~',
-        'combo_code':   None,
-        'start_zone':   None,   # zone attack was called from
-        'end_zone':     None,   # where ball landed
-        'direction':    None,   # attack direction (H=cross, B=line, C=cut, etc.)
-        'num_blockers': None,
+        'team_side':     'home' if code[0] == '*' else 'away',
+        'player_num':    code[1:3],
+        'skill_code':    code[3] if len(code) > 3 else '~',
+        'technique':     code[4] if len(code) > 4 else '~',
+        'evaluation':    code[5] if len(code) > 5 else '~',
+        'combo_code':    None,
+        'start_zone':    None,   # main zone attack was called from (1-9)
+        'start_subzone': None,   # sub-zone digit within start zone (VM format)
+        'end_zone':      None,   # main zone where ball landed (1-9)
+        'end_subzone':   None,   # sub-zone letter within end zone (A-D, VM format)
+        'direction':     None,   # attack direction (A/B/C/D in VM; H/B/C in older)
+        'num_blockers':  None,
     }
 
     # Combination code (chars 6-7)
@@ -297,31 +299,70 @@ def parse_scout_code(code):
     rest = code[8:] if len(code) > 8 else ''
     rest_stripped = rest.replace('~', '')
 
-    # Volleymetrics format for receptions: ~~~XN... where code[10] (N, the second digit)
-    # determines the zone via groupings:
-    #   Zone 1 (back right) : N in {1, 9, 2}
-    #   Zone 5 (back left)  : N in {5, 7, 4}
-    #   Zone 6 (back middle): N in {3, 6, 8}
+    # Volleymetrics (VM) zone encoding: code[8]='~', code[9:11] are two digits.
+    # Different skill types use different layouts after code[8]:
+    #
+    #   Serve/Reception: ~[origin_digit][end_digit][sub_letter]~~~...
+    #     code[9]  = serve origin zone digit (9=back-right, 7=back-left, 6/8=back-mid)
+    #     code[10] = end zone digit → maps to main zone via VM_ZONE_MAP
+    #     code[11] = sub-zone letter (A-D) within end zone
+    #
+    #   Attack:          ~[sz][ss][dir][ht][ez]~...
+    #     code[9]  = start zone (main zone 1-9)
+    #     code[10] = start sub-zone digit (position within zone)
+    #     code[11] = direction letter (A=angle, B=line, C=cross, D=deep)
+    #     code[12] = height/tempo letter
+    #     code[13] = end zone digit (where ball lands on opponent court)
+
+    # Maps VM end-zone second digit → main zone (1=back-right, 5=back-left, 6=back-mid)
     _VM_ZONE_MAP = {'1':'1','9':'1','2':'1', '5':'5','7':'5','4':'5', '3':'6','6':'6','8':'6'}
+    # Maps VM serve-origin first digit → approximate server position on their side
+    _SRV_ORIGIN_MAP = {'9':'1','1':'1','2':'1', '7':'5','5':'5','4':'5', '6':'6','3':'6','8':'6'}
+
     skill = result.get('skill_code', '')
-    if (skill == 'R' and len(code) > 10
-            and code[8] == '~' and code[9].isdigit() and code[10].isdigit()):
-        result['end_zone'] = _VM_ZONE_MAP.get(code[10], code[10])
+    if (len(code) > 10 and code[8] == '~'
+            and code[9].isdigit() and code[10].isdigit()):
+        # ── VM format ────────────────────────────────────────────────────────
+        if skill in ('S', 'R'):
+            # Serve/reception: origin + end zone + sub-zone letter
+            result['start_zone'] = _SRV_ORIGIN_MAP.get(code[9], code[9])
+            result['end_zone']   = _VM_ZONE_MAP.get(code[10], code[10])
+            if len(code) > 11 and code[11].isalpha():
+                result['end_subzone'] = code[11]   # letter A-D
+        elif (skill == 'A' and len(code) > 13
+              and code[11].isalpha() and code[12].isalpha()
+              and code[13].isdigit()):
+            # Attack: full 5-char zone block
+            result['start_zone']    = code[9]
+            result['start_subzone'] = code[10]     # digit within start zone
+            result['direction']     = code[11]     # true direction (A/B/C/D)
+            # code[12] = height/tempo — not stored separately
+            result['end_zone']      = code[13]
+        else:
+            # Other skill in VM format (blocks, digs, etc.) — generic fallback
+            dir_match = re.search(r'([A-Z])(\d)', rest_stripped)
+            if dir_match:
+                result['direction'] = dir_match.group(1)
+                result['end_zone']  = dir_match.group(2)
+                pre_dir = rest_stripped[:dir_match.start()]
+                zones = re.findall(r'\d', pre_dir)
+                if zones:
+                    result['start_zone']   = zones[0]
+                    result['num_blockers'] = int(zones[1]) if len(zones) > 1 else None
     else:
-        # Direction + end zone: letter followed immediately by digit (e.g. H2, B9)
+        # ── Non-VM (practice/internal) format ────────────────────────────────
+        # Direction + end zone: uppercase letter followed immediately by digit
         dir_match = re.search(r'([A-Z])(\d)', rest_stripped)
         if dir_match:
             result['direction'] = dir_match.group(1)
             result['end_zone']  = dir_match.group(2)
-
-            # Start zone: digit before direction pair, possibly preceded by blocker count
             pre_dir = rest_stripped[:dir_match.start()]
             zones = re.findall(r'\d', pre_dir)
             if zones:
                 result['start_zone']   = zones[0]
                 result['num_blockers'] = int(zones[1]) if len(zones) > 1 else None
         else:
-            # Serves / receptions: trailing digit = end zone
+            # Trailing digit = end zone (simple serve/reception codes)
             zone_match = re.search(r'(\d+)$', rest_stripped)
             if zone_match:
                 result['end_zone'] = zone_match.group(1)
@@ -584,7 +625,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
             'combo_code':    combo_code,
             'combo_name':    attack_combos.get(combo_code) if combo_code else None,
             'start_zone':    parsed.get('start_zone'),
+            'start_subzone': parsed.get('start_subzone'),
             'end_zone':      parsed.get('end_zone'),
+            'end_subzone':   parsed.get('end_subzone'),
             'direction':     parsed.get('direction'),
             'num_blockers':  parsed.get('num_blockers'),
             # Setter call (K-code from setter's combo_code field)

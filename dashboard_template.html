@@ -2337,117 +2337,139 @@ function buildMatchOverviewPanel(sessionIds) {
   return html;
 }
 
-// ── Shot Charts (court visuals) ───────────────────────────────────────────────
-// Court SVG: 230px wide × 330px tall, LUC at bottom, opponent at top.
-// Zones 7/8/9 are sub-zones (deeper back row) kept distinct from 5/6/1.
-const CW=230, CH=330;
-const CX1=15, CX2=215;  // court left/right edge x
-const NET_Y=165;         // net y
-const ATK_Y_LUC=NET_Y+38;  // LUC attack line
-const ATK_Y_OPP=NET_Y-38;  // Opp attack line
+// ── Shot Charts (court visuals) ──────────────────────────────────────────────
+// Courts use a 290×440 viewBox. LUC at bottom, opponent at top.
+// Zone sub-zones: 'ss' = digit (1-9) within attack start zone (3×3 grid);
+//                 'esz' = letter (A-D) within serve landing zone (2×2 grid).
+// Zones 7/8/9 exist on LUC's side only (back-row attack starts, serve origins).
+// ZONE_DST has no 7/8/9 — attacks/serves never land in extended zones.
+// Click any chart to expand to fullscreen.
 
-// Column centers: 3 cols across 200px playing width
-const COL = [CX1+33, CX1+100, CX1+167]; // left, mid, right
+const CW=290, CH=440;
+const CX1=18, CX2=272;
+const NET_Y=220;
+const ATK_Y_LUC=NET_Y+55, ATK_Y_OPP=NET_Y-55;
+const COL=[60, 145, 230];
+const COL_D1=(COL[0]+COL[1])/2, COL_D2=(COL[1]+COL[2])/2;
 
-// Zone coordinate centers — LUC's side (src)
+// Zone centers — LUC's side (attack starts + serve origins)
 const ZONE_SRC = {
-  '4':{x:COL[0],y:NET_Y+28},  // front left
-  '3':{x:COL[1],y:NET_Y+28},  // front mid
-  '2':{x:COL[2],y:NET_Y+28},  // front right
-  '5':{x:COL[0],y:NET_Y+80},  // back left
-  '6':{x:COL[1],y:NET_Y+80},  // back mid
-  '1':{x:COL[2],y:NET_Y+80},  // back right
-  '7':{x:COL[0],y:NET_Y+130}, // back left sub-zone (deep)
-  '8':{x:COL[1],y:NET_Y+130}, // back mid sub-zone (deep)
-  '9':{x:COL[2],y:NET_Y+130}, // back right sub-zone (deep)
+  '4':{x:COL[0],y:NET_Y+35},'3':{x:COL[1],y:NET_Y+35},'2':{x:COL[2],y:NET_Y+35},
+  '5':{x:COL[0],y:NET_Y+105},'6':{x:COL[1],y:NET_Y+105},'1':{x:COL[2],y:NET_Y+105},
+  '7':{x:COL[0],y:NET_Y+175},'8':{x:COL[1],y:NET_Y+175},'9':{x:COL[2],y:NET_Y+175},
 };
-// Zone coordinate centers — opponent's side (dst), from LUC's perspective
+// Zone centers — opponent's side (attack/serve landing); no 7/8/9
 const ZONE_DST = {
-  '4':{x:COL[0],y:NET_Y-28},
-  '3':{x:COL[1],y:NET_Y-28},
-  '2':{x:COL[2],y:NET_Y-28},
-  '5':{x:COL[0],y:NET_Y-80},
-  '6':{x:COL[1],y:NET_Y-80},
-  '1':{x:COL[2],y:NET_Y-80},
-  '7':{x:COL[0],y:NET_Y-130},
-  '8':{x:COL[1],y:NET_Y-130},
-  '9':{x:COL[2],y:NET_Y-130},
+  '4':{x:COL[0],y:NET_Y-35},'3':{x:COL[1],y:NET_Y-35},'2':{x:COL[2],y:NET_Y-35},
+  '5':{x:COL[0],y:NET_Y-105},'6':{x:COL[1],y:NET_Y-105},'1':{x:COL[2],y:NET_Y-105},
 };
-// Fallback src when no start zone: middle of LUC's back row
-const FALLBACK_SRC = {x:COL[1], y:NET_Y+80};
+const FALLBACK_SRC={x:COL[1],y:NET_Y+105};
+
+// Sub-zone offsets within a zone:
+// Digit sub-zones (1-9) map to a 3×3 grid inside the zone
+const _SSD={'1':[+1,0],'2':[+1,-1],'3':[0,-1],'4':[-1,-1],'5':[-1,0],'6':[0,0],'7':[-1,+1],'8':[0,+1],'9':[+1,+1]};
+// Letter sub-zones (A-D) map to 2×2 quadrants inside the zone
+const _SSL={'A':[-1,-1],'B':[+1,-1],'C':[-1,+1],'D':[+1,+1]};
+const SZ_DX=13, SZ_DY=10;
+function _subOff(s,isLet){const o=(isLet?_SSL:_SSD)[s];return o?{dx:o[0]*SZ_DX,dy:o[1]*SZ_DY}:{dx:0,dy:0};}
+
+// Cache for fullscreen expansion
+const _SC={};
+function openCourtFullscreen(id){
+  const d=_SC[id]; if(!d) return;
+  let m=document.getElementById('_scM');
+  if(!m){
+    m=document.createElement('div'); m.id='_scM';
+    m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer';
+    m.addEventListener('click',()=>{m.style.display='none';});
+    document.body.appendChild(m);
+  }
+  const w=Math.min(window.innerWidth*0.88,680), h=w/CW*CH;
+  const wrap=document.createElement('div');
+  wrap.style.cssText='cursor:default;text-align:center';
+  wrap.addEventListener('click',e=>e.stopPropagation());
+  const ttl=document.createElement('div');
+  ttl.style.cssText='font-size:16px;font-weight:700;color:#FEBC18;margin-bottom:8px;letter-spacing:.6px';
+  ttl.textContent=d.title;
+  wrap.appendChild(ttl);
+  const svgEl=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svgEl.setAttribute('width',w); svgEl.setAttribute('height',h);
+  svgEl.setAttribute('viewBox',`0 0 ${CW} ${CH}`);
+  svgEl.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  svgEl.innerHTML=_courtInner(d.shots,d.isSrv);
+  wrap.appendChild(svgEl);
+  const stat=document.createElement('div');
+  stat.style.cssText='font-size:13px;color:#888;margin-top:7px';
+  stat.textContent=d._stat;
+  wrap.appendChild(stat);
+  const x=document.createElement('button');
+  x.innerHTML='✕';
+  x.style.cssText='position:fixed;top:12px;right:16px;background:none;border:none;color:#fff;font-size:30px;cursor:pointer;z-index:10001;line-height:1';
+  x.onclick=e=>{e.stopPropagation();m.style.display='none';};
+  m.innerHTML=''; m.appendChild(wrap); m.appendChild(x);
+  m.style.display='flex';
+}
+
+function _courtInner(shots, isSrv) {
+  const uid='u'+Math.random().toString(36).slice(2,7);
+  let lines='';
+  shots.forEach((s,i)=>{
+    const base=ZONE_SRC[s.sz]||FALLBACK_SRC;
+    const dst=ZONE_DST[s.ez]; if(!dst) return;
+    const so=_subOff(s.ss,false);
+    const eo=isSrv?_subOff(s.esz,true):{dx:0,dy:0};
+    const jx=((i*17+3)%15-7), jy=((i*13+7)%11-5);
+    const x1=(base.x+so.dx+jx).toFixed(1), y1=(base.y+so.dy+jy).toFixed(1);
+    const x2=(dst.x+eo.dx+jx*0.5).toFixed(1), y2=(dst.y+eo.dy+jy*0.5).toFixed(1);
+    const isK=s.ev==='#', isE=s.ev==='=';
+    const color=isK?'#22c55e':isE?'#ef4444':'#555';
+    const op=isK||isE?0.82:0.52, sw=isK||isE?1.7:1.3;
+    lines+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${sw}" stroke-opacity="${op}" marker-end="url(#ah${uid}${isK?'k':isE?'e':'o'})"/>`;
+  });
+  const courtH=CH-32;
+  return `<defs>
+      <marker id="ah${uid}k" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="#22c55e"/></marker>
+      <marker id="ah${uid}e" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="#ef4444"/></marker>
+      <marker id="ah${uid}o" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto"><path d="M0,0.5 L6,3 L0,5.5 Z" fill="#555"/></marker>
+    </defs>
+    <rect x="${CX1}" y="10" width="${CX2-CX1}" height="${courtH}" fill="#c8a97a" rx="3"/>
+    <rect x="${CX1}" y="${NET_Y}" width="${CX2-CX1}" height="${courtH-(NET_Y-10)}" fill="#d2b884"/>
+    <rect x="${CX1}" y="10" width="${CX2-CX1}" height="${courtH}" fill="none" stroke="white" stroke-width="1.8" rx="3"/>
+    <rect x="${CX1}" y="${NET_Y-2}" width="${CX2-CX1}" height="4" fill="white"/>
+    <line x1="${CX1}" y1="${ATK_Y_OPP}" x2="${CX2}" y2="${ATK_Y_OPP}" stroke="rgba(255,255,255,0.5)" stroke-width="1" stroke-dasharray="5,3"/>
+    <line x1="${CX1}" y1="${ATK_Y_LUC}" x2="${CX2}" y2="${ATK_Y_LUC}" stroke="rgba(255,255,255,0.5)" stroke-width="1" stroke-dasharray="5,3"/>
+    <line x1="${COL_D1}" y1="10" x2="${COL_D1}" y2="${courtH+10}" stroke="rgba(255,255,255,0.28)" stroke-width="0.8" stroke-dasharray="4,4"/>
+    <line x1="${COL_D2}" y1="10" x2="${COL_D2}" y2="${courtH+10}" stroke="rgba(255,255,255,0.28)" stroke-width="0.8" stroke-dasharray="4,4"/>
+    <!-- Opponent side zone labels (larger, brighter — this is where shots land) -->
+    <text x="${COL[0]}" y="${NET_Y-18}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.72)" font-family="monospace" font-weight="bold">4</text>
+    <text x="${COL[1]}" y="${NET_Y-18}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.72)" font-family="monospace" font-weight="bold">3</text>
+    <text x="${COL[2]}" y="${NET_Y-18}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.72)" font-family="monospace" font-weight="bold">2</text>
+    <text x="${COL[0]}" y="${NET_Y-92}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.72)" font-family="monospace" font-weight="bold">5</text>
+    <text x="${COL[1]}" y="${NET_Y-92}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.72)" font-family="monospace" font-weight="bold">6</text>
+    <text x="${COL[2]}" y="${NET_Y-92}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.72)" font-family="monospace" font-weight="bold">1</text>
+    <!-- LUC side labels (smaller, dim) -->
+    <text x="${COL[0]}" y="${NET_Y+28}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.3)" font-family="monospace">4</text>
+    <text x="${COL[1]}" y="${NET_Y+28}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.3)" font-family="monospace">3</text>
+    <text x="${COL[2]}" y="${NET_Y+28}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.3)" font-family="monospace">2</text>
+    <text x="${COL[0]}" y="${NET_Y+98}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.3)" font-family="monospace">5</text>
+    <text x="${COL[1]}" y="${NET_Y+98}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.3)" font-family="monospace">6</text>
+    <text x="${COL[2]}" y="${NET_Y+98}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.3)" font-family="monospace">1</text>
+    <text x="${(CX1+CX2)/2}" y="${NET_Y+7}" text-anchor="middle" font-size="7" fill="rgba(255,255,255,0.22)">LUC</text>
+    ${lines}`;
+}
 
 function courtSVG(shots, title, isSrv=false) {
-  // shots: [{sz, ez, ev}] — individual attempts
-  const uid = Math.random().toString(36).slice(2,6);
-  let lines = '';
-  let totK=0, totE=0, tot=0;
-
-  shots.forEach((s, i) => {
-    const src = ZONE_SRC[s.sz] || FALLBACK_SRC;
-    const dst = ZONE_DST[s.ez];
-    if (!dst) return;
-    tot++;
-    const isK = s.ev === '#';
-    const isE = s.ev === '=';
-    if (isK) totK++;
-    if (isE) totE++;
-    const color = isK ? '#22c55e' : isE ? '#ef4444' : '#a0a0a0';
-    const op    = isK ? 0.72 : isE ? 0.72 : 0.38;
-    // Deterministic jitter per shot so arrows spread within zone
-    const jx = ((i * 17 + 3) % 19 - 9);
-    const jy = ((i * 13 + 7) % 15 - 7);
-    const x1 = src.x + jx, y1 = src.y + jy;
-    const x2 = dst.x + jx, y2 = dst.y + jy;
-    lines += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="1.4" stroke-opacity="${op}" marker-end="url(#ah-${uid}-${isK?'k':isE?'e':'o'})"/>`;
-  });
-
-  const eff = tot ? ((totK-totE)/tot*100).toFixed(0) : '—';
-  const statLine = isSrv
-    ? `${tot} srv · ${totK} ace · ${totE} err`
-    : `${tot} att · ${totK}K · ${eff}% eff`;
-
-  const courtH = CH - 40; // playing area
-  return `<div style="text-align:center;display:inline-block;margin:6px 10px 14px">
-    <div style="font-size:12px;font-weight:700;color:var(--gold);letter-spacing:.5px;margin-bottom:4px">${title}</div>
-    <svg width="${CW}" height="${CH}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <marker id="ah-${uid}-k" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0.5 L5,2.5 L0,4.5 Z" fill="#22c55e" fill-opacity="0.8"/></marker>
-        <marker id="ah-${uid}-e" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0.5 L5,2.5 L0,4.5 Z" fill="#ef4444" fill-opacity="0.8"/></marker>
-        <marker id="ah-${uid}-o" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto"><path d="M0,0.5 L5,2.5 L0,4.5 Z" fill="#a0a0a0" fill-opacity="0.6"/></marker>
-      </defs>
-      <!-- Court surface -->
-      <rect x="${CX1}" y="10" width="${CX2-CX1}" height="${courtH}" fill="#c8a97a" rx="3"/>
-      <!-- LUC half slightly lighter -->
-      <rect x="${CX1}" y="${NET_Y}" width="${CX2-CX1}" height="${10+courtH-NET_Y}" fill="#d2b884"/>
-      <!-- Net -->
-      <rect x="${CX1}" y="${NET_Y-1.5}" width="${CX2-CX1}" height="3" fill="white" opacity="0.9"/>
-      <!-- Attack lines -->
-      <line x1="${CX1}" y1="${ATK_Y_OPP}" x2="${CX2}" y2="${ATK_Y_OPP}" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="5,3"/>
-      <line x1="${CX1}" y1="${ATK_Y_LUC}" x2="${CX2}" y2="${ATK_Y_LUC}" stroke="rgba(255,255,255,0.45)" stroke-width="1" stroke-dasharray="5,3"/>
-      <!-- Back-zone dividers (sub-zone lines) -->
-      <line x1="${CX1}" y1="${NET_Y+108}" x2="${CX2}" y2="${NET_Y+108}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,5"/>
-      <line x1="${CX1}" y1="${NET_Y-108}" x2="${CX2}" y2="${NET_Y-108}" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="3,5"/>
-      <!-- Column dividers -->
-      <line x1="${COL[0]+33}" y1="10" x2="${COL[0]+33}" y2="${10+courtH}" stroke="rgba(255,255,255,0.22)" stroke-width="1" stroke-dasharray="4,3"/>
-      <line x1="${COL[1]+33}" y1="10" x2="${COL[1]+33}" y2="${10+courtH}" stroke="rgba(255,255,255,0.22)" stroke-width="1" stroke-dasharray="4,3"/>
-      <!-- Court outline -->
-      <rect x="${CX1}" y="10" width="${CX2-CX1}" height="${courtH}" fill="none" stroke="white" stroke-width="1.8" rx="3"/>
-      <!-- Zone labels — opponent side -->
-      <text x="${COL[0]}" y="${NET_Y-18}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.38)">4</text>
-      <text x="${COL[1]}" y="${NET_Y-18}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.38)">3</text>
-      <text x="${COL[2]}" y="${NET_Y-18}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.38)">2</text>
-      <text x="${COL[0]}" y="${NET_Y-70}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.38)">5</text>
-      <text x="${COL[1]}" y="${NET_Y-70}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.38)">6</text>
-      <text x="${COL[2]}" y="${NET_Y-70}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.38)">1</text>
-      <text x="${COL[0]}" y="${NET_Y-122}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.25)">7</text>
-      <text x="${COL[1]}" y="${NET_Y-122}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.25)">8</text>
-      <text x="${COL[2]}" y="${NET_Y-122}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.25)">9</text>
-      <!-- LUC label -->
-      <text x="${(CX1+CX2)/2}" y="${10+courtH+15}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.5)">LUC</text>
-      <!-- Shot arrows -->
-      ${lines}
-    </svg>
-    <div style="font-size:10px;color:var(--text-muted);margin-top:1px">${statLine}</div>
+  const cid='sc'+Object.keys(_SC).length;
+  const tot=shots.length;
+  const totK=shots.filter(s=>s.ev==='#').length;
+  const totE=shots.filter(s=>s.ev==='=').length;
+  const eff=tot?((totK-totE)/tot*100).toFixed(0):'—';
+  const stat=isSrv?`${tot} srv · ${totK} ace · ${totE} err`:`${tot} att · ${totK}K · ${eff}% eff`;
+  _SC[cid]={shots,title,isSrv,_stat:stat};
+  return `<div style="text-align:center;display:inline-block;margin:6px 8px 14px;cursor:pointer" title="Click to enlarge" onclick="openCourtFullscreen('${cid}')">
+    <div style="font-size:12px;font-weight:700;color:var(--gold);letter-spacing:.5px;margin-bottom:3px">${title}</div>
+    <svg width="${CW}" height="${CH}" viewBox="0 0 ${CW} ${CH}" xmlns="http://www.w3.org/2000/svg">${_courtInner(shots,isSrv)}</svg>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:2px">${stat}</div>
   </div>`;
 }
 
@@ -2456,8 +2478,8 @@ const SHOT_CHART_COMBOS = ['X5','V5','X6','V6','XP','X8','X1','X2','X7'];
 
 function buildZoneChartsPanel(sessionIds) {
   // Collect individual shot arrays across selected sessions
-  const atkShots = {}; // combo → [{sz,ez,ev}]
-  const srvShots = []; // [{sz,ez,ev}]
+  const atkShots = {}; // combo → [{sz,ss,ez,ev}]
+  const srvShots = []; // [{sz,ez,esz,ev}]
 
   for (const sid of sessionIds) {
     const se = DATA.sessions.find(s => s.id === sid);
@@ -2478,11 +2500,11 @@ function buildZoneChartsPanel(sessionIds) {
     return '<p style="color:var(--text-muted);padding:12px">No zone data available for selected sessions. Zone data is present in Volleymetrics match files.</p>';
   }
 
-  const legend = (killLbl) => `<div style="font-size:10px;color:var(--text-muted);margin-bottom:14px;display:flex;gap:18px;align-items:center">
+  const legend = (killLbl) => `<div style="font-size:10px;color:var(--text-muted);margin-bottom:14px;display:flex;gap:18px;align-items:center;flex-wrap:wrap">
     <span style="display:flex;align-items:center;gap:5px"><svg width="22" height="3"><line x1="0" y1="1.5" x2="22" y2="1.5" stroke="#22c55e" stroke-width="2"/></svg>${killLbl}</span>
     <span style="display:flex;align-items:center;gap:5px"><svg width="22" height="3"><line x1="0" y1="1.5" x2="22" y2="1.5" stroke="#ef4444" stroke-width="2"/></svg>Error</span>
-    <span style="display:flex;align-items:center;gap:5px"><svg width="22" height="3"><line x1="0" y1="1.5" x2="22" y2="1.5" stroke="#a0a0a0" stroke-width="2" stroke-opacity="0.6"/></svg>In play</span>
-    <span style="color:var(--text-dim)">One arrow per attempt · arrows jitter within zone</span>
+    <span style="display:flex;align-items:center;gap:5px"><svg width="22" height="3"><line x1="0" y1="1.5" x2="22" y2="1.5" stroke="#555" stroke-width="2"/></svg>In play</span>
+    <span style="color:var(--text-dim)">One arrow per attempt · click chart to enlarge</span>
   </div>`;
 
   const sHdr2 = lbl => `<div style="margin:0 0 16px;display:flex;align-items:center;gap:10px">

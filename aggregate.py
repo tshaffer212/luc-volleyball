@@ -629,23 +629,27 @@ def main(raw_path, out_path):
     def compute_zone_charts(session, loyola_side):
         """
         Collect individual attack and serve shot records for court visuals.
-        Preserves sub-zones (7/8/9 kept distinct from 5/6/1).
+        Stores sub-zone precision: 'ss' (digit, attack start sub-zone) and
+        'esz' (letter A-D, serve end sub-zone from VM files).
         Returns:
-          atk: {combo_code: [{sz, ez, ev}]}   (individual shots, ez='0'/None filtered)
-          srv: [{sz, ez, ev}]
+          atk: {combo_code: [{sz, ss, ez, ev}]}
+          srv: [{sz, ez, esz, ev}]
         """
-        VALID = set('123456789')
+        VALID_D = set('123456789')
+        VALID_L = set('ABCDEFGHIJ')
         atk = {}
         srv = []
         for action in session.get('actions', []):
             side = action.get('team_side')
             if loyola_side != 'both' and side != loyola_side:
                 continue
-            sc = action.get('skill_code')
-            ev = action.get('evaluation', '')
-            sz = str(action.get('start_zone') or '')
-            ez = str(action.get('end_zone')   or '')
-            if not ez or ez not in VALID:
+            sc  = action.get('skill_code')
+            ev  = action.get('evaluation', '')
+            sz  = str(action.get('start_zone')    or '')
+            ss  = str(action.get('start_subzone') or '')
+            ez  = str(action.get('end_zone')      or '')
+            esz = str(action.get('end_subzone')   or '')
+            if not ez or ez not in VALID_D:
                 continue
             if sc == 'A':
                 cc = action.get('combo_code')
@@ -653,9 +657,19 @@ def main(raw_path, out_path):
                     continue
                 if cc not in atk:
                     atk[cc] = []
-                atk[cc].append({'sz': sz if sz in VALID else '', 'ez': ez, 'ev': ev})
+                atk[cc].append({
+                    'sz':  sz  if sz  in VALID_D else '',
+                    'ss':  ss  if ss  in VALID_D else '',
+                    'ez':  ez,
+                    'ev':  ev,
+                })
             elif sc == 'S':
-                srv.append({'sz': sz if sz in VALID else '', 'ez': ez, 'ev': ev})
+                srv.append({
+                    'sz':  sz  if sz  in VALID_D else '',
+                    'ez':  ez,
+                    'esz': esz if esz in VALID_L else '',
+                    'ev':  ev,
+                })
         if not atk and not srv:
             return None
         return {'atk': atk, 'srv': srv}
