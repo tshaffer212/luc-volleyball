@@ -1834,11 +1834,20 @@ function fmtKpct(k,a)  { return a ? (k/a*100).toFixed(1)+'%' : '---'; }
 function buildSingleRotTable(rotData, rot, label) {
   const calls = rotData[rot]||{};
   const zone  = ROT_SETTER_ZONE[rot]||'';
+  // Compute OVR as sum of displayed call rows — not from pre-aggregated data
+  let ovrK=0, ovrE=0, ovrBK=0, ovrA=0;
+  for (const cc of CALL_ORDER) {
+    if (cc === 'OVR') continue;
+    const b = calls[cc]||{};
+    ovrK+=b.k||0; ovrE+=b.e||0; ovrBK+=b.bk||0; ovrA+=b.a||0;
+  }
   let rows = '';
   for (const cc of CALL_ORDER) {
-    const b = calls[cc]||{};
-    const k=b.k||0, e=b.e||0, bk=b.bk||0, a=b.a||0;
     const isOvr = cc==='OVR';
+    const k  = isOvr ? ovrK  : (calls[cc]||{}).k ||0;
+    const e  = isOvr ? ovrE  : (calls[cc]||{}).e ||0;
+    const bk = isOvr ? ovrBK : (calls[cc]||{}).bk||0;
+    const a  = isOvr ? ovrA  : (calls[cc]||{}).a ||0;
     const rs = isOvr ? ' style="font-weight:700;background:rgba(141,0,52,.08)"' : '';
     rows += `<tr${rs}><td style="font-weight:600">${cc}</td>
       <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${CALL_LABELS[cc]||''}</td>
@@ -1967,27 +1976,33 @@ function buildSetterBreakdownTable(setterAtk) {
     const name = p ? (p.last_name && p.last_name !== anm ? p.last_name : (p.name||`#${anm}`)) : `#${anm}`;
     const merged = getAttackerMerged(anm, setterAtk);
     let row = `<tr><td style="font-weight:600">#${anm}</td><td style="white-space:nowrap">${name}</td>`;
-    for (const cc of ccs) row += statCells(merged, cc);
-    const ovr=merged['OVR']||{}; const k=ovr.k||0, e=ovr.e||0, bk=ovr.bk||0, a=ovr.a||0;
-    row += `<td class="num" style="font-weight:600">${k||'—'}</td><td class="num" style="font-weight:600">${e||'—'}</td><td class="num" style="font-weight:600">${bk||'—'}</td><td class="num" style="font-weight:600">${a||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(k,e,bk,a)}</td>`;
+    // Compute TOTAL from displayed combo sums — not from pre-aggregated OVR
+    let totK=0, totE=0, totBK=0, totA=0;
+    for (const cc of ccs) {
+      row += statCells(merged, cc);
+      const b=merged[cc]||{}; totK+=b.k||0; totE+=b.e||0; totBK+=b.bk||0; totA+=b.a||0;
+    }
+    row += `<td class="num" style="font-weight:600">${totK||'—'}</td><td class="num" style="font-weight:600">${totE||'—'}</td><td class="num" style="font-weight:600">${totBK||'—'}</td><td class="num" style="font-weight:600">${totA||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(totK,totE,totBK,totA)}</td>`;
     return row + '</tr>';
   }
 
   function subtotalRow(nums, label) {
-    const totals={}; let gK=0,gE=0,gBK=0,gA=0;
+    const totals={};
     for (const anm of nums) {
       const m=getAttackerMerged(anm,setterAtk);
       for (const cc of ccs) {
-        if (!totals[cc]) totals[cc]={k:0,e:0,a:0};
-        const b=m[cc]||{}; totals[cc].k+=b.k||0; totals[cc].e+=b.e||0; totals[cc].a+=b.a||0;
+        if (!totals[cc]) totals[cc]={k:0,e:0,bk:0,a:0};
+        const b=m[cc]||{}; totals[cc].k+=b.k||0; totals[cc].e+=b.e||0; totals[cc].bk+=b.bk||0; totals[cc].a+=b.a||0;
       }
-      const ovr=m['OVR']||{}; gK+=ovr.k||0; gE+=ovr.e||0; gBK+=ovr.bk||0; gA+=ovr.a||0;
     }
+    // Compute TOTAL from per-combo sums — not from pre-aggregated OVR
+    let gK=0,gE=0,gBK=0,gA=0;
+    for (const cc of ccs) { const t=totals[cc]||{}; gK+=t.k||0; gE+=t.e||0; gBK+=t.bk||0; gA+=t.a||0; }
     let row=`<tr style="background:rgba(141,0,52,.07);font-style:italic;font-size:11px">
       <td colspan="2" style="font-weight:700;color:var(--maroon);padding:5px 12px">* ${label}</td>`;
     for (const cc of ccs) {
       const t=totals[cc]||{};
-      row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,0,t.a||0)}</td>`;
+      row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.bk||0,t.a||0)}</td>`;
     }
     row+=`<td class="num" style="font-weight:700">${gK||'—'}</td><td class="num" style="font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gBK||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(gK,gE,gBK,gA)}</td>`;
     return row+'</tr>';
@@ -2042,15 +2057,17 @@ function buildSetterBreakdownTable(setterAtk) {
   const allActive=[...allAtkNums].filter(anm=>{
     const ovr=(getAttackerMerged(anm,setterAtk)['OVR']||{}); return (ovr.a||0)>0;
   });
-  const teamTotals={}; let tK=0,tE=0,tBK=0,tA=0;
+  const teamTotals={};
   for (const anm of allActive) {
     const m=getAttackerMerged(anm,setterAtk);
     for (const cc of ccs) {
-      if (!teamTotals[cc]) teamTotals[cc]={k:0,e:0,a:0};
-      const b=m[cc]||{}; teamTotals[cc].k+=b.k||0; teamTotals[cc].e+=b.e||0; teamTotals[cc].a+=b.a||0;
+      if (!teamTotals[cc]) teamTotals[cc]={k:0,e:0,bk:0,a:0};
+      const b=m[cc]||{}; teamTotals[cc].k+=b.k||0; teamTotals[cc].e+=b.e||0; teamTotals[cc].bk+=b.bk||0; teamTotals[cc].a+=b.a||0;
     }
-    const ovr=m['OVR']||{}; tK+=ovr.k||0; tE+=ovr.e||0; tBK+=ovr.bk||0; tA+=ovr.a||0;
   }
+  // Compute team TOTAL from per-combo sums — not from pre-aggregated OVR
+  let tK=0,tE=0,tBK=0,tA=0;
+  for (const cc of ccs) { const t=teamTotals[cc]||{}; tK+=t.k||0; tE+=t.e||0; tBK+=t.bk||0; tA+=t.a||0; }
   html+=`<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2" style="padding:6px 8px">TEAM TOTAL</td>`;
   for (const cc of ccs) {
     const t=teamTotals[cc]||{};
@@ -3117,7 +3134,7 @@ function buildAttackSheet(groups) {
       if (!grp.length) continue;
 
       const grpTotC = {};
-      rows += `<tr><td colspan="${2+NC*4+4}" style="${GH}">${gName}</td></tr>`;
+      rows += `<tr><td colspan="${2+NC*4+5}" style="${GH}">${gName}</td></tr>`;
 
       for (const p of grp) {
         let totK=0,totE=0,totA=0,totB=0;
@@ -3141,7 +3158,7 @@ function buildAttackSheet(groups) {
           }
         }
         const rEff = totA?(totK-totE-totB)/totA:null;
-        rows += `<td class="num" style="color:var(--gold);font-weight:700">${totK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${totE||'—'}</td><td class="num" style="font-weight:700">${totA||'—'}</td><td class="num" style="color:${effColor(rEff)};font-weight:700">${rEff!==null?(rEff>=0?'+':'')+Math.round(rEff*100)+'%':'—'}</td>`;
+        rows += `<td class="num" style="color:var(--gold);font-weight:700">${totK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${totE||'—'}</td><td class="num" style="font-weight:700">${totB||'—'}</td><td class="num" style="font-weight:700">${totA||'—'}</td><td class="num" style="color:${effColor(rEff)};font-weight:700">${rEff!==null?(rEff>=0?'+':'')+Math.round(rEff*100)+'%':'—'}</td>`;
         rows += `</tr>`;
       }
 
@@ -3156,7 +3173,7 @@ function buildAttackSheet(groups) {
         else     rows += `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
       }
       const ge = gA?(gK-gE-gB)/gA:null;
-      rows += `<td class="num" style="color:var(--gold);font-weight:700">${gK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
+      rows += `<td class="num" style="color:var(--gold);font-weight:700">${gK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gB||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
       rows += `</tr>`;
     }
 
@@ -3171,23 +3188,23 @@ function buildAttackSheet(groups) {
       else     rows += `<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>`;
     }
     const te = tA?(tK-tE-tB)/tA:null;
-    rows += `<td class="num" style="color:var(--gold)">${tK||'—'}</td><td class="num" style="color:#ff8a80">${tE||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:${effColor(te)}">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
+    rows += `<td class="num" style="color:var(--gold)">${tK||'—'}</td><td class="num" style="color:#ff8a80">${tE||'—'}</td><td class="num">${tB||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:${effColor(te)}">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
     rows += `</tr>`;
 
     if (!rows.includes('<td style="color:var(--gold)')) return '';
 
     return `<div class="xlsx-wrap"><table class="xlsx-tbl">
       <thead>
-        <tr><td colspan="${2+NC*4+4}" style="${SH}">${title}</td></tr>
+        <tr><td colspan="${2+NC*4+5}" style="${SH}">${title}</td></tr>
         <tr style="${CH}">
           <th>#</th><th>Player</th>
           ${comboCodes.map(cc=>`<th colspan="4" class="num" style="color:${COMBO_COLORS[cc]||'#888'}">${COMBO_NAMES[cc]||cc}</th>`).join('')}
-          <th colspan="4" class="num" style="color:var(--gold)">TOTAL</th>
+          <th colspan="5" class="num" style="color:var(--gold)">TOTAL</th>
         </tr>
         <tr style="${CH}">
           <th></th><th></th>
           ${comboCodes.map(()=>`<th class="num">K</th><th class="num">E</th><th class="num">Att</th><th class="num">Eff%</th>`).join('')}
-          <th class="num">K</th><th class="num">E</th><th class="num">Att</th><th class="num">Eff%</th>
+          <th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff%</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
