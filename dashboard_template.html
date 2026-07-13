@@ -1787,19 +1787,19 @@ let _cachedSetterAtk   = null;
 function mergeAtkBucket(t, s) {
   if (!s) return;
   t.k = (t.k||0)+(s.k||0); t.e = (t.e||0)+(s.e||0);
-  t.b = (t.b||0)+(s.b||0); t.a = (t.a||0)+(s.a||0);
+  t.b = (t.b||0)+(s.b||0); t.bk = (t.bk||0)+(s.bk||0); t.a = (t.a||0)+(s.a||0);
 }
 function mergeRotDict(target, src) {
   for (const [rot, calls] of Object.entries(src||{})) {
     if (!target[rot]) target[rot] = {};
     for (const [cc, bucket] of Object.entries(calls||{})) {
-      if (!target[rot][cc]) target[rot][cc] = {k:0,e:0,b:0,a:0};
+      if (!target[rot][cc]) target[rot][cc] = {k:0,e:0,b:0,bk:0,a:0};
       mergeAtkBucket(target[rot][cc], bucket);
     }
   }
 }
 function mergeSetterAtkDict(target, src) {
-  // src: {setter: {attacker: {bucket: {combo: {k,e,b,a}}}}}
+  // src: {setter: {attacker: {bucket: {combo: {k,e,b,bk,a}}}}}
   for (const [snm, attackers] of Object.entries(src||{})) {
     if (!target[snm]) target[snm] = {};
     for (const [anm, buckets] of Object.entries(attackers||{})) {
@@ -1807,7 +1807,7 @@ function mergeSetterAtkDict(target, src) {
       for (const [bkt, calls] of Object.entries(buckets||{})) {
         if (!target[snm][anm][bkt]) target[snm][anm][bkt] = {};
         for (const [cc, bucket] of Object.entries(calls||{})) {
-          if (!target[snm][anm][bkt][cc]) target[snm][anm][bkt][cc] = {k:0,e:0,b:0,a:0};
+          if (!target[snm][anm][bkt][cc]) target[snm][anm][bkt][cc] = {k:0,e:0,b:0,bk:0,a:0};
           mergeAtkBucket(target[snm][anm][bkt][cc], bucket);
         }
       }
