@@ -1963,12 +1963,12 @@ function buildSetterBreakdownTable(setterAtk) {
   const ccs = CALL_ORDER.filter(c => callCodes.has(c) && c !== 'OVR');
   if (!ccs.length) return '<div class="empty">No attack data for selected filter</div>';
 
-  // TOTAL column has 5 cells (K,E,BLK,ATT,EFF%), per-combo has 4 (K,E,ATT,EFF%)
-  const colSpan = 2 + ccs.length * 4 + 5;
+  // All columns: K,E,BLK,ATT,EFF% (5 cells each, including per-combo)
+  const colSpan = 2 + ccs.length * 5 + 5;
 
   function statCells(merged, cc) {
     const b=merged[cc]||{}; const k=b.k||0, e=b.e||0, bk=b.bk||0, a=b.a||0;
-    return `<td class="num">${k||'—'}</td><td class="num">${e||'—'}</td><td class="num">${a||'—'}</td><td class="num">${fmtEff(k,e,bk,a)}</td>`;
+    return `<td class="num">${k||'—'}</td><td class="num">${e||'—'}</td><td class="num">${bk||'—'}</td><td class="num">${a||'—'}</td><td class="num">${fmtEff(k,e,bk,a)}</td>`;
   }
 
   function playerRow(anm) {
@@ -2002,7 +2002,7 @@ function buildSetterBreakdownTable(setterAtk) {
       <td colspan="2" style="font-weight:700;color:var(--maroon);padding:5px 12px">* ${label}</td>`;
     for (const cc of ccs) {
       const t=totals[cc]||{};
-      row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.bk||0,t.a||0)}</td>`;
+      row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.bk||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.bk||0,t.a||0)}</td>`;
     }
     row+=`<td class="num" style="font-weight:700">${gK||'—'}</td><td class="num" style="font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gBK||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(gK,gE,gBK,gA)}</td>`;
     return row+'</tr>';
@@ -2035,11 +2035,11 @@ function buildSetterBreakdownTable(setterAtk) {
   let html='<div style="overflow-x:auto"><table class="xlsx-tbl"><thead>';
   html+='<tr><th>#</th><th>PLAYER</th>';
   for (const cc of ccs)
-    html+=`<th class="num" colspan="4" style="text-align:center;background:rgba(141,0,52,.2);font-size:11px;color:var(--gold)">${CALL_LABELS[cc]||cc}</th>`;
+    html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(141,0,52,.2);font-size:11px;color:var(--gold)">${CALL_LABELS[cc]||cc}</th>`;
   html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(141,0,52,.35);font-size:11px;color:var(--gold)">TOTAL</th>`;
   html+='</tr><tr><th></th><th></th>';
   for (let i=0;i<ccs.length;i++)
-    html+='<th class="num">K</th><th class="num">E</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
+    html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
   html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
   html+='</tr></thead><tbody>';
 
@@ -2071,7 +2071,7 @@ function buildSetterBreakdownTable(setterAtk) {
   html+=`<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2" style="padding:6px 8px">TEAM TOTAL</td>`;
   for (const cc of ccs) {
     const t=teamTotals[cc]||{};
-    html+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,0,t.a||0)}</td>`;
+    html+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.bk||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.bk||0,t.a||0)}</td>`;
   }
   html+=`<td class="num">${tK||'—'}</td><td class="num">${tE||'—'}</td><td class="num">${tBK||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(tK,tE,tBK,tA)}</td>`;
   html+='</tr></tbody></table></div>';

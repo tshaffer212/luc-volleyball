@@ -30,10 +30,9 @@ Whenever a table or row displays Kills (K), Errors (E), and Attempts (Att) toget
 
 - Match overview Attacking table: `K | E | BLK | ATT | EFF% | K%`
 - Rotation attack tables: `K | E | BLK | A | Eff% | K%`
+- Setter breakdown per-combo columns: `K | E | BLK | ATT | EFF%`
 - Setter breakdown TOTAL column: `K | E | BLK | ATT | EFF%`
 - Any group/team subtotal row that has a K/E/Att/Eff% pattern
-
-Per-combo columns in the setter breakdown table use 4 columns (K, E, ATT, EFF%) without BLK for space reasons; BLK appears in the TOTAL column only.
 
 ---
 
