@@ -1347,7 +1347,9 @@ function getPlayerAggSeason(pnum, seasons) {
       result.skills[sk].kill_pct  = +((ev['#']||0) / att * 100).toFixed(1);
       result.skills[sk].error_pct = +((ev['='||0] || ev['=']||0) / att * 100).toFixed(1);
       result.skills[sk].pos_pct   = +((( ev['#']||0) + (ev['+'||0]||ev['+']||0) + (ev['/'||0]||ev['/']||0)) / att * 100).toFixed(1);
-      result.skills[sk].efficiency= +(((ev['#']||0) - (ev['=']||0)) / att * 100).toFixed(1);
+      result.skills[sk].efficiency= sk==='A'
+        ? +(((ev['#']||0) - (ev['=']||0) - (ev['/']||0)) / att * 100).toFixed(1)
+        : +(((ev['#']||0) - (ev['=']||0)) / att * 100).toFixed(1);
     }
   }
   return result;
@@ -2463,7 +2465,8 @@ function courtSVG(shots, title, isSrv=false) {
   const tot=shots.length;
   const totK=shots.filter(s=>s.ev==='#').length;
   const totE=shots.filter(s=>s.ev==='=').length;
-  const eff=tot?((totK-totE)/tot*100).toFixed(0):'—';
+  const totB=isSrv?0:shots.filter(s=>s.ev==='/').length;
+  const eff=tot?((totK-totE-totB)/tot*100).toFixed(0):'—';
   const stat=isSrv?`${tot} srv · ${totK} ace · ${totE} err`:`${tot} att · ${totK}K · ${eff}% eff`;
   _SC[cid]={shots,title,isSrv,_stat:stat};
   return `<div style="text-align:center;display:inline-block;margin:6px 8px 14px;cursor:pointer" title="Click to enlarge" onclick="openCourtFullscreen('${cid}')">
@@ -3115,57 +3118,57 @@ function buildAttackSheet(groups) {
       rows += `<tr><td colspan="${2+NC*4+4}" style="${GH}">${gName}</td></tr>`;
 
       for (const p of grp) {
-        let totK=0,totE=0,totA=0;
+        let totK=0,totE=0,totA=0,totB=0;
         rows += `<tr>
           <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
           <td style="white-space:nowrap">${p.name}</td>`;
         for (const cc of comboCodes) {
           const c = p.aC[cc];
-          const a=c?.att||0, k=c?.ev['#']||0, e=c?.ev['='||0]||c?.ev['=']||0;
-          const eff = a ? (k-e)/a : null;
+          const a=c?.att||0, k=c?.ev['#']||0, e=c?.ev['=']||0, b=c?.ev['/']||0;
+          const eff = a ? (k-e-b)/a : null;
           if (a) {
-            totK+=k; totE+=e; totA+=a;
-            if (!grpTotC[cc]) grpTotC[cc]={k:0,e:0,a:0};
-            grpTotC[cc].k+=k; grpTotC[cc].e+=e; grpTotC[cc].a+=a;
-            if (!teamTotC[cc]) teamTotC[cc]={k:0,e:0,a:0};
-            teamTotC[cc].k+=k; teamTotC[cc].e+=e; teamTotC[cc].a+=a;
+            totK+=k; totE+=e; totA+=a; totB+=b;
+            if (!grpTotC[cc]) grpTotC[cc]={k:0,e:0,a:0,b:0};
+            grpTotC[cc].k+=k; grpTotC[cc].e+=e; grpTotC[cc].a+=a; grpTotC[cc].b+=b;
+            if (!teamTotC[cc]) teamTotC[cc]={k:0,e:0,a:0,b:0};
+            teamTotC[cc].k+=k; teamTotC[cc].e+=e; teamTotC[cc].a+=a; teamTotC[cc].b+=b;
             const ec = effColor(eff);
             rows += `<td class="num" style="color:var(--green)">${k}</td><td class="num" style="color:var(--red)">${e}</td><td class="num">${a}</td><td class="num" style="color:${ec};font-weight:600">${eff!==null?(eff>=0?'+':'')+Math.round(eff*100)+'%':'—'}</td>`;
           } else {
             rows += `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
           }
         }
-        const rEff = totA?(totK-totE)/totA:null;
+        const rEff = totA?(totK-totE-totB)/totA:null;
         rows += `<td class="num" style="color:var(--gold);font-weight:700">${totK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${totE||'—'}</td><td class="num" style="font-weight:700">${totA||'—'}</td><td class="num" style="color:${effColor(rEff)};font-weight:700">${rEff!==null?(rEff>=0?'+':'')+Math.round(rEff*100)+'%':'—'}</td>`;
         rows += `</tr>`;
       }
 
       // Group total
-      let gK=0,gE=0,gA=0;
+      let gK=0,gE=0,gA=0,gB=0;
       rows += `<tr style="background:var(--surface3)"><td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>`;
       for (const cc of comboCodes) {
-        const g = grpTotC[cc]||{k:0,e:0,a:0};
-        gK+=g.k; gE+=g.e; gA+=g.a;
-        const ge = g.a?(g.k-g.e)/g.a:null;
+        const g = grpTotC[cc]||{k:0,e:0,a:0,b:0};
+        gK+=g.k; gE+=g.e; gA+=g.a; gB+=g.b;
+        const ge = g.a?(g.k-g.e-g.b)/g.a:null;
         if (g.a) rows += `<td class="num">${g.k}</td><td class="num">${g.e}</td><td class="num">${g.a}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
         else     rows += `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
       }
-      const ge = gA?(gK-gE)/gA:null;
+      const ge = gA?(gK-gE-gB)/gA:null;
       rows += `<td class="num" style="color:var(--gold);font-weight:700">${gK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
       rows += `</tr>`;
     }
 
     // Team total
-    let tK=0,tE=0,tA=0;
+    let tK=0,tE=0,tA=0,tB=0;
     rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2">TEAM TOTAL</td>`;
     for (const cc of comboCodes) {
-      const t = teamTotC[cc]||{k:0,e:0,a:0};
-      tK+=t.k; tE+=t.e; tA+=t.a;
-      const te = t.a?(t.k-t.e)/t.a:null;
+      const t = teamTotC[cc]||{k:0,e:0,a:0,b:0};
+      tK+=t.k; tE+=t.e; tA+=t.a; tB+=t.b;
+      const te = t.a?(t.k-t.e-t.b)/t.a:null;
       if (t.a) rows += `<td class="num">${t.k}</td><td class="num">${t.e}</td><td class="num">${t.a}</td><td class="num">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
       else     rows += `<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>`;
     }
-    const te = tA?(tK-tE)/tA:null;
+    const te = tA?(tK-tE-tB)/tA:null;
     rows += `<td class="num" style="color:var(--gold)">${tK||'—'}</td><td class="num" style="color:#ff8a80">${tE||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:${effColor(te)}">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
     rows += `</tr>`;
 
@@ -3486,24 +3489,26 @@ function getTeamStats() {
       }
     }
     // Derive pcts
-    for (const sv of Object.values(agg.skills)) {
+    for (const [skKey, sv] of Object.entries(agg.skills)) {
       const att = sv.attempts;
       if (att > 0) {
         sv.kill_pct   = +((sv.evals['#']||0)/att*100).toFixed(1);
         sv.error_pct  = +((sv.evals['=']||0)/att*100).toFixed(1);
         sv.pos_pct    = +(((sv.evals['#']||0)+(sv.evals['+']||0)+(sv.evals['/']||0))/att*100).toFixed(1);
-        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0))/att*100).toFixed(1);
+        const blk = skKey==='A' ? (sv.evals['/']||0) : 0;
+        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0)-blk)/att*100).toFixed(1);
       }
     }
   } else {
     // Re-derive from accumulated evals
-    for (const sv of Object.values(agg.skills)) {
+    for (const [skKey, sv] of Object.entries(agg.skills)) {
       const att = sv.attempts;
       if (att > 0) {
         sv.kill_pct   = +((sv.evals['#']||0)/att*100).toFixed(1);
         sv.error_pct  = +((sv.evals['=']||0)/att*100).toFixed(1);
         sv.pos_pct    = +(((sv.evals['#']||0)+(sv.evals['+']||0)+(sv.evals['/']||0))/att*100).toFixed(1);
-        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0))/att*100).toFixed(1);
+        const blk = skKey==='A' ? (sv.evals['/']||0) : 0;
+        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0)-blk)/att*100).toFixed(1);
       }
     }
     agg.actions = Object.values(agg.skills).reduce((s,v)=>s+v.attempts,0);
@@ -4368,9 +4373,10 @@ function getComboStats(seasons, group) {
     if (att > 0) {
       cv.kills      = ev['#']||0;
       cv.errors     = ev['=']||0;
+      cv.blocked    = ev['/']||0;
       cv.kill_pct   = +((ev['#']||0)/att*100).toFixed(1);
       cv.error_pct  = +((ev['=']||0)/att*100).toFixed(1);
-      cv.efficiency = +(((ev['#']||0)-(ev['=']||0))/att*100).toFixed(1);
+      cv.efficiency = +(((ev['#']||0)-(ev['=']||0)-(ev['/']||0))/att*100).toFixed(1);
     }
   }
   return combos;
@@ -4599,23 +4605,26 @@ function renderAttack() {
       for (const cc of allCodes) {
         const cv = psEntry.skills?.A?.combos?.[cc];
         if (!cv) continue;
-        if (!existing.combos[cc]) existing.combos[cc] = {attempts:0,kills:0,errors:0};
+        if (!existing.combos[cc]) existing.combos[cc] = {attempts:0,kills:0,errors:0,blocked:0};
         existing.combos[cc].attempts += cv.attempts||0;
         existing.combos[cc].kills    += cv.evals?.['#']||0;
         existing.combos[cc].errors   += cv.evals?.['=']||0;
+        existing.combos[cc].blocked  += cv.evals?.['/']||0;
       }
-      existing.totalAtt    += aSkill.attempts||0;
-      existing.totalKills  += aSkill.evals?.['#']||0;
-      existing.totalErrors += aSkill.evals?.['=']||0;
+      existing.totalAtt      += aSkill.attempts||0;
+      existing.totalKills    += aSkill.evals?.['#']||0;
+      existing.totalErrors   += aSkill.evals?.['=']||0;
+      existing.totalBlocks   += aSkill.evals?.['/']||0;
     } else {
       const entry = { pnum, name, season, posGrp,
         totalAtt:    aSkill.attempts||0,
         totalKills:  aSkill.evals?.['#']||0,
         totalErrors: aSkill.evals?.['=']||0,
+        totalBlocks: aSkill.evals?.['/']||0,
         combos: {} };
       for (const cc of allCodes) {
         const cv = psEntry.skills?.A?.combos?.[cc];
-        if (cv) entry.combos[cc] = { attempts: cv.attempts||0, kills: cv.evals?.['#']||0, errors: cv.evals?.['=']||0 };
+        if (cv) entry.combos[cc] = { attempts: cv.attempts||0, kills: cv.evals?.['#']||0, errors: cv.evals?.['=']||0, blocked: cv.evals?.['/']||0 };
       }
       playerData.push(entry);
     }
@@ -4660,7 +4669,7 @@ function renderAttack() {
       let totalStatVal = '';
       if (p.totalAtt) {
         if (metric === 'kill_pct')    totalStatVal = `<span style="color:var(--green);margin-right:4px">${(p.totalKills/p.totalAtt*100).toFixed(0)}%</span>`;
-        else if (metric === 'efficiency') totalStatVal = `<span style="color:var(--gold);margin-right:4px">${((p.totalKills-p.totalErrors)/p.totalAtt*100).toFixed(0)}%</span>`;
+        else if (metric === 'efficiency') totalStatVal = `<span style="color:var(--gold);margin-right:4px">${((p.totalKills-p.totalErrors-(p.totalBlocks||0))/p.totalAtt*100).toFixed(0)}%</span>`;
         else if (metric === 'error_pct')  totalStatVal = `<span style="color:var(--red);margin-right:4px">${(p.totalErrors/p.totalAtt*100).toFixed(0)}%</span>`;
       }
       return `<tr>
@@ -4678,7 +4687,7 @@ function renderAttack() {
         } else if (metric === 'kill_pct') {
           val = (cv.kills/cv.attempts*100).toFixed(0)+'%'; color = 'var(--green)';
         } else if (metric === 'efficiency') {
-          val = ((cv.kills-cv.errors)/cv.attempts*100).toFixed(0)+'%'; color = 'var(--gold)';
+          val = ((cv.kills-cv.errors-(cv.blocked||0))/cv.attempts*100).toFixed(0)+'%'; color = 'var(--gold)';
         } else if (metric === 'error_pct') {
           val = (cv.errors/cv.attempts*100).toFixed(0)+'%'; color = 'var(--red)';
         }
@@ -5320,15 +5329,16 @@ function renderSetterCourt(allCombos, totalAtt) {
   if (!svg) return;
 
   const zoneData = COURT_ZONES.map(z => {
-    let att=0, k=0, e=0;
+    let att=0, k=0, e=0, b=0;
     for (const cc of z.codes) {
       const cv = allCombos[cc];
       if (!cv) continue;
       att += cv.attempts||0;
       k   += cv.kills||0;
       e   += cv.errors||0;
+      b   += cv.blocked||0;
     }
-    const eff     = att ? ((k-e)/att*100) : null;
+    const eff     = att ? ((k-e-b)/att*100) : null;
     const killPct = att ? (k/att*100) : null;
     const errPct  = att ? (e/att*100) : null;
     const distPct = totalAtt ? (att/totalAtt*100) : 0;
@@ -5454,6 +5464,7 @@ function getComboStatsBySessions(sessionIds, group) {
       combos[cc].attempts += cv.attempts || 0;
       combos[cc].kills    = (combos[cc].kills||0) + (cv.evals?.['#']||0);
       combos[cc].errors   = (combos[cc].errors||0) + (cv.evals?.['=']||0);
+      combos[cc].blocked  = (combos[cc].blocked||0) + (cv.evals?.['/']||0);
       for (const [ev, cnt] of Object.entries(cv.evals || {})) {
         combos[cc].evals[ev] = (combos[cc].evals[ev]||0) + cnt;
       }
@@ -5464,7 +5475,7 @@ function getComboStatsBySessions(sessionIds, group) {
     if (att) {
       cv.kill_pct   = +((cv.kills/att)*100).toFixed(1);
       cv.error_pct  = +((cv.errors/att)*100).toFixed(1);
-      cv.efficiency = +(((cv.kills-cv.errors)/att)*100).toFixed(1);
+      cv.efficiency = +(((cv.kills-cv.errors-(cv.blocked||0))/att)*100).toFixed(1);
     }
   }
   return combos;
@@ -5821,7 +5832,7 @@ function renderSetter() {
       const cv = combos[cc];
       const kp  = cv.att ? (cv.kills/cv.att*100).toFixed(1) : 0;
       const ep  = cv.att ? (cv.errors/cv.att*100).toFixed(1) : 0;
-      const eff = cv.att ? ((cv.kills-cv.errors)/cv.att*100).toFixed(1) : 0;
+      const eff = cv.att ? ((cv.kills-cv.errors-(cv.blocks||0))/cv.att*100).toFixed(1) : 0;
       const dist = totalAtt ? (cv.att/totalAtt*100).toFixed(1) : 0;
       return `<tr>
         <td><span style="color:${COMBO_COLORS[cc]||'#888'};font-weight:700">${COMBO_NAMES[cc]||cc}</span></td>

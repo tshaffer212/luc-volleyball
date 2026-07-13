@@ -154,7 +154,7 @@ def compute_call_attacks(actions, loyola_side):
     if current:
         rallies.append(current)
 
-    call_atk = defaultdict(lambda: defaultdict(lambda: {'attempts': 0, 'kills': 0, 'errors': 0}))
+    call_atk = defaultdict(lambda: defaultdict(lambda: {'attempts': 0, 'kills': 0, 'errors': 0, 'blocks': 0}))
 
     for rally in rallies:
         for i, a in enumerate(rally):
@@ -184,6 +184,8 @@ def compute_call_attacks(actions, loyola_side):
                 cv['kills'] += 1
             elif ev == '=':
                 cv['errors'] += 1
+            elif ev == '/':
+                cv['blocks'] += 1
 
     return {kc: dict(combos) for kc, combos in call_atk.items()}
 
@@ -321,22 +323,30 @@ def compute_rally_sequences(actions, loyola_side):
 
 
 def derive(skill_stats):
-    """Add kill%, error%, pos%, efficiency to each skill (in-place)."""
-    for st in skill_stats.values():
+    """Add kill%, error%, pos%, efficiency to each skill (in-place).
+    For attacks (skill 'A'), efficiency = (K - E - Blocked) / Att * 100,
+    where blocked = evals['/'] (A/ = attack blocked by opponent).
+    """
+    for sk, st in skill_stats.items():
         att = st['attempts']
         ev  = st['evals']
-        kills  = ev.get('#', 0)
-        errors = ev.get('=', 0)
-        pos    = kills + ev.get('+', 0) + ev.get('/', 0)
+        kills   = ev.get('#', 0)
+        errors  = ev.get('=', 0)
+        blocked = ev.get('/', 0) if sk == 'A' else 0   # A/ = blocked attack
+        pos     = kills + ev.get('+', 0) + ev.get('/', 0)
         st['kill_pct']   = round(kills  / att * 100, 1) if att else 0
         st['error_pct']  = round(errors / att * 100, 1) if att else 0
         st['pos_pct']    = round(pos    / att * 100, 1) if att else 0
-        st['efficiency'] = round((kills - errors) / att * 100, 1) if att else 0
+        st['efficiency'] = round((kills - errors - blocked) / att * 100, 1) if att else 0
+        is_atk = (sk == 'A')
         for cs in st.get('combos', {}).values():
             ca = cs['attempts']
-            cs['kill_pct']   = round(cs['evals'].get('#',0) / ca * 100, 1) if ca else 0
-            cs['error_pct']  = round(cs['evals'].get('=',0) / ca * 100, 1) if ca else 0
-            cs['efficiency'] = round((cs['evals'].get('#',0)-cs['evals'].get('=',0))/ca*100,1) if ca else 0
+            ck = cs['evals'].get('#', 0)
+            ce = cs['evals'].get('=', 0)
+            cb = cs['evals'].get('/', 0) if is_atk else 0
+            cs['kill_pct']   = round(ck / ca * 100, 1) if ca else 0
+            cs['error_pct']  = round(ce / ca * 100, 1) if ca else 0
+            cs['efficiency'] = round((ck - ce - cb) / ca * 100, 1) if ca else 0
 
 CLOSE_K_CODES = {'K1', 'K2', 'KC'}   # front quick / back quick → close-route attacks
 GAP_K_CODES   = {'K7', 'KM', 'KP', 'KE', 'KD'}   # gap / shoot sets
