@@ -1828,7 +1828,7 @@ function aggregateMatchRotStats(sessionIds) {
 }
 
 // ── Match report rendering ────────────────────────────────────────────────────
-function fmtEff(k,e,a) { return a ? ((k-e)/a*100).toFixed(1)+'%' : '---'; }
+function fmtEff(k,e,bk,a) { return a ? ((k-e-bk)/a*100).toFixed(1)+'%' : '---'; }
 function fmtKpct(k,a)  { return a ? (k/a*100).toFixed(1)+'%' : '---'; }
 
 function buildSingleRotTable(rotData, rot, label) {
@@ -1837,13 +1837,13 @@ function buildSingleRotTable(rotData, rot, label) {
   let rows = '';
   for (const cc of CALL_ORDER) {
     const b = calls[cc]||{};
-    const k=b.k||0, e=b.e||0, bb=b.b||0, a=b.a||0;
+    const k=b.k||0, e=b.e||0, bk=b.bk||0, a=b.a||0;
     const isOvr = cc==='OVR';
     const rs = isOvr ? ' style="font-weight:700;background:rgba(141,0,52,.08)"' : '';
     rows += `<tr${rs}><td style="font-weight:600">${cc}</td>
       <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${CALL_LABELS[cc]||''}</td>
-      <td class="num">${k}</td><td class="num">${e}</td><td class="num">${bb}</td><td class="num">${a}</td>
-      <td class="num">${fmtEff(k,e,a)}</td>
+      <td class="num">${k}</td><td class="num">${e}</td><td class="num">${bk}</td><td class="num">${a}</td>
+      <td class="num">${fmtEff(k,e,bk,a)}</td>
       <td class="num" style="color:var(--gold);font-weight:600">${fmtKpct(k,a)}</td></tr>`;
   }
   const title = label ? `Rotation ${rot} (${label})` : `Rotation ${rot}`;
@@ -1852,7 +1852,7 @@ function buildSingleRotTable(rotData, rot, label) {
       ${title} <span style="opacity:.45;font-weight:400;font-size:11px">(setter in ${zone})</span></div>
     <table class="xlsx-tbl"><thead><tr>
       <th>Call</th><th>Type</th>
-      <th class="num">K</th><th class="num">E</th><th class="num">B</th><th class="num">A</th>
+      <th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">A</th>
       <th class="num">Eff%</th><th class="num" style="color:var(--gold)">K%</th>
     </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -1915,9 +1915,9 @@ function getAttackerMerged(atkNum, setterAtk) {
     const atkData = (setterAtk[snm]||{})[atkNum]||{};
     for (const bkt of setterBucketFilter) {
       for (const [cc, v] of Object.entries(atkData[bkt]||{})) {
-        if (!result[cc]) result[cc] = {k:0,e:0,b:0,a:0};
+        if (!result[cc]) result[cc] = {k:0,e:0,b:0,bk:0,a:0};
         result[cc].k+=v.k||0; result[cc].e+=v.e||0;
-        result[cc].b+=v.b||0; result[cc].a+=v.a||0;
+        result[cc].b+=v.b||0; result[cc].bk+=v.bk||0; result[cc].a+=v.a||0;
       }
     }
   }
@@ -1954,11 +1954,12 @@ function buildSetterBreakdownTable(setterAtk) {
   const ccs = CALL_ORDER.filter(c => callCodes.has(c) && c !== 'OVR');
   if (!ccs.length) return '<div class="empty">No attack data for selected filter</div>';
 
-  const colSpan = 2 + (ccs.length + 1) * 4;
+  // TOTAL column has 5 cells (K,E,BLK,ATT,EFF%), per-combo has 4 (K,E,ATT,EFF%)
+  const colSpan = 2 + ccs.length * 4 + 5;
 
   function statCells(merged, cc) {
-    const b=merged[cc]||{}; const k=b.k||0, e=b.e||0, a=b.a||0;
-    return `<td class="num">${k||'—'}</td><td class="num">${e||'—'}</td><td class="num">${a||'—'}</td><td class="num">${fmtEff(k,e,a)}</td>`;
+    const b=merged[cc]||{}; const k=b.k||0, e=b.e||0, bk=b.bk||0, a=b.a||0;
+    return `<td class="num">${k||'—'}</td><td class="num">${e||'—'}</td><td class="num">${a||'—'}</td><td class="num">${fmtEff(k,e,bk,a)}</td>`;
   }
 
   function playerRow(anm) {
@@ -1967,28 +1968,28 @@ function buildSetterBreakdownTable(setterAtk) {
     const merged = getAttackerMerged(anm, setterAtk);
     let row = `<tr><td style="font-weight:600">#${anm}</td><td style="white-space:nowrap">${name}</td>`;
     for (const cc of ccs) row += statCells(merged, cc);
-    const ovr=merged['OVR']||{}; const k=ovr.k||0, e=ovr.e||0, a=ovr.a||0;
-    row += `<td class="num" style="font-weight:600">${k||'—'}</td><td class="num" style="font-weight:600">${e||'—'}</td><td class="num" style="font-weight:600">${a||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(k,e,a)}</td>`;
+    const ovr=merged['OVR']||{}; const k=ovr.k||0, e=ovr.e||0, bk=ovr.bk||0, a=ovr.a||0;
+    row += `<td class="num" style="font-weight:600">${k||'—'}</td><td class="num" style="font-weight:600">${e||'—'}</td><td class="num" style="font-weight:600">${bk||'—'}</td><td class="num" style="font-weight:600">${a||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(k,e,bk,a)}</td>`;
     return row + '</tr>';
   }
 
   function subtotalRow(nums, label) {
-    const totals={}; let gK=0,gE=0,gA=0;
+    const totals={}; let gK=0,gE=0,gBK=0,gA=0;
     for (const anm of nums) {
       const m=getAttackerMerged(anm,setterAtk);
       for (const cc of ccs) {
         if (!totals[cc]) totals[cc]={k:0,e:0,a:0};
         const b=m[cc]||{}; totals[cc].k+=b.k||0; totals[cc].e+=b.e||0; totals[cc].a+=b.a||0;
       }
-      const ovr=m['OVR']||{}; gK+=ovr.k||0; gE+=ovr.e||0; gA+=ovr.a||0;
+      const ovr=m['OVR']||{}; gK+=ovr.k||0; gE+=ovr.e||0; gBK+=ovr.bk||0; gA+=ovr.a||0;
     }
     let row=`<tr style="background:rgba(141,0,52,.07);font-style:italic;font-size:11px">
       <td colspan="2" style="font-weight:700;color:var(--maroon);padding:5px 12px">* ${label}</td>`;
     for (const cc of ccs) {
       const t=totals[cc]||{};
-      row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.a||0)}</td>`;
+      row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,0,t.a||0)}</td>`;
     }
-    row+=`<td class="num" style="font-weight:700">${gK||'—'}</td><td class="num" style="font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(gK,gE,gA)}</td>`;
+    row+=`<td class="num" style="font-weight:700">${gK||'—'}</td><td class="num" style="font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gBK||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(gK,gE,gBK,gA)}</td>`;
     return row+'</tr>';
   }
 
@@ -2020,10 +2021,11 @@ function buildSetterBreakdownTable(setterAtk) {
   html+='<tr><th>#</th><th>PLAYER</th>';
   for (const cc of ccs)
     html+=`<th class="num" colspan="4" style="text-align:center;background:rgba(141,0,52,.2);font-size:11px;color:var(--gold)">${CALL_LABELS[cc]||cc}</th>`;
-  html+=`<th class="num" colspan="4" style="text-align:center;background:rgba(141,0,52,.35);font-size:11px;color:var(--gold)">TOTAL</th>`;
+  html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(141,0,52,.35);font-size:11px;color:var(--gold)">TOTAL</th>`;
   html+='</tr><tr><th></th><th></th>';
-  for (let i=0;i<=ccs.length;i++)
+  for (let i=0;i<ccs.length;i++)
     html+='<th class="num">K</th><th class="num">E</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
+  html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
   html+='</tr></thead><tbody>';
 
   const allShown=[];
@@ -2040,21 +2042,21 @@ function buildSetterBreakdownTable(setterAtk) {
   const allActive=[...allAtkNums].filter(anm=>{
     const ovr=(getAttackerMerged(anm,setterAtk)['OVR']||{}); return (ovr.a||0)>0;
   });
-  const teamTotals={}; let tK=0,tE=0,tA=0;
+  const teamTotals={}; let tK=0,tE=0,tBK=0,tA=0;
   for (const anm of allActive) {
     const m=getAttackerMerged(anm,setterAtk);
     for (const cc of ccs) {
       if (!teamTotals[cc]) teamTotals[cc]={k:0,e:0,a:0};
       const b=m[cc]||{}; teamTotals[cc].k+=b.k||0; teamTotals[cc].e+=b.e||0; teamTotals[cc].a+=b.a||0;
     }
-    const ovr=m['OVR']||{}; tK+=ovr.k||0; tE+=ovr.e||0; tA+=ovr.a||0;
+    const ovr=m['OVR']||{}; tK+=ovr.k||0; tE+=ovr.e||0; tBK+=ovr.bk||0; tA+=ovr.a||0;
   }
   html+=`<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2" style="padding:6px 8px">TEAM TOTAL</td>`;
   for (const cc of ccs) {
     const t=teamTotals[cc]||{};
-    html+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.a||0)}</td>`;
+    html+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,0,t.a||0)}</td>`;
   }
-  html+=`<td class="num">${tK||'—'}</td><td class="num">${tE||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(tK,tE,tA)}</td>`;
+  html+=`<td class="num">${tK||'—'}</td><td class="num">${tE||'—'}</td><td class="num">${tBK||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(tK,tE,tBK,tA)}</td>`;
   html+='</tr></tbody></table></div>';
   return html;
 }
@@ -2129,7 +2131,7 @@ function buildMatchOverviewPanel(sessionIds) {
       season,  // store season for display lookups
       S:{att:0,ace:0,err:0,pos:0,neg:0,over:0},
       R:{att:0,pts:0,perf:0,good:0,med:0,oos:0,over:0,err:0},
-      A:{att:0,k:0,e:0},
+      A:{att:0,k:0,e:0,bk:0},
       zones:{}
     };
     const p=pstats[pnum], sk=ps.skills||{};
@@ -2146,7 +2148,7 @@ function buildMatchOverviewPanel(sessionIds) {
     }
     if (sk.A&&sk.A.attempts>0) {
       const ev=sk.A.evals||{};
-      p.A.att+=sk.A.attempts; p.A.k+=ev['#']||0; p.A.e+=ev['=']||0;
+      p.A.att+=sk.A.attempts; p.A.k+=ev['#']||0; p.A.e+=ev['=']||0; p.A.bk+=ev['/']||0;
     }
     for (const [z,zd] of Object.entries(ps.rcv_zones||{})) {
       if (!p.zones[z]) p.zones[z]={att:0,pts:0,perf:0,err:0};
@@ -2157,12 +2159,12 @@ function buildMatchOverviewPanel(sessionIds) {
   }
 
   // ── Pre-compute team totals ───────────────────────────────────────────────
-  let tK=0,tE=0,tA=0;
+  let tK=0,tE=0,tBK=0,tA=0;
   let tSAtt=0,tSAce=0,tSErr=0,tSPos=0,tSNeg=0,tSOver=0;
   let tRAtt=0,tRPts=0,tRPerf=0,tRGood=0,tRMed=0,tROos=0,tROver=0,tRErr=0;
   const teamZones={};
   for (const p of Object.values(pstats)) {
-    tK+=p.A.k; tE+=p.A.e; tA+=p.A.att;
+    tK+=p.A.k; tE+=p.A.e; tBK+=p.A.bk||0; tA+=p.A.att;
     tSAtt+=p.S.att; tSAce+=p.S.ace; tSErr+=p.S.err;
     tSPos+=p.S.pos; tSNeg+=p.S.neg; tSOver+=p.S.over;
     tRAtt+=p.R.att; tRPts+=p.R.pts;
@@ -2196,20 +2198,20 @@ function buildMatchOverviewPanel(sessionIds) {
   function pct(n,d) { return d?(n/d*100).toFixed(1)+'%':'---'; }
 
   // ── Opponent KPIs from opp_stats (aggregated across selected sessions) ──────
-  let oppA=0,oppAk=0,oppAe=0,oppSAtt=0,oppSAce=0,oppSErr=0,oppRAtt=0,oppRPts=0,oppFbsoRcv=0,oppFbsoKills=0;
+  let oppA=0,oppAk=0,oppAe=0,oppAblocked=0,oppSAtt=0,oppSAce=0,oppSErr=0,oppRAtt=0,oppRPts=0,oppFbsoRcv=0,oppFbsoKills=0;
   let oppMatchCount=0;
   for (const sid of sessionIds) {
     const se = DATA.sessions.find(s => s.id === sid);
     if (!se?.opp_stats) continue;
     const o = se.opp_stats;
-    oppA         += o.A?.att||0;    oppAk   += o.A?.k||0;   oppAe  += o.A?.e||0;
+    oppA         += o.A?.att||0;    oppAk   += o.A?.k||0;   oppAe  += o.A?.e||0;   oppAblocked += o.A?.blocked||0;
     oppSAtt      += o.S?.att||0;    oppSAce += o.S?.ace||0; oppSErr+= o.S?.err||0;
     oppRAtt      += o.R?.att||0;    oppRPts += o.R?.pts||0;
     oppFbsoRcv   += o.FBSO?.rcv||0; oppFbsoKills += o.FBSO?.kills||0;
     oppMatchCount++;
   }
   const hasOpp = oppMatchCount > 0;
-  const oppAtkEff    = hasOpp && oppA       ? (oppAk-oppAe)/oppA*100       : null;
+  const oppAtkEff    = hasOpp && oppA       ? (oppAk-oppAe-oppAblocked)/oppA*100 : null;
   const oppAcePct    = hasOpp && oppSAtt    ? oppSAce/oppSAtt*100           : null;
   const oppSrvErrPct = hasOpp && oppSAtt    ? oppSErr/oppSAtt*100           : null;
   const oppPassAvg   = hasOpp && oppRAtt    ? oppRPts/oppRAtt               : null;
@@ -2232,7 +2234,7 @@ function buildMatchOverviewPanel(sessionIds) {
   }
 
   // ── Summary bar ───────────────────────────────────────────────────────────
-  const lucAtkEff   = tA    ? (tK-tE)/tA*100              : null;
+  const lucAtkEff   = tA    ? (tK-tE-tBK)/tA*100           : null;
   const lucAcePct   = tSAtt ? tSAce/tSAtt*100             : null;
   const lucSrvErrPct= tSAtt ? tSErr/tSAtt*100             : null;
   const lucPassAvg  = tRAtt ? tRPts/tRAtt                 : null;
@@ -2266,19 +2268,19 @@ function buildMatchOverviewPanel(sessionIds) {
 
   // ── Attacking ─────────────────────────────────────────────────────────────
   html+=sHdr('Attacking', true);
-  html+=`<div style="overflow-x:auto;margin-bottom:24px"><table class="xlsx-tbl"><thead><tr><th>#</th><th>PLAYER</th><th class="num">K</th><th class="num">E</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th><th class="num">K%</th></tr></thead><tbody>`;
+  html+=`<div style="overflow-x:auto;margin-bottom:24px"><table class="xlsx-tbl"><thead><tr><th>#</th><th>PLAYER</th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th><th class="num">K%</th></tr></thead><tbody>`;
   for (const {key,code,lib} of POS_GROUPS) {
     const nums=grpNums(code,lib).filter(n=>pstats[n].A.att>0);
     if (!nums.length) continue;
-    let gK=0,gE=0,gA=0;
-    html+=grpHdr(key,7);
+    let gK=0,gE=0,gBK=0,gA=0;
+    html+=grpHdr(key,8);
     for (const n of nums) {
-      const a=pstats[n].A; gK+=a.k; gE+=a.e; gA+=a.att;
-      html+=`<tr><td style="font-weight:600">#${n}</td><td>${pName(n)}</td><td class="num">${a.k}</td><td class="num">${a.e}</td><td class="num">${a.att}</td><td class="num">${fmtEff(a.k,a.e,a.att)}</td><td class="num">${fmtKpct(a.k,a.att)}</td></tr>`;
+      const a=pstats[n].A; gK+=a.k; gE+=a.e; gBK+=a.bk||0; gA+=a.att;
+      html+=`<tr><td style="font-weight:600">#${n}</td><td>${pName(n)}</td><td class="num">${a.k}</td><td class="num">${a.e}</td><td class="num">${a.bk||0}</td><td class="num">${a.att}</td><td class="num">${fmtEff(a.k,a.e,a.bk||0,a.att)}</td><td class="num">${fmtKpct(a.k,a.att)}</td></tr>`;
     }
-    html+=subRow(key,`<td class="num">${gK}</td><td class="num">${gE}</td><td class="num">${gA}</td><td class="num">${fmtEff(gK,gE,gA)}</td><td class="num">${fmtKpct(gK,gA)}</td>`);
+    html+=subRow(key,`<td class="num">${gK}</td><td class="num">${gE}</td><td class="num">${gBK}</td><td class="num">${gA}</td><td class="num">${fmtEff(gK,gE,gBK,gA)}</td><td class="num">${fmtKpct(gK,gA)}</td>`);
   }
-  html+=totRow(`<td class="num">${tK}</td><td class="num">${tE}</td><td class="num">${tA}</td><td class="num" style="color:var(--gold)">${fmtEff(tK,tE,tA)}</td><td class="num">${fmtKpct(tK,tA)}</td>`);
+  html+=totRow(`<td class="num">${tK}</td><td class="num">${tE}</td><td class="num">${tBK}</td><td class="num">${tA}</td><td class="num" style="color:var(--gold)">${fmtEff(tK,tE,tBK,tA)}</td><td class="num">${fmtKpct(tK,tA)}</td>`);
   html+='</tbody></table></div>';
 
   // ── Serving ───────────────────────────────────────────────────────────────
@@ -3053,7 +3055,7 @@ function renderRptSetterChart() {
       data: sortedCodes.map(cc => {
         const c = setterCombos[pnum]?.[cc];
         if (!c || !c.a) return null;
-        return +((c.k - c.e) / c.a * 100).toFixed(1);
+        return +((c.k - c.e - (c.bk||0)) / c.a * 100).toFixed(1);
       }),
       backgroundColor: SETTER_COLORS[i] + 'cc',
       borderColor: SETTER_COLORS[i],
@@ -3573,13 +3575,14 @@ function renderTeam() {
       const sids = sessionIdsByBucket[key];
       skills = sids ? aggregateSessionStats(sids).skills : {};
     }
-    for (const sv of Object.values(skills)) {
+    for (const [skKey, sv] of Object.entries(skills)) {
       const att = sv.attempts || 0;
       if (att > 0) {
+        const blk = skKey==='A' ? (sv.evals['/']||0) : 0;
         sv.kill_pct   = +(((sv.evals['#']||0)/att)*100).toFixed(1);
         sv.error_pct  = +(((sv.evals['=']||0)/att)*100).toFixed(1);
         sv.pos_pct    = +(((sv.evals['#']||0)+(sv.evals['+']||0)+(sv.evals['/']||0))/att*100).toFixed(1);
-        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0))/att*100).toFixed(1);
+        sv.efficiency = +(((sv.evals['#']||0)-(sv.evals['=']||0)-blk)/att*100).toFixed(1);
       }
     }
     _bucketSkillCache[key] = skills;
@@ -5491,10 +5494,11 @@ function getCallAttacksBySessions(sessionIds) {
     for (const [kcode, combos] of Object.entries(ca)) {
       if (!result[kcode]) result[kcode] = {};
       for (const [cc, cv] of Object.entries(combos)) {
-        if (!result[kcode][cc]) result[kcode][cc] = {att:0, kills:0, errors:0};
+        if (!result[kcode][cc]) result[kcode][cc] = {att:0, kills:0, errors:0, blocks:0};
         result[kcode][cc].att    += cv.attempts||0;
         result[kcode][cc].kills  += cv.kills||0;
         result[kcode][cc].errors += cv.errors||0;
+        result[kcode][cc].blocks += cv.blocks||0;
       }
     }
   }
@@ -5510,10 +5514,11 @@ function getCallAttacks(seasons) {
     for (const [kcode, combos] of Object.entries(ca)) {
       if (!result[kcode]) result[kcode] = {};
       for (const [cc, cv] of Object.entries(combos)) {
-        if (!result[kcode][cc]) result[kcode][cc] = {att:0, kills:0, errors:0};
+        if (!result[kcode][cc]) result[kcode][cc] = {att:0, kills:0, errors:0, blocks:0};
         result[kcode][cc].att    += cv.attempts||0;
         result[kcode][cc].kills  += cv.kills||0;
         result[kcode][cc].errors += cv.errors||0;
+        result[kcode][cc].blocks += cv.blocks||0;
       }
     }
   }

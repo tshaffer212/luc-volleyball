@@ -369,13 +369,14 @@ def compute_match_rotation_stats(actions):
         by_rally[a.get('rally_seq', 0)].append(a)
 
     def ea():
-        return {'k': 0, 'e': 0, 'b': 0, 'a': 0}
+        return {'k': 0, 'e': 0, 'b': 0, 'bk': 0, 'a': 0}
 
     def add_atk(bucket, ev):
         bucket['a'] += 1
         if ev == '#':   bucket['k'] += 1
         elif ev == '=': bucket['e'] += 1
         else:           bucket['b'] += 1
+        if ev == '/':   bucket['bk'] += 1   # blocked specifically (opponent scored block kill)
 
     rot_atk       = defaultdict(lambda: defaultdict(ea))
     rot_atk_close = defaultdict(lambda: defaultdict(ea))
@@ -595,7 +596,7 @@ def main(raw_path, out_path):
         if loyola_side == 'both':
             return None
         opp = {
-            'A':    {'att': 0, 'k': 0, 'e': 0},
+            'A':    {'att': 0, 'k': 0, 'e': 0, 'blocked': 0},
             'S':    {'att': 0, 'ace': 0, 'err': 0},
             'R':    {'att': 0, 'pts': 0},
             'FBSO': {'rcv': 0, 'kills': 0},
@@ -611,6 +612,7 @@ def main(raw_path, out_path):
                 opp['A']['att'] += 1
                 if ev == '#':   opp['A']['k'] += 1
                 elif ev == '=': opp['A']['e'] += 1
+                elif ev == '/': opp['A']['blocked'] += 1
             elif sc == 'S':
                 opp['S']['att'] += 1
                 if ev == '#':   opp['S']['ace'] += 1
