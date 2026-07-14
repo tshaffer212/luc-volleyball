@@ -493,6 +493,7 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
     actions          = []
     scout_lines      = sections.get('3SCOUT', [])
     current_rally_seq = 0   # increments each time a rally-end marker ('p') is seen
+    current_away_zone = None  # tracks LUC rotation for away Volleymetrics matches via az{N} codes
 
     for idx, line in enumerate(scout_lines):
         if not line or line[0] not in ('*', 'a'):
@@ -500,6 +501,18 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
 
         fields   = line.split(';')
         code_str = fields[0]
+
+        # ── Away-team zone marker: 'az{N}' or 'az{N}>LUp' ───────────────
+        # Volleymetrics does not update fields[10] (away rotation) in match files
+        # where LUC is the visitor. Instead it emits 'az{N}' codes at the start
+        # of each rally to indicate LUC's current serving zone / rotation.
+        # Carry this value forward to cover rallies where the home team serves.
+        if len(code_str) >= 3 and code_str[0] == 'a' and code_str[1] == 'z' and code_str[2].isdigit():
+            try:
+                current_away_zone = int(code_str[2])
+            except:
+                pass
+            continue
 
         if len(code_str) < 4:
             continue
@@ -553,37 +566,45 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         combo_code = parsed['combo_code']
 
         # ── Rotation / set / lineup from DVW fields ───────────────────────
-        # Field layout (Volleymetrics & standard practice DVW):
-        #   [9]  = set number (1-5)
-        #   [10] = home rotation (1-6)
-        #   [11] = away rotation (1-6)
-        #   [13] = action sequence counter (unique per event)
-        #   [15..20] = home lineup (player nums at positions 1-6)
-        #   [21..26] = away lineup
+        # Actual field layout (verified against raw Volleymetrics DVW files):
+        #   [8]  = set number (1-5)
+        #   [9]  = home rotation (1-6)
+        #   [10] = away rotation (1-6) — NOTE: Volleymetrics always writes 1 here
+        #            for away team; use az{N} zone codes instead for away matches
+        #   [12] = action sequence counter (unique per event)
+        #   [14..19] = home lineup (player nums at positions 1-6)
+        #   [20..25] = away lineup
         set_num    = None
         rot_h      = None
         rot_v      = None
         action_seq = None
         luc_lineup = None
 
+        if len(fields) > 8:
+            try: set_num = int(fields[8].strip())
+            except: pass
         if len(fields) > 9:
-            try: set_num = int(fields[9].strip())
+            try: rot_h = int(fields[9].strip())
             except: pass
         if len(fields) > 10:
-            try: rot_h = int(fields[10].strip())
+            try: rot_v = int(fields[10].strip())
             except: pass
-        if len(fields) > 11:
-            try: rot_v = int(fields[11].strip())
-            except: pass
-        if len(fields) > 13:
-            s = fields[13].strip()
+        if len(fields) > 12:
+            s = fields[12].strip()
             try: action_seq = int(s) if s else None
             except: action_seq = s or None
 
-        luc_rot = rot_h if luc_side == 'home' else rot_v
+        # For away Volleymetrics matches, use the az{N} zone code (carried forward)
+        # because fields[10] (away rotation) is never updated by Volleymetrics.
+        if luc_side == 'home':
+            luc_rot = rot_h
+        elif current_away_zone is not None:
+            luc_rot = current_away_zone
+        else:
+            luc_rot = rot_v  # fallback (may be 1 for Volleymetrics away matches)
 
         # Lineup: positions 1-6 as player jersey numbers
-        lu_start = 15 if luc_side == 'home' else 21
+        lu_start = 14 if luc_side == 'home' else 20
         if len(fields) > lu_start + 5:
             try:
                 nums = [int(fields[lu_start + i].strip()) for i in range(6)
