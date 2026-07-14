@@ -1644,6 +1644,12 @@ function renderReports() {
     .filter(s => seasons.includes(s.season) && s.type !== 'scout')
     .sort((a,b) => (a.date||'').localeCompare(b.date||''));
 
+  // Prune rptSelected: remove any sessions that no longer match the current season/type filter
+  const validRptIds = new Set(sessions.map(s => s.id));
+  for (const id of [...rptSelected]) {
+    if (!validRptIds.has(id)) rptSelected.delete(id);
+  }
+
   // ── Monthly trend ─────────────────────────────────────────────────────────
   // Group sessions from the selected seasons by YYYY-MM
   const { monthKeys: rptMoKeys, shortLabels, sessionIdsByMonth: rptMoSess } = getMonthBuckets(seasons);
