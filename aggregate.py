@@ -352,7 +352,7 @@ CLOSE_K_CODES = {'K1', 'K2', 'KC'}   # front quick / back quick → close-route 
 GAP_K_CODES   = {'K7', 'KM', 'KP', 'KE', 'KD'}   # gap / shoot sets
 
 
-def compute_match_rotation_stats(actions):
+def compute_match_rotation_stats(actions, loyola_side='both'):
     """
     Build rotation-based match report tables from LUC-only match actions.
 
@@ -394,13 +394,18 @@ def compute_match_rotation_stats(actions):
                 rot = str(r)
                 break
 
-        # Reception quality this rally
-        rcv_ev = next((a.get('evaluation','') for a in rally if a.get('skill_code') == 'R'), None)
+        # Reception quality this rally — LUC receptions only
+        rcv_ev = next((a.get('evaluation','') for a in rally
+                       if a.get('skill_code') == 'R'
+                       and (loyola_side == 'both' or a.get('team_side') == loyola_side)), None)
         has_rcv = rcv_ev is not None
 
-        # Each setter action → find next attack in same rally
+        # Each setter action → find next attack in same rally (LUC only)
         for i, a in enumerate(rally):
             if a.get('skill_code') != 'E':
+                continue
+            # Skip opponent setter actions
+            if loyola_side != 'both' and a.get('team_side') != loyola_side:
                 continue
             setter_num = a.get('player_num', '')
             if not setter_num:
@@ -410,7 +415,9 @@ def compute_match_rotation_stats(actions):
             is_close = k_code in CLOSE_K_CODES
             is_gap   = k_code in GAP_K_CODES
 
-            next_atk = next((b for b in rally[i+1:] if b.get('skill_code') == 'A'), None)
+            next_atk = next((b for b in rally[i+1:]
+                             if b.get('skill_code') == 'A'
+                             and (loyola_side == 'both' or b.get('team_side') == loyola_side)), None)
             if not next_atk:
                 continue
 
@@ -580,7 +587,7 @@ def main(raw_path, out_path):
         acts   = s.get('actions', [])
         dig, fbso = compute_rally_sequences(acts, ls)
         ca = compute_call_attacks(acts, ls)
-        rot_stats = compute_match_rotation_stats(acts) if s.get('type') == 'match' else None
+        rot_stats = compute_match_rotation_stats(acts, ls) if s.get('type') == 'match' else None
         session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca, 'rot_stats': rot_stats}
         # Accumulate setter-call → attack outcome per season
         for k_code, combos in ca.items():
