@@ -715,7 +715,7 @@
           </table>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="sr-rcv-card">
         <h3>Reception Stats by Player</h3>
         <div class="table-scroll">
           <table class="data-table">
@@ -733,6 +733,13 @@
             <tbody id="rcv-tbody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+    <!-- Unified Float/Topspin/Total reception table — shown only in Both mode -->
+    <div id="sr-rcv-unified" style="display:none;margin-top:16px">
+      <div class="card">
+        <h3>Reception by Player — <span style="color:#7aaaff">Float (RM)</span> / <span style="color:#cc99ff">Topspin (RQ)</span> / <span style="color:var(--gold)">All</span></h3>
+        <div style="overflow-x:auto" id="sr-rcv-unified-inner"></div>
       </div>
     </div>
     <div class="grid-2 mt-16">
@@ -5077,6 +5084,69 @@ function renderRcvTbody(tbodyId, players) {
   }).join('') || '<tr><td colspan="10" class="empty">No reception data</td></tr>';
 }
 
+// Unified Float/Topspin/Total reception table for S&R tab "Both" mode
+function renderRcvUnified(containerId, floatPlayers, tsPlayers, allPlayers) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const floatMap = Object.fromEntries(floatPlayers.map(p => [p.pnum, p]));
+  const tsMap    = Object.fromEntries(tsPlayers.map(p => [p.pnum, p]));
+  // Master list: anyone with any reception data
+  const seen = new Set([...allPlayers, ...floatPlayers, ...tsPlayers].map(p=>p.pnum));
+  const master = [...seen].map(pnum => {
+    return allPlayers.find(p=>p.pnum===pnum) || floatPlayers.find(p=>p.pnum===pnum) || tsPlayers.find(p=>p.pnum===pnum);
+  }).filter(p => {
+    const fAtt = floatMap[p.pnum]?.rcv_att||0;
+    const tAtt = tsMap[p.pnum]?.rcv_att||0;
+    const aAtt = allPlayers.find(x=>x.pnum===p.pnum)?.rcv_att||0;
+    return fAtt+tAtt+aAtt > 0;
+  }).sort((a,b) => {
+    const aAll = allPlayers.find(x=>x.pnum===a.pnum)?.rcv_att||0;
+    const bAll = allPlayers.find(x=>x.pnum===b.pnum)?.rcv_att||0;
+    return bAll - aAll;
+  });
+
+  function c4(p) {
+    if (!p?.rcv_att) return '<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>';
+    const rm = rcvMetrics(p.rcv_ev, p.rcv_att, p.rPts, p.rCat);
+    if (!rm) return '<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>';
+    const ac = rm.avg>=3.0?'var(--green)':rm.avg<2.0?'var(--red)':'var(--text)';
+    return `<td class="num">${p.rcv_att}</td><td class="num" style="color:${ac};font-weight:600">${rm.avg.toFixed(2)}</td><td class="num green">${pct(rm.perf_pct)}</td><td class="num red">${pct(rm.err_pct)}</td>`;
+  }
+  function c8(p) {
+    if (!p?.rcv_att) return '<td class="num">—</td>'.repeat(8);
+    const rm = rcvMetrics(p.rcv_ev, p.rcv_att, p.rPts, p.rCat);
+    if (!rm) return '<td class="num">—</td>'.repeat(8);
+    const ac = rm.avg>=3.0?'var(--green)':rm.avg<2.0?'var(--red)':'var(--text)';
+    return `<td class="num">${p.rcv_att}</td><td class="num" style="color:${ac};font-weight:600">${rm.avg.toFixed(2)}</td><td class="num green">${pct(rm.perf_pct)}</td><td class="num">${pct(rm.gp_pct)}</td><td class="num">${pct(rm.med_pct)}</td><td class="num" style="color:var(--gold)">${pct(rm.oos_pct)}</td><td class="num">${pct(rm.over_pct)}</td><td class="num red">${pct(rm.err_pct)}</td>`;
+  }
+  container.innerHTML = `<table class="data-table" style="min-width:900px;border-collapse:collapse;font-size:12px;white-space:nowrap">
+    <thead>
+      <tr>
+        <th rowspan="2">#</th><th rowspan="2">Name</th>
+        <th colspan="4" class="num" style="text-align:center;background:rgba(60,100,180,.25);color:#7aaaff;font-size:11px;padding:4px 6px">Float (RM)</th>
+        <th colspan="4" class="num" style="text-align:center;background:rgba(120,60,160,.25);color:#cc99ff;font-size:11px;padding:4px 6px">Topspin (RQ)</th>
+        <th colspan="8" class="num" style="text-align:center;background:rgba(141,0,52,.25);color:var(--gold);font-size:11px;padding:4px 6px">All Receives</th>
+      </tr>
+      <tr>
+        <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
+        <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
+        <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">GP%</th><th class="num">Med%</th><th class="num">OoS%</th><th class="num">OvP%</th><th class="num">Err%</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${master.map(p => {
+        const aP = allPlayers.find(x=>x.pnum===p.pnum);
+        return `<tr>
+          <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+          ${c4(floatMap[p.pnum])}
+          ${c4(tsMap[p.pnum])}
+          ${c8(aP)}
+        </tr>`;
+      }).join('') || '<tr><td colspan="18" style="text-align:center;padding:12px;color:#666">No reception data</td></tr>'}
+    </tbody>
+  </table>`;
+}
+
 function renderServeDonut(chartId, teamServeEv, label) {
   const serveLabels = ['Ace (#)', 'Good Press (+)', 'Overpass (/)', 'Weak (-)', 'Error (=)'];
   const serveVals   = [
@@ -5390,9 +5460,26 @@ function renderServRcv() {
     `;
 
     renderServeTbody('serve-tbody', players);
-    renderRcvTbody('rcv-tbody', players);
     renderServeDonut('chart-serve-evals', teamServeEv, null);
     renderRcvDonut('chart-rcv-evals', teamRcvEv);
+
+    if (srServeType === 'both') {
+      // Unified Float / Topspin / Total reception table
+      const unifiedEl = document.getElementById('sr-rcv-unified');
+      const rcvCardEl = document.getElementById('sr-rcv-card');
+      if (unifiedEl) unifiedEl.style.display = '';
+      if (rcvCardEl) rcvCardEl.style.display = 'none';
+      const floatRcvP = buildSrPlayerStats(activeSids, seasons, group, 'S', 'RM');
+      const tsRcvP    = buildSrPlayerStats(activeSids, seasons, group, 'S', 'RQ');
+      renderRcvUnified('sr-rcv-unified-inner', floatRcvP, tsRcvP, players);
+    } else {
+      // Float or Topspin single mode — standard per-type table
+      const unifiedEl = document.getElementById('sr-rcv-unified');
+      const rcvCardEl = document.getElementById('sr-rcv-card');
+      if (unifiedEl) unifiedEl.style.display = 'none';
+      if (rcvCardEl) rcvCardEl.style.display = '';
+      renderRcvTbody('rcv-tbody', players);
+    }
   }
 
   // Reception AVG trend — uses correct skill key for current serve type filter
