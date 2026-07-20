@@ -1478,6 +1478,22 @@ function sessionPool() {
 // Always repopulates period dropdowns first so stale options (months/weeks with
 // no data for the new type) are removed before rendering.
 function setSessionType(type, renderFn) {
+  // Before switching type, check if ALL months in the current pool were selected.
+  // If so, auto-select all months across ALL session types for this season so that
+  // switching Match→Both (or Practice→Both etc.) includes sessions exclusive to
+  // the other type (e.g. December practice sessions that have no match counterpart).
+  const seasonEl = document.getElementById('rpt-season');
+  if (seasonEl) {
+    const seas = resolveSeasons(seasonEl.value);
+    const { monthKeys: prevKeys } = getMonthBuckets(seas);
+    const allWereSelected = prevKeys.length > 0 && prevKeys.every(mo => rptSelectedMonths.has(mo));
+    if (allWereSelected) {
+      // Auto-include every month that has any session in this season
+      DATA.sessions
+        .filter(s => seas.includes(s.season) && s.type !== 'scout' && s.date)
+        .forEach(s => rptSelectedMonths.add(s.date.slice(0, 7)));
+    }
+  }
   sessionTypeFilter = type;
   populateAtkPeriod();
   populateSrPeriod();
@@ -1649,10 +1665,16 @@ function renderReports() {
   // Build month→sessionIds for current season + type filter
   const { monthKeys: rptMoKeys, shortLabels, sessionIdsByMonth: rptMoSess } = getMonthBuckets(seasons);
 
-  // Prune rptSelectedMonths: remove months not in the current season window
-  const validMonths = new Set(rptMoKeys);
+  // Prune rptSelectedMonths: remove months that don't exist in this season at all
+  // (season-wide, NOT restricted to the current session type — otherwise switching
+  //  Match→Both would permanently drop practice-only months like December)
+  const allSeasonMonths = new Set(
+    DATA.sessions
+      .filter(s => seasons.includes(s.season) && s.type !== 'scout' && s.date)
+      .map(s => s.date.slice(0, 7))
+  );
   for (const mo of [...rptSelectedMonths]) {
-    if (!validMonths.has(mo)) rptSelectedMonths.delete(mo);
+    if (!allSeasonMonths.has(mo)) rptSelectedMonths.delete(mo);
   }
 
   // Derive rptSelected from rptSelectedMonths × current session pool.
