@@ -1871,7 +1871,8 @@ function mergeSetterAtkDict(target, src) {
   }
 }
 function aggregateMatchRotStats(sessionIds) {
-  const c = {rotation_atk:{},rotation_atk_close:{},rotation_atk_gap:{},setter_atk:{}};
+  const c = {rotation_atk:{},rotation_atk_close:{},rotation_atk_gap:{},setter_atk:{},
+             rotation_srv:{},rotation_rcv:{},rotation_so:{}};
   for (const sid of sessionIds) {
     const mrs = DATA.sessions.find(s=>s.id===sid)?.match_rot_stats;
     if (!mrs) continue;
@@ -1879,6 +1880,16 @@ function aggregateMatchRotStats(sessionIds) {
     mergeRotDict(c.rotation_atk_close, mrs.rotation_atk_close ||{});
     mergeRotDict(c.rotation_atk_gap,   mrs.rotation_atk_gap   ||{});
     mergeSetterAtkDict(c.setter_atk, mrs.setter_atk ||{});
+    // Merge flat rotation stats (srv / rcv / so)
+    for (const key of ['rotation_srv','rotation_rcv','rotation_so']) {
+      const src = mrs[key] || {};
+      for (const [rot, vals] of Object.entries(src)) {
+        if (!c[key][rot]) c[key][rot] = {};
+        for (const [k,v] of Object.entries(vals)) {
+          c[key][rot][k] = (c[key][rot][k]||0) + v;
+        }
+      }
+    }
   }
   return c;
 }
@@ -2709,6 +2720,132 @@ function buildZoneChartsPanel(sessionIds) {
   return html;
 }
 
+function buildRotationOverviewPanel(mrs) {
+  const ROTS = ['1','2','3','4','5','6'];
+  const ROT_LABELS = {'1':'S-B','2':'S-LF','3':'S-CF','4':'S-RF','5':'S-MF','6':'S-RB'};
+
+  const SH = `background:#1a0010;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;letter-spacing:.4px`;
+  const GH = `background:var(--maroon);color:#fff;text-align:center;font-weight:700;font-size:11px;letter-spacing:.3px;padding:5px 8px`;
+  const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase`;
+
+  const pct = (n, d) => d ? (n/d*100).toFixed(1)+'%' : '—';
+  const soColor  = v => v===null?'var(--text-dim)':v>=55?'var(--green)':v<=44?'var(--red)':'var(--text)';
+  const pspColor = v => v===null?'var(--text-dim)':v>=35?'var(--green)':v<=24?'var(--red)':'var(--text)';
+  const rcvColor = v => v===null?'var(--text-dim)':v>=2.5?'var(--green)':v<1.5?'var(--red)':'var(--gold)';
+  const kColor   = v => v===null?'var(--text-dim)':v>=45?'var(--green)':v<=30?'var(--red)':'var(--text)';
+  const errColor = v => v===null?'var(--text-dim)':v<=10?'var(--green)':v>=20?'var(--red)':'var(--text)';
+
+  let rows = '';
+  let totSO={opp:0,won:0}, totSrv={opp:0,won:0,att:0,ace:0,err:0};
+  let totRcv={att:0,pts:0,perf:0}, totAtk={k:0,e:0,bk:0,a:0,blk:0};
+
+  for (const rot of ROTS) {
+    const so  = mrs.rotation_so[rot]  || {};
+    const srv = mrs.rotation_srv[rot] || {};
+    const rcv = mrs.rotation_rcv[rot] || {};
+    const atk = (mrs.rotation_atk[rot] || {})['OVR'] || {};
+
+    const soOpp = so.so_opp||0,  soWon = so.so_won||0;
+    const srvOpp= so.srv_opp||0, srvWon= so.srv_won||0;
+    const blk   = so.blk||0;
+    const sAtt  = srv.att||0, sAce=srv.ace||0, sErr=srv.err||0;
+    const rAtt  = rcv.att||0, rPts=rcv.pts||0, rPerf=rcv.perf||0;
+    const aK=atk.k||0, aE=atk.e||0, aBK=atk.bk||0, aA=atk.a||0;
+
+    const soV   = soOpp  ? soWon/soOpp*100   : null;
+    const pspV  = srvOpp ? srvWon/srvOpp*100 : null;
+    const rcvAvg= rAtt   ? rPts/rAtt         : null;
+    const perfPct= rAtt  ? rPerf/rAtt*100    : null;
+    const acePct = sAtt  ? sAce/sAtt*100     : null;
+    const sErrPct= sAtt  ? sErr/sAtt*100     : null;
+    const kPct   = aA    ? aK/aA*100         : null;
+    const eff    = aA    ? (aK-aE-aBK)/aA*100: null;
+
+    totSO.opp+=soOpp; totSO.won+=soWon;
+    totSrv.opp+=srvOpp; totSrv.won+=srvWon;
+    totSrv.att+=sAtt; totSrv.ace+=sAce; totSrv.err+=sErr;
+    totRcv.att+=rAtt; totRcv.pts+=rPts; totRcv.perf+=rPerf;
+    totAtk.k+=aK; totAtk.e+=aE; totAtk.bk+=aBK; totAtk.a+=aA; totAtk.blk+=blk;
+
+    rows += `<tr>
+      <td style="font-weight:700;color:var(--gold);text-align:center">${rot}</td>
+      <td style="color:var(--text-muted);font-size:10px;text-align:center">${ROT_LABELS[rot]||''}</td>
+      <td class="num" style="font-weight:700;color:${soColor(soV)}">${soV!==null?soV.toFixed(1)+'%':'—'}</td>
+      <td class="num">${soOpp||'—'}</td>
+      <td class="num" style="color:${rcvColor(rcvAvg)}">${rcvAvg!==null?rcvAvg.toFixed(2):'—'}</td>
+      <td class="num" style="color:var(--green)">${perfPct!==null?perfPct.toFixed(1)+'%':'—'}</td>
+      <td class="num" style="border-left:2px solid #333;font-weight:700;color:${pspColor(pspV)}">${pspV!==null?pspV.toFixed(1)+'%':'—'}</td>
+      <td class="num">${srvOpp||'—'}</td>
+      <td class="num" style="color:var(--green)">${acePct!==null?acePct.toFixed(1)+'%':'—'}</td>
+      <td class="num" style="color:${errColor(sErrPct)}">${sErrPct!==null?sErrPct.toFixed(1)+'%':'—'}</td>
+      <td class="num" style="border-left:2px solid #333;color:${kColor(kPct)}">${kPct!==null?kPct.toFixed(1)+'%':'—'}</td>
+      <td class="num" style="color:${errColor(eff!==null?null:null)}">${eff!==null?((eff>=0?'+':'')+eff.toFixed(1)+'%'):'—'}</td>
+      <td class="num">${aA||'—'}</td>
+      <td class="num" style="color:var(--green)">${blk||'—'}</td>
+    </tr>`;
+  }
+
+  // Team total row
+  const tSoV   = totSO.opp   ? totSO.won/totSO.opp*100     : null;
+  const tPspV  = totSrv.opp  ? totSrv.won/totSrv.opp*100   : null;
+  const tRcvAvg= totRcv.att  ? totRcv.pts/totRcv.att       : null;
+  const tPerf  = totRcv.att  ? totRcv.perf/totRcv.att*100  : null;
+  const tAce   = totSrv.att  ? totSrv.ace/totSrv.att*100   : null;
+  const tSErr  = totSrv.att  ? totSrv.err/totSrv.att*100   : null;
+  const tKpct  = totAtk.a    ? totAtk.k/totAtk.a*100       : null;
+  const tEff   = totAtk.a    ? (totAtk.k-totAtk.e-totAtk.bk)/totAtk.a*100 : null;
+
+  rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
+    <td colspan="2" style="text-align:center;font-weight:700">TOTAL</td>
+    <td class="num">${tSoV!==null?tSoV.toFixed(1)+'%':'—'}</td>
+    <td class="num">${totSO.opp||'—'}</td>
+    <td class="num">${tRcvAvg!==null?tRcvAvg.toFixed(2):'—'}</td>
+    <td class="num">${tPerf!==null?tPerf.toFixed(1)+'%':'—'}</td>
+    <td class="num" style="border-left:2px solid rgba(255,255,255,.2)">${tPspV!==null?tPspV.toFixed(1)+'%':'—'}</td>
+    <td class="num">${totSrv.opp||'—'}</td>
+    <td class="num">${tAce!==null?tAce.toFixed(1)+'%':'—'}</td>
+    <td class="num">${tSErr!==null?tSErr.toFixed(1)+'%':'—'}</td>
+    <td class="num" style="border-left:2px solid rgba(255,255,255,.2)">${tKpct!==null?tKpct.toFixed(1)+'%':'—'}</td>
+    <td class="num">${tEff!==null?((tEff>=0?'+':'')+tEff.toFixed(1)+'%'):'—'}</td>
+    <td class="num">${totAtk.a||'—'}</td>
+    <td class="num">${totAtk.blk||'—'}</td>
+  </tr>`;
+
+  return `<div style="margin-top:24px">
+    <div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead>
+        <tr><td colspan="14" style="${SH}">ROTATION OVERVIEW</td></tr>
+        <tr style="${CH}">
+          <th colspan="2"></th>
+          <th colspan="4" style="${GH};background:#1a3a6a">SIDEOUT (Receiving)</th>
+          <th colspan="4" style="${GH};background:#1a3a1a;border-left:2px solid #333">POINT SCORING (Serving)</th>
+          <th colspan="4" style="${GH};background:#3a1a00;border-left:2px solid #333">ATTACK</th>
+        </tr>
+        <tr style="${CH}">
+          <th style="text-align:center">Rot</th>
+          <th style="text-align:center;color:var(--text-dim)">Zone</th>
+          <th class="num" style="color:#7aaaff">SO%</th>
+          <th class="num">Opp</th>
+          <th class="num">Rcv AVG</th>
+          <th class="num">Perf%</th>
+          <th class="num" style="color:var(--green);border-left:2px solid #333">PSP%</th>
+          <th class="num">Opp</th>
+          <th class="num">Ace%</th>
+          <th class="num">SErr%</th>
+          <th class="num" style="color:var(--gold);border-left:2px solid #333">K%</th>
+          <th class="num">Eff%</th>
+          <th class="num">Att</th>
+          <th class="num" style="color:var(--green)">BLK</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:6px;padding:0 2px">
+      SO% = sideout % (won rally when receiving) &nbsp;|&nbsp; PSP% = point scoring % (won rally when serving) &nbsp;|&nbsp; Rcv AVG = reception avg (3×Perf+2×Good+Med)/Att &nbsp;|&nbsp; Eff% = (K−E−BLK)/Att
+    </div>
+  </div>`;
+}
+
 function renderMatchRotationReport() {
   const mrs = aggregateMatchRotStats(rptSelected);
   const rotEl      = document.getElementById('rpt-panel-rot');
@@ -2724,7 +2861,7 @@ function renderMatchRotationReport() {
   setterSelected     = 'all';
   setterEl.innerHTML = '<h3 style="margin:0 0 14px">Setter Breakdown</h3>' + buildSetterBreakdownPanel(mrs.setter_atk);
 
-  overviewEl.innerHTML = '<h3 style="margin:0 0 14px">Match Overview</h3>' + buildMatchOverviewPanel(rptSelected);
+  overviewEl.innerHTML = '<h3 style="margin:0 0 14px">Match Overview</h3>' + buildMatchOverviewPanel(rptSelected) + buildRotationOverviewPanel(mrs);
 
   const sessionIds = [...rptSelected];
   const hasZones = sessionIds.some(sid => DATA.sessions.find(s=>s.id===sid)?.zone_charts);

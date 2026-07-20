@@ -382,6 +382,14 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
     rot_atk_close = defaultdict(lambda: defaultdict(ea))
     rot_atk_gap   = defaultdict(lambda: defaultdict(ea))
 
+    # per-rotation serve/receive/sideout accumulators
+    def es(): return {'att':0,'ace':0,'err':0,'pos':0,'neg':0}
+    def er(): return {'att':0,'pts':0,'perf':0,'good':0,'med':0,'oos':0,'err':0,'over':0}
+    def eso(): return {'so_opp':0,'so_won':0,'srv_opp':0,'srv_won':0,'blk':0}
+    rot_srv = defaultdict(es)
+    rot_rcv = defaultdict(er)
+    rot_so  = defaultdict(eso)
+
     # {setter_num: {atk_num: {bucket: {combo_code: {k,e,b,a}}}}}
     # buckets: 'all' | 'fbso' | 'perf'(#) | 'good'(+) | 'med'(!) | 'oos'(-) | 'transition'
     setter_atk = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(ea))))
@@ -399,6 +407,67 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
                        if a.get('skill_code') == 'R'
                        and (loyola_side == 'both' or a.get('team_side') == loyola_side)), None)
         has_rcv = rcv_ev is not None
+
+        # ── Rally outcome (who won) ───────────────────────────────────────────
+        luc_won = None
+        for a in reversed(rally):
+            ev = a.get('evaluation', '')
+            if ev in ('#', '=', '/'):
+                side = a.get('team_side')
+                if ev == '#':
+                    luc_won = (side == loyola_side)
+                else:  # '=' error or '/' blocked-attack = opponent of action team wins
+                    luc_won = (side != loyola_side)
+                break
+
+        # LUC serve this rally
+        luc_srv = next((a for a in rally
+                        if a.get('skill_code') == 'S'
+                        and (loyola_side == 'both' or a.get('team_side') == loyola_side)), None)
+
+        # LUC reception this rally
+        luc_rcv = next((a for a in rally
+                        if a.get('skill_code') == 'R'
+                        and (loyola_side == 'both' or a.get('team_side') == loyola_side)), None)
+
+        # LUC block kills this rally
+        luc_blks = sum(1 for a in rally
+                       if a.get('skill_code') == 'B'
+                       and (loyola_side == 'both' or a.get('team_side') == loyola_side)
+                       and a.get('evaluation') == '#')
+
+        if rot:
+            # Serve stats
+            if luc_srv:
+                sev = luc_srv.get('evaluation', '')
+                rs_ = rot_srv[rot]
+                rs_['att'] += 1
+                if sev == '#':   rs_['ace'] += 1
+                elif sev == '=': rs_['err'] += 1
+                elif sev == '+': rs_['pos'] += 1
+                elif sev == '-': rs_['neg'] += 1
+                # Point scoring % (LUC serving → did LUC win?)
+                if luc_won is not None:
+                    rot_so[rot]['srv_opp'] += 1
+                    if luc_won: rot_so[rot]['srv_won'] += 1
+
+            # Receive stats + sideout %
+            if luc_rcv:
+                rev = luc_rcv.get('evaluation', '')
+                rr_ = rot_rcv[rot]
+                rr_['att'] += 1
+                if   rev == '#': rr_['perf'] += 1; rr_['pts'] += 3
+                elif rev == '+': rr_['good'] += 1; rr_['pts'] += 2
+                elif rev == '!': rr_['med']  += 1; rr_['pts'] += 1
+                elif rev == '-': rr_['oos']  += 1
+                elif rev == '=': rr_['err']  += 1
+                elif rev == '/': rr_['over'] += 1
+                if luc_won is not None:
+                    rot_so[rot]['so_opp'] += 1
+                    if luc_won: rot_so[rot]['so_won'] += 1
+
+            # Blocks
+            rot_so[rot]['blk'] += luc_blks
 
         # Each setter action → find next attack in same rally (LUC only)
         for i, a in enumerate(rally):
@@ -477,6 +546,9 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
         'rotation_atk_close': ser_rot(rot_atk_close),
         'rotation_atk_gap':   ser_rot(rot_atk_gap),
         'setter_atk':         ser_setter_v2(setter_atk),
+        'rotation_srv':       {r: dict(v) for r, v in rot_srv.items()},
+        'rotation_rcv':       {r: dict(v) for r, v in rot_rcv.items()},
+        'rotation_so':        {r: dict(v) for r, v in rot_so.items()},
     }
 
 
