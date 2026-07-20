@@ -2781,6 +2781,7 @@ function buildRotationOverviewPanel(mrs) {
       <td class="num" style="border-left:2px solid #333;color:${kColor(kPct)}">${kPct!==null?kPct.toFixed(1)+'%':'—'}</td>
       <td class="num" style="color:${errColor(eff!==null?null:null)}">${eff!==null?((eff>=0?'+':'')+eff.toFixed(1)+'%'):'—'}</td>
       <td class="num">${aA||'—'}</td>
+      <td class="num" style="color:var(--red)">${aBK||'—'}</td>
       <td class="num" style="color:var(--green)">${blk||'—'}</td>
     </tr>`;
   }
@@ -2808,18 +2809,19 @@ function buildRotationOverviewPanel(mrs) {
     <td class="num" style="border-left:2px solid rgba(255,255,255,.2)">${tKpct!==null?tKpct.toFixed(1)+'%':'—'}</td>
     <td class="num">${tEff!==null?((tEff>=0?'+':'')+tEff.toFixed(1)+'%'):'—'}</td>
     <td class="num">${totAtk.a||'—'}</td>
+    <td class="num">${totAtk.bk||'—'}</td>
     <td class="num">${totAtk.blk||'—'}</td>
   </tr>`;
 
   return `<div style="margin-top:24px">
     <div class="xlsx-wrap"><table class="xlsx-tbl">
       <thead>
-        <tr><td colspan="14" style="${SH}">ROTATION OVERVIEW</td></tr>
+        <tr><td colspan="15" style="${SH}">ROTATION OVERVIEW</td></tr>
         <tr style="${CH}">
           <th colspan="2"></th>
           <th colspan="4" style="${GH};background:#1a3a6a">SIDEOUT (Receiving)</th>
           <th colspan="4" style="${GH};background:#1a3a1a;border-left:2px solid #333">POINT SCORING (Serving)</th>
-          <th colspan="4" style="${GH};background:#3a1a00;border-left:2px solid #333">ATTACK</th>
+          <th colspan="5" style="${GH};background:#3a1a00;border-left:2px solid #333">ATTACK</th>
         </tr>
         <tr style="${CH}">
           <th style="text-align:center">Rot</th>
@@ -2835,13 +2837,14 @@ function buildRotationOverviewPanel(mrs) {
           <th class="num" style="color:var(--gold);border-left:2px solid #333">K%</th>
           <th class="num">Eff%</th>
           <th class="num">Att</th>
-          <th class="num" style="color:var(--green)">BLK</th>
+          <th class="num" style="color:var(--red)">Got Blk</th>
+          <th class="num" style="color:var(--green)">Our BLK</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div style="font-size:10px;color:var(--text-dim);margin-top:6px;padding:0 2px">
-      SO% = sideout % (won rally when receiving) &nbsp;|&nbsp; PSP% = point scoring % (won rally when serving) &nbsp;|&nbsp; Rcv AVG = reception avg (3×Perf+2×Good+Med)/Att &nbsp;|&nbsp; Eff% = (K−E−BLK)/Att
+      SO% = sideout % (won rally when receiving) &nbsp;|&nbsp; PSP% = point scoring % (won rally when serving) &nbsp;|&nbsp; Got Blk = times our attack was blocked &nbsp;|&nbsp; Our BLK = block kills by LUC &nbsp;|&nbsp; Eff% = (K−E−BLK)/Att
     </div>
   </div>`;
 }
@@ -3220,9 +3223,6 @@ function buildServeRcvSheet(groups) {
 
   const sCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Ace</th><th class="num">Err</th><th class="num">2P</th><th class="num">1P</th><th class="num">OP</th><th class="num">Ace%</th><th class="num">Err%</th><th class="num">OGP%</th><th class="num">OoS%</th>`;
   return `<div style="display:flex;flex-direction:column;gap:20px">
-    <div style="font-size:11px;color:var(--text-dim);padding:4px 0">
-      Serve: AVG = (2P×2 + 1P×1) / Att &nbsp;|&nbsp; Receive: Perf=#, 2P=+, 1P=/, OP=−, AVG=(3×Perf+2×2P+1P)/Att &nbsp;|&nbsp; Float (RM) = vs float serve, Topspin (RQ) = vs topspin serve
-    </div>
     ${buildTable(sCols, 'SERVING', p=>sRow(p), 11)}
     ${buildRcvTable()}
   </div>`;
