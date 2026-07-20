@@ -1999,48 +1999,61 @@ function buildSetterBreakdownTable(setterAtk) {
   const ccs = CALL_ORDER.filter(c => callCodes.has(c) && c !== 'OVR');
   if (!ccs.length) return '<div class="empty">No attack data for selected filter</div>';
 
-  // All columns: K,E,BLK,ATT,EFF% (5 cells each, including per-combo)
-  const colSpan = 2 + ccs.length * 5 + 5;
+  // All columns: K,E,BLK,ATT,EFF% (5 cells each) — displayed combos + OTHER + TOTAL
+  const colSpan = 2 + (ccs.length + 1) * 5 + 5; // +1 for OTHER column
 
   function statCells(merged, cc) {
     const b=merged[cc]||{}; const k=b.k||0, e=b.e||0, bk=b.bk||0, a=b.a||0;
     return `<td class="num">${k||'—'}</td><td class="num">${e||'—'}</td><td class="num">${bk||'—'}</td><td class="num">${a||'—'}</td><td class="num">${fmtEff(k,e,bk,a)}</td>`;
   }
 
+  function otherCells5(othK,othE,othBK,othA,bold='') {
+    if (othA > 0) return `<td class="num" style="${bold}">${othK||'—'}</td><td class="num" style="${bold}">${othE||'—'}</td><td class="num" style="${bold}">${othBK||'—'}</td><td class="num" style="${bold}">${othA||'—'}</td><td class="num" style="${bold}">${fmtEff(othK,othE,othBK,othA)}</td>`;
+    return `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
+  }
+
   function playerRow(anm) {
     const p = rptPlayer(anm);
     const name = p ? (p.last_name && p.last_name !== anm ? p.last_name : (p.name||`#${anm}`)) : `#${anm}`;
     const merged = getAttackerMerged(anm, setterAtk);
+    // True totals from pre-aggregated OVR (includes all combos, even those outside CALL_ORDER)
+    const ovr = merged['OVR'] || {};
+    const ovrK=ovr.k||0, ovrE=ovr.e||0, ovrBK=ovr.bk||0, ovrA=ovr.a||0;
     let row = `<tr><td style="font-weight:600">#${anm}</td><td style="white-space:nowrap">${name}</td>`;
-    // Compute TOTAL from displayed combo sums — not from pre-aggregated OVR
-    let totK=0, totE=0, totBK=0, totA=0;
+    let dispK=0, dispE=0, dispBK=0, dispA=0;
     for (const cc of ccs) {
       row += statCells(merged, cc);
-      const b=merged[cc]||{}; totK+=b.k||0; totE+=b.e||0; totBK+=b.bk||0; totA+=b.a||0;
+      const b=merged[cc]||{}; dispK+=b.k||0; dispE+=b.e||0; dispBK+=b.bk||0; dispA+=b.a||0;
     }
-    row += `<td class="num" style="font-weight:600">${totK||'—'}</td><td class="num" style="font-weight:600">${totE||'—'}</td><td class="num" style="font-weight:600">${totBK||'—'}</td><td class="num" style="font-weight:600">${totA||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(totK,totE,totBK,totA)}</td>`;
+    // OTHER column — attacks in combos outside CALL_ORDER (XM, XL, X9, etc.)
+    row += otherCells5(ovrK-dispK, ovrE-dispE, ovrBK-dispBK, ovrA-dispA, 'font-weight:600');
+    // TOTAL from OVR (true total, all combos)
+    row += `<td class="num" style="font-weight:600">${ovrK||'—'}</td><td class="num" style="font-weight:600">${ovrE||'—'}</td><td class="num" style="font-weight:600">${ovrBK||'—'}</td><td class="num" style="font-weight:600">${ovrA||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(ovrK,ovrE,ovrBK,ovrA)}</td>`;
     return row + '</tr>';
   }
 
   function subtotalRow(nums, label) {
     const totals={};
+    let grpOvrK=0,grpOvrE=0,grpOvrBK=0,grpOvrA=0;
     for (const anm of nums) {
       const m=getAttackerMerged(anm,setterAtk);
+      const ovr=m['OVR']||{};
+      grpOvrK+=ovr.k||0; grpOvrE+=ovr.e||0; grpOvrBK+=ovr.bk||0; grpOvrA+=ovr.a||0;
       for (const cc of ccs) {
         if (!totals[cc]) totals[cc]={k:0,e:0,bk:0,a:0};
         const b=m[cc]||{}; totals[cc].k+=b.k||0; totals[cc].e+=b.e||0; totals[cc].bk+=b.bk||0; totals[cc].a+=b.a||0;
       }
     }
-    // Compute TOTAL from per-combo sums — not from pre-aggregated OVR
     let gK=0,gE=0,gBK=0,gA=0;
-    for (const cc of ccs) { const t=totals[cc]||{}; gK+=t.k||0; gE+=t.e||0; gBK+=t.bk||0; gA+=t.a||0; }
     let row=`<tr style="background:rgba(141,0,52,.07);font-style:italic;font-size:11px">
       <td colspan="2" style="font-weight:700;color:var(--maroon);padding:5px 12px">* ${label}</td>`;
     for (const cc of ccs) {
       const t=totals[cc]||{};
+      gK+=t.k||0; gE+=t.e||0; gBK+=t.bk||0; gA+=t.a||0;
       row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.bk||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.bk||0,t.a||0)}</td>`;
     }
-    row+=`<td class="num" style="font-weight:700">${gK||'—'}</td><td class="num" style="font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gBK||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(gK,gE,gBK,gA)}</td>`;
+    row += otherCells5(grpOvrK-gK, grpOvrE-gE, grpOvrBK-gBK, grpOvrA-gA, 'font-weight:700');
+    row+=`<td class="num" style="font-weight:700">${grpOvrK||'—'}</td><td class="num" style="font-weight:700">${grpOvrE||'—'}</td><td class="num" style="font-weight:700">${grpOvrBK||'—'}</td><td class="num" style="font-weight:700">${grpOvrA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(grpOvrK,grpOvrE,grpOvrBK,grpOvrA)}</td>`;
     return row+'</tr>';
   }
 
@@ -2072,10 +2085,12 @@ function buildSetterBreakdownTable(setterAtk) {
   html+='<tr><th>#</th><th>PLAYER</th>';
   for (const cc of ccs)
     html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(141,0,52,.2);font-size:11px;color:var(--gold)">${CALL_LABELS[cc]||cc}</th>`;
+  html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(100,100,100,.2);font-size:11px;color:#aaa">OTHER</th>`;
   html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(141,0,52,.35);font-size:11px;color:var(--gold)">TOTAL</th>`;
   html+='</tr><tr><th></th><th></th>';
   for (let i=0;i<ccs.length;i++)
     html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
+  html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:#aaa">EFF%</th>';
   html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
   html+='</tr></thead><tbody>';
 
@@ -2094,22 +2109,29 @@ function buildSetterBreakdownTable(setterAtk) {
     const ovr=(getAttackerMerged(anm,setterAtk)['OVR']||{}); return (ovr.a||0)>0;
   });
   const teamTotals={};
+  let teamOvrK=0,teamOvrE=0,teamOvrBK=0,teamOvrA=0;
   for (const anm of allActive) {
     const m=getAttackerMerged(anm,setterAtk);
+    const ovr=m['OVR']||{};
+    teamOvrK+=ovr.k||0; teamOvrE+=ovr.e||0; teamOvrBK+=ovr.bk||0; teamOvrA+=ovr.a||0;
     for (const cc of ccs) {
       if (!teamTotals[cc]) teamTotals[cc]={k:0,e:0,bk:0,a:0};
       const b=m[cc]||{}; teamTotals[cc].k+=b.k||0; teamTotals[cc].e+=b.e||0; teamTotals[cc].bk+=b.bk||0; teamTotals[cc].a+=b.a||0;
     }
   }
-  // Compute team TOTAL from per-combo sums — not from pre-aggregated OVR
-  let tK=0,tE=0,tBK=0,tA=0;
-  for (const cc of ccs) { const t=teamTotals[cc]||{}; tK+=t.k||0; tE+=t.e||0; tBK+=t.bk||0; tA+=t.a||0; }
+  // Team displayed combo totals (for computing OTHER)
+  let tDispK=0,tDispE=0,tDispBK=0,tDispA=0;
+  for (const cc of ccs) { const t=teamTotals[cc]||{}; tDispK+=t.k||0; tDispE+=t.e||0; tDispBK+=t.bk||0; tDispA+=t.a||0; }
   html+=`<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2" style="padding:6px 8px">TEAM TOTAL</td>`;
   for (const cc of ccs) {
     const t=teamTotals[cc]||{};
     html+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.bk||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.bk||0,t.a||0)}</td>`;
   }
-  html+=`<td class="num">${tK||'—'}</td><td class="num">${tE||'—'}</td><td class="num">${tBK||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(tK,tE,tBK,tA)}</td>`;
+  // OTHER column for team total
+  const tOthK=teamOvrK-tDispK, tOthE=teamOvrE-tDispE, tOthBK=teamOvrBK-tDispBK, tOthA=teamOvrA-tDispA;
+  html+=`<td class="num">${tOthK||'—'}</td><td class="num">${tOthE||'—'}</td><td class="num">${tOthBK||'—'}</td><td class="num">${tOthA||'—'}</td><td class="num">${fmtEff(tOthK,tOthE,tOthBK,tOthA)}</td>`;
+  // TOTAL from OVR (true total, all combos)
+  html+=`<td class="num">${teamOvrK||'—'}</td><td class="num">${teamOvrE||'—'}</td><td class="num">${teamOvrBK||'—'}</td><td class="num">${teamOvrA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(teamOvrK,teamOvrE,teamOvrBK,teamOvrA)}</td>`;
   html+='</tr></tbody></table></div>';
   return html;
 }
@@ -3469,7 +3491,8 @@ function renderRptDetail() {
 
   // ── Toggle match vs practice sub-tabs ──────────────────────────────────────
   const isMatchFilter = (sessionTypeFilter === 'match');
-  const practiceTabs  = ['servrcv','attack','overview'];
+  // 'servrcv' is always visible — serve/receive data is meaningful for both match and practice
+  const practiceTabs  = ['attack','overview'];
   const matchTabs     = ['rot','routes','setter','match-overview','zones','fbso-match'];
   practiceTabs.forEach(t => {
     const btn = document.getElementById(`rpt-subtab-${t}`);
@@ -3483,7 +3506,6 @@ function renderRptDetail() {
   if (isMatchFilter) {
     // ── Match report ────────────────────────────────────────────────────────
     renderMatchRotationReport();
-    // Also build practice panels (KPI + Serve/Rcv still useful for match context)
     const groups = buildPlayerGroups();
     document.getElementById('rpt-panel-servrcv').innerHTML  = buildServeRcvSheet(groups) + buildZoneSheet(groups);
     const setterSessionMap = getSessionSetterMap();
@@ -3492,7 +3514,7 @@ function renderRptDetail() {
       setterSectionHTML + '<div id="rpt-attack-tables">' + buildAttackSheet(groups) + '</div>';
     if (setterSectionHTML) renderRptSetterChart();
     document.getElementById('rpt-panel-overview').innerHTML = buildBlockDefSheet(groups);
-    // Default to rotation tab for match mode
+    // Default to rotation tab for match mode if a practice-only tab is active
     if (practiceTabs.includes(rptActiveSubTab)) rptActiveSubTab = 'rot';
   } else {
     // ── Practice / Both report ───────────────────────────────────────────────
