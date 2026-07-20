@@ -2772,12 +2772,14 @@ function buildPlayerGroups(sidFilter) {
         name:  getPlayerName(pnum, season),
         group: getPlayerGroup(pnum, season),
         sEv:{}, sAtt:0,   // serve
-        rEv:{}, rAtt:0,   // receive
+        rEv:{}, rAtt:0,   // receive (all types)
+        rmEv:{}, rmAtt:0, rmPts:null, rmCat:null,  // vs float
+        rqEv:{}, rqAtt:0, rqPts:null, rqCat:null,  // vs topspin
         aEv:{}, aAtt:0,   // attack (total)
         aC:{},             // attack combos
         bEv:{}, bAtt:0,   // block
         dEv:{}, dAtt:0,   // dig
-        rZones:{},         // receive zones
+        rZones:{}, rmZones:{}, rqZones:{},  // receive zones (all / float / topspin)
         digKillR:0, digTotR:0, // rally-level dig conversion
       };
     }
@@ -2785,6 +2787,18 @@ function buildPlayerGroups(sidFilter) {
 
     const addEv = (tgt, src) => {
       for (const [e,n] of Object.entries(src||{})) tgt[e] = (tgt[e]||0) + n;
+    };
+    const addCat = (tgt, cat) => {
+      if (!cat) return; if (!tgt) return;
+      for (const c of ['perf','good','med','oos','over','err']) tgt[c] = (tgt[c]||0) + (cat[c]||0);
+    };
+    const addZones = (plZones, psZones) => {
+      for (const [zk, zv] of Object.entries(psZones||{})) {
+        if (!plZones[zk]) plZones[zk] = { attempts:0, evals:{} };
+        plZones[zk].attempts += zv.attempts||0;
+        if (zv.rcv_pts != null) plZones[zk].rcv_pts = (plZones[zk].rcv_pts||0) + zv.rcv_pts;
+        addEv(plZones[zk].evals, zv.evals);
+      }
     };
 
     const sk = ps.skills || {};
@@ -2794,15 +2808,21 @@ function buildPlayerGroups(sidFilter) {
       if (sk.R.rcv_pts != null) pl.rPts = (pl.rPts||0) + sk.R.rcv_pts;
       if (sk.R.rcv_cat) {
         if (!pl.rCat) pl.rCat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
-        for (const c of ['perf','good','med','oos','over','err'])
-          pl.rCat[c] = (pl.rCat[c]||0) + (sk.R.rcv_cat[c]||0);
+        addCat(pl.rCat, sk.R.rcv_cat);
       }
-      for (const [zk, zv] of Object.entries(ps.rcv_zones||{})) {
-        if (!pl.rZones[zk]) pl.rZones[zk] = { attempts:0, evals:{} };
-        pl.rZones[zk].attempts += zv.attempts||0;
-        if (zv.rcv_pts != null) pl.rZones[zk].rcv_pts = (pl.rZones[zk].rcv_pts||0) + zv.rcv_pts;
-        addEv(pl.rZones[zk].evals, zv.evals);
-      }
+      addZones(pl.rZones, ps.rcv_zones);
+    }
+    if (sk.RM) {
+      pl.rmAtt += sk.RM.attempts||0; addEv(pl.rmEv, sk.RM.evals);
+      if (sk.RM.rcv_pts != null) pl.rmPts = (pl.rmPts||0) + sk.RM.rcv_pts;
+      if (sk.RM.rcv_cat) { if (!pl.rmCat) pl.rmCat={perf:0,good:0,med:0,oos:0,over:0,err:0}; addCat(pl.rmCat, sk.RM.rcv_cat); }
+      addZones(pl.rmZones, ps.rcv_zones_m);
+    }
+    if (sk.RQ) {
+      pl.rqAtt += sk.RQ.attempts||0; addEv(pl.rqEv, sk.RQ.evals);
+      if (sk.RQ.rcv_pts != null) pl.rqPts = (pl.rqPts||0) + sk.RQ.rcv_pts;
+      if (sk.RQ.rcv_cat) { if (!pl.rqCat) pl.rqCat={perf:0,good:0,med:0,oos:0,over:0,err:0}; addCat(pl.rqCat, sk.RQ.rcv_cat); }
+      addZones(pl.rqZones, ps.rcv_zones_q);
     }
     if (sk.A) {
       pl.aAtt += sk.A.attempts||0; addEv(pl.aEv, sk.A.evals);
@@ -2876,18 +2896,23 @@ function buildServeRcvSheet(groups) {
   const SH = `background:#1a0010;color:#fff;font-size:13px;font-weight:700;text-align:center;padding:8px;letter-spacing:.4px`;
   const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
 
-  function totalize(players, sk) {
-    const ev = {}, pl = { pnum:'*', name:'GROUP TOTAL', sEv:{}, sAtt:0, rEv:{}, rAtt:0, rPts:null, rCat:null };
+  function totalize(players) {
+    const pl = { pnum:'*', name:'GROUP TOTAL', sEv:{}, sAtt:0,
+                 rEv:{}, rAtt:0, rPts:null, rCat:null,
+                 rmEv:{}, rmAtt:0, rmPts:null, rmCat:null,
+                 rqEv:{}, rqAtt:0, rqPts:null, rqCat:null };
+    const addC = (dst, src) => { if (src) { if (!pl[dst]) pl[dst]={perf:0,good:0,med:0,oos:0,over:0,err:0}; for (const c of ['perf','good','med','oos','over','err']) pl[dst][c]=(pl[dst][c]||0)+(src[c]||0); } };
     for (const p of players) {
       pl.sAtt += p.sAtt; pl.rAtt += p.rAtt;
+      pl.rmAtt += p.rmAtt||0; pl.rqAtt += p.rqAtt||0;
       for (const [e,n] of Object.entries(p.sEv)) pl.sEv[e] = (pl.sEv[e]||0)+n;
       for (const [e,n] of Object.entries(p.rEv)) pl.rEv[e] = (pl.rEv[e]||0)+n;
+      for (const [e,n] of Object.entries(p.rmEv||{})) pl.rmEv[e] = (pl.rmEv[e]||0)+n;
+      for (const [e,n] of Object.entries(p.rqEv||{})) pl.rqEv[e] = (pl.rqEv[e]||0)+n;
       if (p.rPts != null) pl.rPts = (pl.rPts||0) + p.rPts;
-      if (p.rCat) {
-        if (!pl.rCat) pl.rCat = {perf:0,good:0,med:0,oos:0,over:0,err:0};
-        for (const c of ['perf','good','med','oos','over','err'])
-          pl.rCat[c] = (pl.rCat[c]||0) + (p.rCat[c]||0);
-      }
+      if (p.rmPts != null) pl.rmPts = (pl.rmPts||0) + p.rmPts;
+      if (p.rqPts != null) pl.rqPts = (pl.rqPts||0) + p.rqPts;
+      addC('rCat', p.rCat); addC('rmCat', p.rmCat); addC('rqCat', p.rqCat);
     }
     return pl;
   }
@@ -2916,26 +2941,98 @@ function buildServeRcvSheet(groups) {
       <td ${ns}>${att?xpct(oos/att):'—'}</td>`;
   }
 
-  function rRow(p, bold=false) {
-    const ev = p.rEv, att = p.rAtt;
-    const m = rcvMetrics(ev, att, p.rPts, p.rCat);
-    const avg = m ? m.avg : null;
+  // rRowUnified: Float(4) | Topspin(4) | All(8) = 16 data cols
+  function rRowUnified(p, bold=false) {
     const B = bold ? 'font-weight:700;' : '';
-    const ns  = `style="${B}text-align:right;font-variant-numeric:tabular-nums"`;
-    const gns = `style="${B}text-align:right;color:var(--green)"`;
-    const mns = `style="${B}text-align:right;color:var(--gold)"`;
-    const rns = `style="${B}text-align:right;color:var(--red)"`;
-    const dns = `style="${B}text-align:right;color:var(--text-dim)"`;
-    if (!att) return `<td colspan="8" style="color:var(--text-dim);text-align:center;font-size:11px">—</td>`;
-    return `
-      <td ${ns}>${att}</td>
-      <td ${mns}>${avg!==null?avg.toFixed(2):'—'}</td>
-      <td ${gns}>${m?xpct(m.perf_pct/100):'—'}</td>
-      <td ${gns}>${m?xpct(m.gp_pct/100):'—'}</td>
-      <td ${mns}>${m&&m.med_pct?xpct(m.med_pct/100):'—'}</td>
-      <td ${rns}>${m?xpct(m.oos_pct/100):'—'}</td>
-      <td ${dns}>${m?xpct(m.over_pct/100):'—'}</td>
-      <td ${rns}>${m?xpct(m.err_pct/100):'—'}</td>`;
+    const ns  = (extra='') => `style="${B}text-align:right;font-variant-numeric:tabular-nums${extra}"`;
+    const gns = (extra='') => `style="${B}text-align:right;color:var(--green)${extra}"`;
+    const mns = (extra='') => `style="${B}text-align:right;color:var(--gold)${extra}"`;
+    const rns = (extra='') => `style="${B}text-align:right;color:var(--red)${extra}"`;
+    const dns = (extra='') => `style="${B}text-align:right;color:var(--text-dim)${extra}"`;
+    const BL_FLOAT = ';border-left:2px solid #3a5a8f';
+    const BL_TS    = ';border-left:2px solid #6a3a8f';
+    const BL_ALL   = ';border-left:2px solid #6a5800';
+
+    // Float (RM) — 4 cols: Att AVG Perf% Err%
+    const rmAtt = p.rmAtt||0;
+    const rmM = rcvMetrics(p.rmEv||{}, rmAtt, p.rmPts, p.rmCat);
+    const rmCells = rmAtt
+      ? `<td ${ns(BL_FLOAT)}>${rmAtt}</td>
+         <td ${mns()}>${rmM&&rmM.avg!==null?rmM.avg.toFixed(2):'—'}</td>
+         <td ${gns()}>${rmM?xpct(rmM.perf_pct/100):'—'}</td>
+         <td ${rns()}>${rmM?xpct(rmM.err_pct/100):'—'}</td>`
+      : `<td colspan="4" style="${B}text-align:center;color:var(--text-dim)${BL_FLOAT}">—</td>`;
+
+    // Topspin (RQ) — 4 cols: Att AVG Perf% Err%
+    const rqAtt = p.rqAtt||0;
+    const rqM = rcvMetrics(p.rqEv||{}, rqAtt, p.rqPts, p.rqCat);
+    const rqCells = rqAtt
+      ? `<td ${ns(BL_TS)}>${rqAtt}</td>
+         <td ${mns()}>${rqM&&rqM.avg!==null?rqM.avg.toFixed(2):'—'}</td>
+         <td ${gns()}>${rqM?xpct(rqM.perf_pct/100):'—'}</td>
+         <td ${rns()}>${rqM?xpct(rqM.err_pct/100):'—'}</td>`
+      : `<td colspan="4" style="${B}text-align:center;color:var(--text-dim)${BL_TS}">—</td>`;
+
+    // All (R) — 8 cols: Att AVG Perf% Good% Med% OOS% Over% Err%
+    const att = p.rAtt||0;
+    const m = rcvMetrics(p.rEv||{}, att, p.rPts, p.rCat);
+    const rCells = att
+      ? `<td ${ns(BL_ALL)}>${att}</td>
+         <td ${mns()}>${m&&m.avg!==null?m.avg.toFixed(2):'—'}</td>
+         <td ${gns()}>${m?xpct(m.perf_pct/100):'—'}</td>
+         <td ${gns()}>${m?xpct(m.gp_pct/100):'—'}</td>
+         <td ${mns()}>${m&&m.med_pct?xpct(m.med_pct/100):'—'}</td>
+         <td ${rns()}>${m?xpct(m.oos_pct/100):'—'}</td>
+         <td ${dns()}>${m?xpct(m.over_pct/100):'—'}</td>
+         <td ${rns()}>${m?xpct(m.err_pct/100):'—'}</td>`
+      : `<td colspan="8" style="${B}text-align:center;color:var(--text-dim)${BL_ALL}">—</td>`;
+
+    return rmCells + rqCells + rCells;
+  }
+
+  function buildRcvTable() {
+    const PASS_GROUPS = ['OUTSIDES', 'LIBEROS'];
+    const TOTAL_COLS = 18; // 2 + 4 + 4 + 8
+    let rows = '';
+    for (const gName of PASS_GROUPS) {
+      const grp = (groups[gName]||[]).filter(p => p.rAtt > 0);
+      if (!grp.length) continue;
+      rows += `<tr><td colspan="${TOTAL_COLS}" style="${GH}">${gName}</td></tr>`;
+      for (const p of grp) {
+        rows += `<tr>
+          <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
+          <td style="white-space:nowrap">${p.name}</td>
+          ${rRowUnified(p)}
+        </tr>`;
+      }
+      const gt = totalize(grp);
+      rows += `<tr style="background:var(--surface3)">
+        <td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>
+        ${rRowUnified(gt, true)}
+      </tr>`;
+    }
+    rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
+      <td colspan="2" style="font-weight:700">TEAM TOTAL</td>
+      ${rRowUnified(rcvTeamTot, true)}
+    </tr>`;
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead>
+        <tr><td colspan="${TOTAL_COLS}" style="${SH}">RECEIVING</td></tr>
+        <tr style="${CH}">
+          <th>#</th><th>Player</th>
+          <th class="num" colspan="4" style="border-left:2px solid #3a5a8f;color:#7aaaff">Float (RM)</th>
+          <th class="num" colspan="4" style="border-left:2px solid #6a3a8f;color:#cc99ff">Topspin (RQ)</th>
+          <th class="num" colspan="8" style="border-left:2px solid #6a5800;color:var(--gold)">All Receives</th>
+        </tr>
+        <tr style="${CH}">
+          <th></th><th></th>
+          <th class="num" style="border-left:2px solid #3a5a8f">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
+          <th class="num" style="border-left:2px solid #6a3a8f">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
+          <th class="num" style="border-left:2px solid #6a5800">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Good%</th><th class="num">Med%</th><th class="num">OOS%</th><th class="num">Over%</th><th class="num">Err%</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
   }
 
   const allPlayers = POS_GROUP_ORDER.flatMap(g => groups[g]||[]);
@@ -2985,16 +3082,12 @@ function buildServeRcvSheet(groups) {
   }
 
   const sCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Ace</th><th class="num">Err</th><th class="num">2P</th><th class="num">1P</th><th class="num">OP</th><th class="num">Ace%</th><th class="num">Err%</th><th class="num">OGP%</th><th class="num">OoS%</th>`;
-  const rCols = `<th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Good%</th><th class="num">Med%</th><th class="num">OOS%</th><th class="num">Over%</th><th class="num">Err%</th>`;
-
   return `<div style="display:flex;flex-direction:column;gap:20px">
     <div style="font-size:11px;color:var(--text-dim);padding:4px 0">
-      Serve: AVG = (2P×2 + 1P×1) / Att &nbsp;|&nbsp; Receive: Perf=#, 2P=+, 1P=/, OP=−, AVG=(3×Perf+2×2P+1P)/Att
+      Serve: AVG = (2P×2 + 1P×1) / Att &nbsp;|&nbsp; Receive: Perf=#, 2P=+, 1P=/, OP=−, AVG=(3×Perf+2×2P+1P)/Att &nbsp;|&nbsp; Float (RM) = vs float serve, Topspin (RQ) = vs topspin serve
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      ${buildTable(sCols, 'SERVING',   p=>sRow(p), 11)}
-      ${buildTable(rCols, 'RECEIVING', p=>rRow(p), 12)}
-    </div>
+    ${buildTable(sCols, 'SERVING', p=>sRow(p), 11)}
+    ${buildRcvTable()}
   </div>`;
 }
 
@@ -3005,16 +3098,25 @@ function buildZoneSheet(groups) {
   const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
   const ZONES = [{ k:'1',label:'Zone 1' }, { k:'6',label:'Zone 6' }, { k:'5',label:'Zone 5' }];
 
+  // Each zone: Att | F.AVG | TS.AVG | AVG  (4 cols × 4 sections = 16 data cols + 2 = 18 total)
+  const ZONE_COLS = 4;
+  const TOTAL_COLS = 2 + (ZONES.length + 1) * ZONE_COLS; // 2 + 4*4 = 18
+
+  function avgColor(v) {
+    if (v === null) return 'var(--text-dim)';
+    return v > 2.5 ? 'var(--green)' : v < 1.5 ? 'var(--red)' : 'var(--text)';
+  }
+
   function buildTable(players) {
     const PASS_GROUPS = ['OUTSIDES', 'LIBEROS'];
     let rows = '';
     for (const gName of PASS_GROUPS) {
       const grp = (groups[gName]||[]).filter(p => p.rAtt > 0);
-      const relevant = grp.filter(p => Object.keys(p.rZones).length > 0);
+      const relevant = grp.filter(p => Object.keys(p.rZones||{}).length > 0);
       if (!relevant.length) continue;
-      rows += `<tr><td colspan="${2+ZONES.length*2+2}" style="${GH}">${gName}</td></tr>`;
+      rows += `<tr><td colspan="${TOTAL_COLS}" style="${GH}">${gName}</td></tr>`;
       for (const p of relevant) {
-        // Build a merged zone record for the total column
+        // Build merged zone record for the Overall column
         const totalZd = { attempts:0, evals:{}, rcv_pts: null };
         for (const z of ZONES) {
           const zd = p.rZones[z.k] || {};
@@ -3024,16 +3126,26 @@ function buildZoneSheet(groups) {
         }
         if (totalZd.rcv_pts === null) delete totalZd.rcv_pts;
         const totAvg = zoneAvgFromRecord(totalZd);
+
         rows += `<tr>
           <td style="color:var(--gold);font-weight:700;font-size:11px">#${p.pnum}</td>
           <td style="white-space:nowrap">${p.name}</td>
           ${ZONES.map(z => {
-            const zd = p.rZones[z.k] || {};
-            const za = zd.attempts||0;
+            const zd   = p.rZones[z.k]  || {};
+            const zdM  = p.rmZones[z.k] || {};
+            const zdQ  = p.rqZones[z.k] || {};
+            const za   = zd.attempts||0;
             const zavg = zoneAvgFromRecord(zd);
-            return `<td class="num">${za||'—'}</td><td class="num" style="color:${zavg!==null?zavg>2.5?'var(--green)':zavg<1.5?'var(--red)':'var(--text)':'var(--text-dim)'}">${zavg!==null?zavg.toFixed(2):'—'}</td>`;
+            const fAvg = zoneAvgFromRecord(zdM);
+            const tAvg = zoneAvgFromRecord(zdQ);
+            return `<td class="num">${za||'—'}</td>
+                    <td class="num" style="color:${fAvg!==null?'#7aaaff':'var(--text-dim)'}">${fAvg!==null?fAvg.toFixed(2):'—'}</td>
+                    <td class="num" style="color:${tAvg!==null?'#cc99ff':'var(--text-dim)'}">${tAvg!==null?tAvg.toFixed(2):'—'}</td>
+                    <td class="num" style="color:${avgColor(zavg)};font-weight:700">${zavg!==null?zavg.toFixed(2):'—'}</td>`;
           }).join('')}
           <td class="num"><strong>${totalZd.attempts||'—'}</strong></td>
+          <td class="num" style="color:#7aaaff">${(() => { const zdM={}; for(const z of ZONES){const d=p.rmZones[z.k]||{};for(const[e,n]of Object.entries(d.evals||{}))zdM[e]=(zdM[e]||0)+n;} const rmTotAtt=ZONES.reduce((s,z)=>s+(p.rmZones[z.k]?.attempts||0),0); const fA=zoneAvgFromRecord({attempts:rmTotAtt,evals:zdM}); return fA!==null?fA.toFixed(2):'—'; })()}</td>
+          <td class="num" style="color:#cc99ff">${(() => { const zdQ={}; for(const z of ZONES){const d=p.rqZones[z.k]||{};for(const[e,n]of Object.entries(d.evals||{}))zdQ[e]=(zdQ[e]||0)+n;} const rqTotAtt=ZONES.reduce((s,z)=>s+(p.rqZones[z.k]?.attempts||0),0); const tA=zoneAvgFromRecord({attempts:rqTotAtt,evals:zdQ}); return tA!==null?tA.toFixed(2):'—'; })()}</td>
           <td class="num" style="color:${totAvg!==null?totAvg>2.5?'var(--green)':totAvg<1.5?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
         </tr>`;
       }
@@ -3041,16 +3153,15 @@ function buildZoneSheet(groups) {
     if (!rows) return '<div class="empty">No zone data — zone tracking requires 2026+ seasons</div>';
     return `<div class="xlsx-wrap"><table class="xlsx-tbl">
       <thead>
-        <tr><td colspan="${2+ZONES.length*2+2}" style="${SH}">RECEIVE BY ZONE</td></tr>
+        <tr><td colspan="${TOTAL_COLS}" style="${SH}">RECEIVE BY ZONE</td></tr>
         <tr style="${CH}">
           <th>#</th><th>Player</th>
-          ${ZONES.map(z=>`<th class="num" colspan="2">${z.label}</th>`).join('')}
-          <th class="num" colspan="2">Overall</th>
+          ${ZONES.map(z=>`<th class="num" colspan="${ZONE_COLS}">${z.label}</th>`).join('')}
+          <th class="num" colspan="${ZONE_COLS}">Overall</th>
         </tr>
         <tr style="${CH}">
           <th></th><th></th>
-          ${ZONES.map(()=>`<th class="num">Att</th><th class="num">AVG</th>`).join('')}
-          <th class="num">Att</th><th class="num">AVG</th>
+          ${[...ZONES,{k:'ovr'}].map(()=>`<th class="num">Att</th><th class="num" style="color:#7aaaff">F.AVG</th><th class="num" style="color:#cc99ff">TS.AVG</th><th class="num">AVG</th>`).join('')}
         </tr>
       </thead>
       <tbody>${rows}</tbody>
