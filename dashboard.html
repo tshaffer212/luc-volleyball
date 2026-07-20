@@ -1250,7 +1250,7 @@ const SEASONS_SORTED = ['Fall 2025','Spring 2025','Fall 2026','Spring 2026'];
 function orderedSeasons() {
   const present = new Set(DATA.meta.seasons);
   const known   = SEASONS_SORTED.filter(s => present.has(s));
-  const extra   = DATA.meta.seasons.filter(s => !SEASONS_SORTED.includes(s));
+  const extra   = DATA.meta.seasons.filter(s => !SEASONS_SORTED.includes(s) && s !== 'Unknown Season');
   return [...known, ...extra];
 }
 
@@ -1422,7 +1422,8 @@ function init() {
 }
 
 // ═══════════════════════════ REPORTS TAB ═════════════════════════════════════
-let rptSelected    = new Set(); // selected session IDs
+let rptSelectedMonths = new Set(); // canonical: selected YYYY-MM month keys
+let rptSelected    = new Set(); // derived: session IDs in selected months × current type
 let setterGroupSel   = null;  // 'pins' | 'middles' | 'bic' | null — setter group bar filter
 let setterZoneSel    = null;  // COURT_ZONES id ('z4','z3','z2','z6','z1') | null — zone card filter
 let setterPnumFilter = null;  // pnum string | null — which setter to isolate
@@ -1644,15 +1645,23 @@ function renderReports() {
     .filter(s => seasons.includes(s.season) && s.type !== 'scout')
     .sort((a,b) => (a.date||'').localeCompare(b.date||''));
 
-  // Prune rptSelected: remove any sessions that no longer match the current season/type filter
-  const validRptIds = new Set(sessions.map(s => s.id));
-  for (const id of [...rptSelected]) {
-    if (!validRptIds.has(id)) rptSelected.delete(id);
+  // ── Monthly trend ─────────────────────────────────────────────────────────
+  // Build month→sessionIds for current season + type filter
+  const { monthKeys: rptMoKeys, shortLabels, sessionIdsByMonth: rptMoSess } = getMonthBuckets(seasons);
+
+  // Prune rptSelectedMonths: remove months not in the current season window
+  const validMonths = new Set(rptMoKeys);
+  for (const mo of [...rptSelectedMonths]) {
+    if (!validMonths.has(mo)) rptSelectedMonths.delete(mo);
   }
 
-  // ── Monthly trend ─────────────────────────────────────────────────────────
-  // Group sessions from the selected seasons by YYYY-MM
-  const { monthKeys: rptMoKeys, shortLabels, sessionIdsByMonth: rptMoSess } = getMonthBuckets(seasons);
+  // Derive rptSelected from rptSelectedMonths × current session pool.
+  // This auto-syncs when the session type changes (Matches ↔ Both ↔ Practices):
+  // switching to "Both" automatically adds practice sessions for selected months.
+  rptSelected.clear();
+  for (const [mo, sids] of Object.entries(rptMoSess)) {
+    if (rptSelectedMonths.has(mo)) sids.forEach(id => rptSelected.add(id));
+  }
 
   function monthMetric(fn) {
     return rptMoKeys.map(mo => {
@@ -1709,19 +1718,14 @@ function renderReports() {
   makeChart('chart-wk-vol','bar',{
     labels: shortLabels,
     datasets:[{ label:'Actions', data:volAct,
-      backgroundColor: rptMoKeys.map(mo => {
-        const hasSel = rptMoSess[mo] && [...rptMoSess[mo]].some(id => rptSelected.has(id));
-        return hasSel ? GOLD : MAROON+'cc';
-      }),
+      backgroundColor: rptMoKeys.map(mo => rptSelectedMonths.has(mo) ? GOLD : MAROON+'cc'),
       borderRadius:4 }]
   },{
     onClick: (e, elements) => {
       if (!elements.length) return;
       const mo = rptMoKeys[elements[0].index];
-      const sids = rptMoSess[mo];
-      if (!sids) return;
-      const allSel = [...sids].every(id => rptSelected.has(id));
-      sids.forEach(id => allSel ? rptSelected.delete(id) : rptSelected.add(id));
+      if (rptSelectedMonths.has(mo)) rptSelectedMonths.delete(mo);
+      else rptSelectedMonths.add(mo);
       renderReports();
       renderRptDetail();
     }
@@ -1755,12 +1759,16 @@ function renderReports() {
 }
 
 function toggleRptSession(id) {
-  if (rptSelected.has(id)) rptSelected.delete(id);
-  else rptSelected.add(id);
+  const s = DATA.sessions.find(s => s.id === id);
+  if (!s || !s.date) return;
+  const mo = s.date.slice(0, 7);
+  if (rptSelectedMonths.has(mo)) rptSelectedMonths.delete(mo);
+  else rptSelectedMonths.add(mo);
   renderReports();
 }
 
 function clearRptSelection() {
+  rptSelectedMonths.clear();
   rptSelected.clear();
   renderReports();
 }
