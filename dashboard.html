@@ -3163,6 +3163,8 @@ function buildAttackSheet(groups) {
     const NC = comboCodes.length;
     let rows = '';
     const teamTotC = {};
+    // True team totals — ALL attacks, not just those in the displayed combo columns
+    let teamAllK=0,teamAllE=0,teamAllA=0,teamAllB=0;
     const groupOrder = posFilter ? POS_GROUP_ORDER.filter(g => posFilter.includes(g)) : POS_GROUP_ORDER;
 
     for (const gName of groupOrder) {
@@ -3170,10 +3172,16 @@ function buildAttackSheet(groups) {
       if (!grp.length) continue;
 
       const grpTotC = {};
+      // True group totals — ALL attacks by players in this group
+      let grpAllK=0,grpAllE=0,grpAllA=0,grpAllB=0;
       rows += `<tr><td colspan="${2+NC*4+5}" style="${GH}">${gName}</td></tr>`;
 
       for (const p of grp) {
-        let totK=0,totE=0,totA=0,totB=0;
+        // True totals from the player object — includes every attack regardless of combo code
+        const allK=p.aEv['#']||0, allE=p.aEv['=']||0, allB=p.aEv['/']||0, allA=p.aAtt;
+        grpAllK+=allK; grpAllE+=allE; grpAllB+=allB; grpAllA+=allA;
+        teamAllK+=allK; teamAllE+=allE; teamAllB+=allB; teamAllA+=allA;
+
         rows += `<tr>
           <td style="color:var(--gold);font-weight:700;font-size:11px;white-space:nowrap">#${p.pnum}</td>
           <td style="white-space:nowrap">${p.name}</td>`;
@@ -3182,7 +3190,6 @@ function buildAttackSheet(groups) {
           const a=c?.att||0, k=c?.ev['#']||0, e=c?.ev['=']||0, b=c?.ev['/']||0;
           const eff = a ? (k-e-b)/a : null;
           if (a) {
-            totK+=k; totE+=e; totA+=a; totB+=b;
             if (!grpTotC[cc]) grpTotC[cc]={k:0,e:0,a:0,b:0};
             grpTotC[cc].k+=k; grpTotC[cc].e+=e; grpTotC[cc].a+=a; grpTotC[cc].b+=b;
             if (!teamTotC[cc]) teamTotC[cc]={k:0,e:0,a:0,b:0};
@@ -3193,38 +3200,35 @@ function buildAttackSheet(groups) {
             rows += `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
           }
         }
-        const rEff = totA?(totK-totE-totB)/totA:null;
-        rows += `<td class="num" style="color:var(--gold);font-weight:700">${totK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${totE||'—'}</td><td class="num" style="font-weight:700">${totB||'—'}</td><td class="num" style="font-weight:700">${totA||'—'}</td><td class="num" style="color:${effColor(rEff)};font-weight:700">${rEff!==null?(rEff>=0?'+':'')+Math.round(rEff*100)+'%':'—'}</td>`;
+        // TOTAL column uses true player totals (all attacks, all combo codes)
+        const rEff = allA?(allK-allE-allB)/allA:null;
+        rows += `<td class="num" style="color:var(--gold);font-weight:700">${allK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${allE||'—'}</td><td class="num" style="font-weight:700">${allB||'—'}</td><td class="num" style="font-weight:700">${allA||'—'}</td><td class="num" style="color:${effColor(rEff)};font-weight:700">${rEff!==null?(rEff>=0?'+':'')+Math.round(rEff*100)+'%':'—'}</td>`;
         rows += `</tr>`;
       }
 
-      // Group total
-      let gK=0,gE=0,gA=0,gB=0;
+      // Group total — combo columns from grpTotC, TOTAL column from true group totals
       rows += `<tr style="background:var(--surface3)"><td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">* ${gName}</td>`;
       for (const cc of comboCodes) {
         const g = grpTotC[cc]||{k:0,e:0,a:0,b:0};
-        gK+=g.k; gE+=g.e; gA+=g.a; gB+=g.b;
         const ge = g.a?(g.k-g.e-g.b)/g.a:null;
         if (g.a) rows += `<td class="num">${g.k}</td><td class="num">${g.e}</td><td class="num">${g.a}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
         else     rows += `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
       }
-      const ge = gA?(gK-gE-gB)/gA:null;
-      rows += `<td class="num" style="color:var(--gold);font-weight:700">${gK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${gE||'—'}</td><td class="num" style="font-weight:700">${gB||'—'}</td><td class="num" style="font-weight:700">${gA||'—'}</td><td class="num" style="color:${effColor(ge)};font-weight:700">${ge!==null?(ge>=0?'+':'')+Math.round(ge*100)+'%':'—'}</td>`;
+      const grpEff = grpAllA?(grpAllK-grpAllE-grpAllB)/grpAllA:null;
+      rows += `<td class="num" style="color:var(--gold);font-weight:700">${grpAllK||'—'}</td><td class="num" style="color:var(--red);font-weight:700">${grpAllE||'—'}</td><td class="num" style="font-weight:700">${grpAllB||'—'}</td><td class="num" style="font-weight:700">${grpAllA||'—'}</td><td class="num" style="color:${effColor(grpEff)};font-weight:700">${grpEff!==null?(grpEff>=0?'+':'')+Math.round(grpEff*100)+'%':'—'}</td>`;
       rows += `</tr>`;
     }
 
-    // Team total
-    let tK=0,tE=0,tA=0,tB=0;
+    // Team total — combo columns from teamTotC, TOTAL column from true team totals
     rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2">TEAM TOTAL</td>`;
     for (const cc of comboCodes) {
       const t = teamTotC[cc]||{k:0,e:0,a:0,b:0};
-      tK+=t.k; tE+=t.e; tA+=t.a; tB+=t.b;
       const te = t.a?(t.k-t.e-t.b)/t.a:null;
       if (t.a) rows += `<td class="num">${t.k}</td><td class="num">${t.e}</td><td class="num">${t.a}</td><td class="num">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
       else     rows += `<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>`;
     }
-    const te = tA?(tK-tE-tB)/tA:null;
-    rows += `<td class="num" style="color:var(--gold)">${tK||'—'}</td><td class="num" style="color:#ff8a80">${tE||'—'}</td><td class="num">${tB||'—'}</td><td class="num">${tA||'—'}</td><td class="num" style="color:${effColor(te)}">${te!==null?(te>=0?'+':'')+Math.round(te*100)+'%':'—'}</td>`;
+    const teamEff = teamAllA?(teamAllK-teamAllE-teamAllB)/teamAllA:null;
+    rows += `<td class="num" style="color:var(--gold)">${teamAllK||'—'}</td><td class="num" style="color:#ff8a80">${teamAllE||'—'}</td><td class="num">${teamAllB||'—'}</td><td class="num">${teamAllA||'—'}</td><td class="num" style="color:${effColor(teamEff)}">${teamEff!==null?(teamEff>=0?'+':'')+Math.round(teamEff*100)+'%':'—'}</td>`;
     rows += `</tr>`;
 
     if (!rows.includes('<td style="color:var(--gold)')) return '';
