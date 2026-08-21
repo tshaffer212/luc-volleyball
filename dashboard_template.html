@@ -1758,13 +1758,13 @@ function renderReports() {
   makeChart('chart-wk-vol','bar',{
     labels: shortLabels,
     datasets:[{ label:'Actions', data:volAct,
-      backgroundColor: rptMoKeys.map(mo => (rptMoSess[mo]||[]).some(id => rptSelected.has(id)) ? GOLD : MAROON+'cc'),
+      backgroundColor: rptMoKeys.map(mo => { const s = rptMoSess[mo]; return (s && [...s].some(id => rptSelected.has(id))) ? GOLD : MAROON+'cc'; }),
       borderRadius:4 }]
   },{
     onClick: (e, elements) => {
       if (!elements.length) return;
       const mo = rptMoKeys[elements[0].index];
-      const moSids = rptMoSess[mo] || [];
+      const moSids = [...(rptMoSess[mo] || [])];
       const allSel = moSids.length > 0 && moSids.every(id => rptSelected.has(id));
       if (allSel) moSids.forEach(id => rptSelected.delete(id));
       else moSids.forEach(id => rptSelected.add(id));
