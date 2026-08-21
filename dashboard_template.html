@@ -1505,13 +1505,13 @@ function setSessionType(type, renderFn) {
   const seasonEl = document.getElementById('rpt-season');
   if (seasonEl) {
     const seas = resolveSeasons(seasonEl.value);
-    const { monthKeys: prevKeys } = getMonthBuckets(seas);
-    const allWereSelected = prevKeys.length > 0 && prevKeys.every(mo => rptSelectedMonths.has(mo));
+    const currentPool = DATA.sessions.filter(s => seas.includes(s.season) && s.type !== 'scout');
+    const allWereSelected = currentPool.length > 0 && currentPool.every(s => rptSelected.has(s.id));
     if (allWereSelected) {
-      // Auto-include every month that has any session in this season
+      // Auto-include all sessions across types for this season
       DATA.sessions
-        .filter(s => seas.includes(s.season) && s.type !== 'scout' && s.date)
-        .forEach(s => rptSelectedMonths.add(s.date.slice(0, 7)));
+        .filter(s => seas.includes(s.season) && s.type !== 'scout')
+        .forEach(s => rptSelected.add(s.id));
     }
   }
   sessionTypeFilter = type;
@@ -1697,12 +1697,10 @@ function renderReports() {
     if (!allSeasonMonths.has(mo)) rptSelectedMonths.delete(mo);
   }
 
-  // Derive rptSelected from rptSelectedMonths × current session pool.
-  // This auto-syncs when the session type changes (Matches ↔ Both ↔ Practices):
-  // switching to "Both" automatically adds practice sessions for selected months.
-  rptSelected.clear();
-  for (const [mo, sids] of Object.entries(rptMoSess)) {
-    if (rptSelectedMonths.has(mo)) sids.forEach(id => rptSelected.add(id));
+  // Prune rptSelected: remove session IDs no longer in the current season/type pool
+  const poolIds = new Set(sessions.map(s => s.id));
+  for (const id of [...rptSelected]) {
+    if (!poolIds.has(id)) rptSelected.delete(id);
   }
 
   function monthMetric(fn) {
@@ -1760,14 +1758,16 @@ function renderReports() {
   makeChart('chart-wk-vol','bar',{
     labels: shortLabels,
     datasets:[{ label:'Actions', data:volAct,
-      backgroundColor: rptMoKeys.map(mo => rptSelectedMonths.has(mo) ? GOLD : MAROON+'cc'),
+      backgroundColor: rptMoKeys.map(mo => (rptMoSess[mo]||[]).some(id => rptSelected.has(id)) ? GOLD : MAROON+'cc'),
       borderRadius:4 }]
   },{
     onClick: (e, elements) => {
       if (!elements.length) return;
       const mo = rptMoKeys[elements[0].index];
-      if (rptSelectedMonths.has(mo)) rptSelectedMonths.delete(mo);
-      else rptSelectedMonths.add(mo);
+      const moSids = rptMoSess[mo] || [];
+      const allSel = moSids.length > 0 && moSids.every(id => rptSelected.has(id));
+      if (allSel) moSids.forEach(id => rptSelected.delete(id));
+      else moSids.forEach(id => rptSelected.add(id));
       renderReports();
       renderRptDetail();
     }
@@ -1801,11 +1801,8 @@ function renderReports() {
 }
 
 function toggleRptSession(id) {
-  const s = DATA.sessions.find(s => s.id === id);
-  if (!s || !s.date) return;
-  const mo = s.date.slice(0, 7);
-  if (rptSelectedMonths.has(mo)) rptSelectedMonths.delete(mo);
-  else rptSelectedMonths.add(mo);
+  if (rptSelected.has(id)) rptSelected.delete(id);
+  else rptSelected.add(id);
   renderReports();
 }
 
