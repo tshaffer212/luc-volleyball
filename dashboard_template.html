@@ -6064,10 +6064,10 @@ function renderSetter() {
   const seasons   = resolveSeasons(seasonVal);
 
   // ── Populate setter dropdown ────────────────────────────────────────────────
-  // Use ALL seasons to find every session each setter has ever set in,
-  // then intersect with the selected seasons when filtering data.
-  const allSeasons = orderedSeasons();
-  const fullSetterMap = getSetterSessionMap(allSeasons); // 'pnum|season' → Set<sid>
+  // Only show setters who actually set in the currently selected season(s),
+  // with session counts scoped to that season — so the list updates per season
+  // instead of listing every setter from the program's whole history.
+  const fullSetterMap = getSetterSessionMap(seasons); // 'pnum|season' → Set<sid>
 
   // Group by pnum|name so same person across seasons = one dropdown entry
   const settersByPlayer = {}; // 'pnum|name' → { pnum, name, allSids: Set }
