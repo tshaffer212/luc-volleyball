@@ -450,7 +450,7 @@
 <!-- ═══════════════════════════ TEAM TAB ═══════════════════════════ -->
 <div id="tab-team" class="tab-panel active">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="team-season-filter" onchange="renderTeam()">
+    <div><label>Season</label><br><select id="team-season-filter" onchange="syncSeason(this.value)">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -512,7 +512,7 @@
 <!-- ═══════════════════════════ SEASON TAB ═══════════════════════════ -->
 <div id="tab-season" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="season-select" onchange="renderSeason()">
+    <div><label>Season</label><br><select id="season-select" onchange="syncSeason(this.value)">
     </select></div>
     <div class="filter-sep"></div>
     <div><label>View</label><br><select id="season-view" onchange="renderSeason()">
@@ -529,7 +529,7 @@
 <div id="tab-reports" class="tab-panel">
   <div class="filter-bar">
     <div><label>Season</label><br>
-      <select id="rpt-season" onchange="renderReports()">
+      <select id="rpt-season" onchange="syncSeason(this.value)">
         <option value="all">All Seasons</option>
       </select>
     </div>
@@ -609,7 +609,7 @@
 <!-- ═══════════════════════════ ATTACK TAB ═══════════════════════════ -->
 <div id="tab-attack" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="atk-season" onchange="atkCodeSel=new Set();populateAtkPeriod();renderAttack()">
+    <div><label>Season</label><br><select id="atk-season" onchange="syncSeason(this.value)">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -664,7 +664,7 @@
 <!-- ═══════════════════════════ SERVE & RECEIVE TAB ═══════════════════════════ -->
 <div id="tab-servrcv" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="sr-season" onchange="populateSrPeriod();renderServRcv()">
+    <div><label>Season</label><br><select id="sr-season" onchange="syncSeason(this.value)">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -956,7 +956,7 @@
 <!-- ═══════════════════════════ SETTER TAB ═══════════════════════════ -->
 <div id="tab-setter" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="set-season" onchange="setterPnumFilter=null;setterGroupSel=null;setterZoneSel=null;populateSetPeriod();renderSetter()">
+    <div><label>Season</label><br><select id="set-season" onchange="syncSeason(this.value)">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -1046,7 +1046,7 @@
 <!-- ═══════════════════════════ FBSO TAB ═══════════════════════════ -->
 <div id="tab-fbso" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="fbso-season" onchange="renderFbso()">
+    <div><label>Season</label><br><select id="fbso-season" onchange="syncSeason(this.value)">
       <option value="all">All Seasons</option>
     </select></div>
   </div>
@@ -1079,7 +1079,7 @@
 <!-- ═══════════════════════════ PLAYER TAB ═══════════════════════════ -->
 <div id="tab-player" class="tab-panel">
   <div class="filter-bar">
-    <div><label>Season</label><br><select id="player-season-filter" onchange="onPlayerSeasonChange()">
+    <div><label>Season</label><br><select id="player-season-filter" onchange="syncSeason(this.value)">
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
@@ -1452,6 +1452,41 @@ let atkCodeSel     = new Set(); // Set of selected combo codes — attack bar fi
 // ── Session type filter ───────────────────────────────────────────────────────
 // 'both' | 'practice' | 'match'  — controlled per-tab via setSessionType()
 let sessionTypeFilter = 'both';
+let globalSeason = 'all';  // shared across all tabs (Scouting keeps its own season list — different domain)
+
+// Called by every tab's Season <select> onchange. Pushes the chosen season to every
+// other tab's Season dropdown and re-renders each tab so the whole dashboard stays
+// in sync — pick a season once, it applies everywhere (Scouting excluded; its season
+// list is a different, scout-specific set of values).
+function syncSeason(value) {
+  globalSeason = value;
+  ['team-season-filter','rpt-season','atk-season','sr-season','set-season','fbso-season','player-season-filter']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = value; });
+  // season-select (Season tab) has no "All Seasons" option — it always shows one
+  // specific season, so only push into it when a real season (not "all") was picked.
+  const seasonSelEl = document.getElementById('season-select');
+  if (seasonSelEl && value !== 'all') seasonSelEl.value = value;
+
+  // Reset season-scoped derived filter state that individual tabs used to clear
+  // locally in their own onchange handlers.
+  atkCodeSel = new Set();
+  setterPnumFilter = null;
+  setterGroupSel = null;
+  setterZoneSel = null;
+
+  populateAtkPeriod();
+  populateSrPeriod();
+  populateSetPeriod();
+
+  renderTeam();
+  renderSeason();
+  renderReports();
+  renderAttack();
+  renderServRcv();
+  renderSetter();
+  renderFbso();
+  onPlayerSeasonChange(); // prunes pinned players for the new season, then renders the player list
+}
 
 // ── Serve type filter (S&R tab only) ─────────────────────────────────────────
 // 'both' | 'float' | 'topspin' | 'split'
