@@ -44,8 +44,8 @@ FOLDER_MAP = {
     "Fall 2026":        ("Fall 2026",   "practice", False),
     "Spring 2026":      ("Spring 2026", "practice", False),
     "Spring 2026 Scout":("Spring 2026 Scout", "scout", True),
+    "Fall 2027":        ("Fall 2027",   "practice", False),
     # Add new seasons here, e.g.:
-    # "Fall 2027":      ("Fall 2027",   "practice", False),
 }
 
 # Files in this script's directory
