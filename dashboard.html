@@ -29,19 +29,24 @@
 
   /* Header */
   header {
-    background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 60%, var(--maroon-light) 100%);
+    background: linear-gradient(135deg, var(--maroon-dark) 0%, var(--maroon) 55%, var(--maroon-light) 100%);
     border-bottom: 3px solid var(--gold);
-    padding: 16px 24px;
-    display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    padding: 18px 28px;
+    display: flex; align-items: center; gap: 18px;
+    position: relative; z-index: 1;
   }
-  .logo { width: 56px; height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-  .logo svg { width: 56px; height: 56px; }
-  header h1 { font-size: 20px; font-weight: 700; color: #fff; }
-  header p  { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px; }
-  .header-stats { margin-left: auto; display: flex; gap: 24px; }
-  .hstat { text-align: center; }
-  .hstat-val { font-size: 22px; font-weight: 700; color: var(--gold); line-height: 1; }
-  .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; }
+  .logo { width: 60px; height: 60px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+  .logo svg { width: 60px; height: 60px; }
+  header .header-text { padding-left: 2px; border-left: 1px solid rgba(255,255,255,0.18); margin-left: 2px; padding-left: 18px; }
+  header h1 { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+  header p  { font-size: 12px; color: rgba(255,255,255,0.72); margin-top: 3px; letter-spacing: 0.2px; }
+  .header-stats { margin-left: auto; display: flex; gap: 0; }
+  .hstat { text-align: center; padding: 0 20px; }
+  .hstat + .hstat { border-left: 1px solid rgba(255,255,255,0.18); }
+  .hstat-val { font-size: 23px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.62); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 3px; }
 
   /* Tabs */
   nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; padding: 0 24px; gap: 0; }
@@ -376,12 +381,12 @@
 <!-- ── Auth overlay ── -->
 <div id="auth-overlay">
   <div id="auth-box">
-    <svg viewBox="0 0 72 72" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
-      <rect width="72" height="72" rx="8" fill="#FEBC18"/>
-      <text x="36" y="28" font-family="'Arial Black','Arial',sans-serif" font-size="18" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="0.5">LOYOLA</text>
-      <line x1="8" y1="34" x2="64" y2="34" stroke="#8D0034" stroke-width="2"/>
-      <text x="36" y="48" font-family="'Arial Black','Arial',sans-serif" font-size="13" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="1">RAMBLERS</text>
-      <text x="36" y="63" font-family="'Arial',sans-serif" font-size="9" font-weight="600" fill="#8D0034" text-anchor="middle" letter-spacing="0.3">VOLLEYBALL</text>
+    <svg viewBox="0 0 64 64" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="30" fill="#8D0034"/>
+      <circle cx="32" cy="32" r="25.5" fill="#FEBC18"/>
+      <circle cx="32" cy="32" r="25.5" fill="none" stroke="#8D0034" stroke-width="1.5"/>
+      <text x="32" y="30" font-family="Georgia,'Times New Roman',serif" font-size="18" font-weight="700" fill="#8D0034" text-anchor="middle">LUC</text>
+      <text x="32" y="42" font-family="'Arial Black',Arial,sans-serif" font-size="7" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="0.8">RAMBLERS</text>
     </svg>
     <h2>LUC Men's Volleyball</h2>
     <p>Analytics Dashboard — Staff Access Only</p>
@@ -414,16 +419,16 @@
 
 <header>
   <div class="logo">
-    <!-- LUC Ramblers wordmark SVG -->
-    <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
-      <rect width="56" height="56" rx="6" fill="#FEBC18"/>
-      <text x="28" y="22" font-family="'Arial Black','Arial',sans-serif" font-size="14" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="0.5">LOYOLA</text>
-      <line x1="6" y1="26" x2="50" y2="26" stroke="#8D0034" stroke-width="1.5"/>
-      <text x="28" y="38" font-family="'Arial Black','Arial',sans-serif" font-size="10" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="1">RAMBLERS</text>
-      <text x="28" y="51" font-family="'Arial',sans-serif" font-size="7" font-weight="600" fill="#8D0034" text-anchor="middle" letter-spacing="0.3">VOLLEYBALL</text>
+    <!-- LUC Ramblers wordmark medallion (typographic, official colors — no mascot artwork) -->
+    <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="30" fill="#8D0034"/>
+      <circle cx="32" cy="32" r="25.5" fill="#FEBC18"/>
+      <circle cx="32" cy="32" r="25.5" fill="none" stroke="#8D0034" stroke-width="1.5"/>
+      <text x="32" y="30" font-family="Georgia,'Times New Roman',serif" font-size="18" font-weight="700" fill="#8D0034" text-anchor="middle">LUC</text>
+      <text x="32" y="42" font-family="'Arial Black',Arial,sans-serif" font-size="7" font-weight="900" fill="#8D0034" text-anchor="middle" letter-spacing="0.8">RAMBLERS</text>
     </svg>
   </div>
-  <div>
+  <div class="header-text">
     <h1>Loyola University Chicago — Men's Volleyball</h1>
     <p id="header-subtitle">Analytics Dashboard</p>
   </div>
