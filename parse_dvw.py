@@ -223,7 +223,7 @@ def parse_players(lines):
             'first_name':    first,
             'name':          f"{first} {last}".strip(),
             'is_libero':     role == 'L',
-            'position_code': pos_code,   # 1=libero, 2=OH, 3=MH, 4=OPP, 5=setter
+            'position_code': pos_code,   # 1=Libero, 2=Outside, 3=Opposite, 4=Middle, 5=Setter (confirmed 2026-09-11)
         }
     return players
 

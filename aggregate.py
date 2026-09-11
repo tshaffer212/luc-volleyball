@@ -22,8 +22,23 @@ LOYOLA_KEYWORDS = ['loyola', 'luc', 'lmv']
 # Use when fuzzy matching picks the wrong (more frequent but misspelled) variant.
 # Format: { jersey_number_string: 'Correct Full Name' }
 # The correct name will be used regardless of which spelling appears most in the data.
+# Value can be a plain string (applies to every season that jersey number appears
+# in) or a {season: name} dict when the SAME number was worn by a different real
+# person in other seasons (roster turnover) and the fix must not bleed into them.
 NAME_OVERRIDES = {
     # '16': 'Alex Smith Van Oyen',   # uncomment if Smith is correct, not Smits
+    '3': {'Fall 2027': 'Matt Kelly'},   # #3 was JJ Sowa through Fall 2026; Matt Kelly
+                                        # took #3 in Fall 2027 and is sometimes misspelled 'Matt Kally'.
+}
+
+# ── Manual position overrides ─────────────────────────────────────────────────
+# Use when a DVW file has the wrong position_code for a player (e.g. a scouting
+# entry mistake) and you want it corrected everywhere regardless of what the raw
+# file says. Format: { jersey_number_string: 'position_code' }
+# position_code convention used by this dashboard: 1=Libero, 2=Outside, 3=Opposite, 4=Middle, 5=Setter
+POSITION_OVERRIDES = {
+    '15': '4',   # Wil/William Hatch — entered as Outside ('2') in the first two Fall 2027
+                 # files by mistake; he's a Middle ('4'). Consistent with every prior season.
 }
 
 def is_loyola_team(team_str):
@@ -617,15 +632,36 @@ def main(raw_path, out_path):
                         print(f"  Name fix: #{num} '{variant}' → '{canonical}'", file=sys.stderr)
 
     # Apply manual overrides — force correct spelling regardless of frequency
-    for num, correct_name in NAME_OVERRIDES.items():
+    for num, override in NAME_OVERRIDES.items():
+        for season, roster in players_by_season.items():
+            if num not in roster:
+                continue
+            # Season-scoped override ({season: name}) only applies to listed seasons;
+            # a plain string applies to every season that jersey number appears in.
+            if isinstance(override, dict):
+                if season not in override:
+                    continue
+                correct_name = override[season]
+            else:
+                correct_name = override
+            old = roster[num]['name']
+            if old != correct_name:
+                roster[num]['name'] = correct_name
+                print(f"  Name override: #{num} ({season}) '{old}' → '{correct_name}'", file=sys.stderr)
+            # Also update name_canon so any variant maps to the override, scoped by
+            # (num, variant) — safe here since name_canon lookup happens per (num, name)
+            # and a season-scoped override's variant name doesn't occur in other seasons.
+            name_canon[(num, old)] = correct_name
+
+    # Apply manual position overrides — force correct position_code regardless
+    # of what a particular DVW file happened to record.
+    for num, correct_pos in POSITION_OVERRIDES.items():
         for season, roster in players_by_season.items():
             if num in roster:
-                old = roster[num]['name']
-                if old != correct_name:
-                    roster[num]['name'] = correct_name
-                    print(f"  Name override: #{num} '{old}' → '{correct_name}'", file=sys.stderr)
-                # Also update name_canon so any variant maps to the override
-                name_canon[(num, old)] = correct_name
+                old_pos = roster[num]['position_code']
+                if old_pos != correct_pos:
+                    roster[num]['position_code'] = correct_pos
+                    print(f"  Position override: #{num} ({season}) '{old_pos}' -> '{correct_pos}'", file=sys.stderr)
 
     # Apply normalized names back into players_by_season
     for season, roster in players_by_season.items():
