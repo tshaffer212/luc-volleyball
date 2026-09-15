@@ -205,6 +205,62 @@ def compute_call_attacks(actions, loyola_side):
     return {kc: dict(combos) for kc, combos in call_atk.items()}
 
 
+def compute_setter_player_attacks(actions, loyola_side):
+    """
+    Per rally: for each Set (E) action with a player_num, find the next Attack (A)
+    action on the same team side, and attribute that attack (by attacking player and
+    combo code) to the setter who set it. This gives TRUE per-setter attribution even
+    when two setters share the same session (rotating groups / split-squad practices),
+    unlike session-level "who was the primary setter" approximations.
+
+    Returns: { setter_pnum: { attacker_pnum: { atk_combo: {attempts, kills, errors, blocks} } } }
+    """
+    rallies, current = [], []
+    for a in actions:
+        if a.get('skill_code') == 'S' and current:
+            rallies.append(current)
+            current = []
+        current.append(a)
+    if current:
+        rallies.append(current)
+
+    result = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {'attempts': 0, 'kills': 0, 'errors': 0, 'blocks': 0})))
+
+    for rally in rallies:
+        for i, a in enumerate(rally):
+            if a.get('skill_code') != 'E':
+                continue
+            setter_pnum = a.get('player_num') or ''
+            if not setter_pnum:
+                continue
+            e_side = a.get('team_side')
+            if loyola_side != 'both' and e_side != loyola_side:
+                continue
+            next_atk = next(
+                (b for b in rally[i+1:]
+                 if b.get('skill_code') == 'A' and b.get('team_side') == e_side),
+                None
+            )
+            if not next_atk:
+                continue
+            atk_cc = next_atk.get('combo_code') or ''
+            attacker_pnum = next_atk.get('player_num') or ''
+            if not atk_cc or not attacker_pnum:
+                continue
+            ev = next_atk.get('evaluation') or ''
+            cv = result[setter_pnum][attacker_pnum][atk_cc]
+            cv['attempts'] += 1
+            if ev == '#':
+                cv['kills'] += 1
+            elif ev == '=':
+                cv['errors'] += 1
+            elif ev == '/':
+                cv['blocks'] += 1
+
+    return {sp: {ap: dict(combos) for ap, combos in attackers.items()}
+            for sp, attackers in result.items()}
+
+
 def compute_rally_sequences(actions, loyola_side):
     """
     Split actions into rallies and compute:
@@ -695,8 +751,9 @@ def main(raw_path, out_path):
         acts   = s.get('actions', [])
         dig, fbso = compute_rally_sequences(acts, ls)
         ca = compute_call_attacks(acts, ls)
+        sa = compute_setter_player_attacks(acts, ls)
         rot_stats = compute_match_rotation_stats(acts, ls) if s.get('type') == 'match' else None
-        session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca, 'rot_stats': rot_stats}
+        session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca, 'setter_atk': sa, 'rot_stats': rot_stats}
         # Accumulate setter-call → attack outcome per season
         for k_code, combos in ca.items():
             for atk_cc, cv in combos.items():
@@ -821,6 +878,7 @@ def main(raw_path, out_path):
             'fbso_rcv':       fbso['rcv_rallies'],
             'fbso_kills':     fbso['fbso_kills'],
             'call_attacks':   session_rally[sid]['call_atk'],
+            'setter_attacks': session_rally[sid]['setter_atk'],  # setter_pnum -> attacker_pnum -> combo -> {attempts,kills,errors,blocks}
             'match_rot_stats': session_rally[sid]['rot_stats'],  # None for practice
             # opp_stats: only populated when the file contains both teams' actions
             'opp_stats': compute_opp_stats(s, ls)

@@ -3393,6 +3393,100 @@ function aggregateAttackBySessionIds(sessionIds) {
   return combos;
 }
 
+// Rally-accurate per-setter attack attribution (uses DATA.sessions[i].setter_attacks,
+// which links each attack to the specific setter whose Set preceded it in that rally —
+// unlike session-level "who was the primary setter" approximations, this stays correct
+// even when two setters share the same session (rotating groups / split-squad practice).
+function aggregateSetterComboTotals(setterPnum, sessionIds) {
+  const combos = {};
+  for (const sid of sessionIds) {
+    const sess = DATA.sessions.find(s => s.id === sid);
+    const byAttacker = sess?.setter_attacks?.[setterPnum];
+    if (!byAttacker) continue;
+    for (const attackerCombos of Object.values(byAttacker)) {
+      for (const [cc, cv] of Object.entries(attackerCombos)) {
+        if (!combos[cc]) combos[cc] = { k:0, e:0, a:0, bk:0 };
+        combos[cc].k  += cv.kills||0;
+        combos[cc].e  += cv.errors||0;
+        combos[cc].a  += cv.attempts||0;
+        combos[cc].bk += cv.blocks||0;
+      }
+    }
+  }
+  return combos;
+}
+
+// "Other Setters" bucket — everyone EXCEPT excludePnum, same sessions, rally-accurate.
+function aggregateSetterComboTotalsExcluding(excludePnum, sessionIds) {
+  const combos = {};
+  for (const sid of sessionIds) {
+    const sess = DATA.sessions.find(s => s.id === sid);
+    const bySetter = sess?.setter_attacks || {};
+    for (const [pnum, byAttacker] of Object.entries(bySetter)) {
+      if (pnum === excludePnum) continue;
+      for (const attackerCombos of Object.values(byAttacker)) {
+        for (const [cc, cv] of Object.entries(attackerCombos)) {
+          if (!combos[cc]) combos[cc] = { k:0, e:0, a:0, bk:0 };
+          combos[cc].k  += cv.kills||0;
+          combos[cc].e  += cv.errors||0;
+          combos[cc].a  += cv.attempts||0;
+          combos[cc].bk += cv.blocks||0;
+        }
+      }
+    }
+  }
+  return combos;
+}
+
+// Player-group breakdown (matches buildPlayerGroups()'s output shape, but limited to
+// attack stats) filtered to attacks actually SET by setterPnum, using the same
+// rally-accurate setter_attacks attribution — so the Pins/Backrow & Middles tables
+// reflect the selected setter instead of showing the whole session regardless of who
+// selected.
+function buildPlayerGroupsForSetter(setterPnum, sessionIds) {
+  const players = {};
+  for (const sid of sessionIds) {
+    const sess = DATA.sessions.find(s => s.id === sid);
+    if (!sess) continue;
+    const season = sess.season;
+    if (!season) continue;
+    const byAttacker = sess.setter_attacks?.[setterPnum];
+    if (!byAttacker) continue;
+    for (const [pnum, combos] of Object.entries(byAttacker)) {
+      if (!players[pnum]) {
+        players[pnum] = {
+          pnum, season,
+          name:  getPlayerName(pnum, season),
+          group: getPlayerGroup(pnum, season),
+          aEv: {}, aAtt: 0, aC: {},
+        };
+      }
+      const pl = players[pnum];
+      for (const [cc, cv] of Object.entries(combos)) {
+        const a = cv.attempts||0, k = cv.kills||0, e = cv.errors||0, b = cv.blocks||0;
+        if (!pl.aC[cc]) pl.aC[cc] = { att:0, ev:{} };
+        pl.aC[cc].att += a;
+        pl.aC[cc].ev['#'] = (pl.aC[cc].ev['#']||0) + k;
+        pl.aC[cc].ev['='] = (pl.aC[cc].ev['=']||0) + e;
+        pl.aC[cc].ev['/'] = (pl.aC[cc].ev['/']||0) + b;
+        pl.aAtt += a;
+        pl.aEv['#'] = (pl.aEv['#']||0) + k;
+        pl.aEv['='] = (pl.aEv['=']||0) + e;
+        pl.aEv['/'] = (pl.aEv['/']||0) + b;
+      }
+    }
+  }
+  const groups = {};
+  for (const g of POS_GROUP_ORDER) groups[g] = [];
+  for (const pl of Object.values(players)) {
+    (groups[pl.group] || groups['OUTSIDES']).push(pl);
+  }
+  for (const g of Object.values(groups)) {
+    g.sort((a,b) => (b.aAtt||0) - (a.aAtt||0));
+  }
+  return groups;
+}
+
 // Build the setter-breakdown section HTML (chart canvas + filter buttons)
 function buildSetterAttackSectionHTML(setterSessionMap) {
   // Find distinct setters and their session sets
@@ -3463,7 +3557,7 @@ function renderRptSetterChart() {
   // Determine season for name lookup
   const anySession = DATA.sessions.find(s => rptSelected.has(s.id));
   const season = anySession?.season;
-  function getSetterLabel(pnum) { return getPlayerName(pnum, season) || `#${pnum}`; }
+  function getSetterLabel(pnum) { return pnum === '__rest__' ? 'Other Setters' : (getPlayerName(pnum, season) || `#${pnum}`); }
 
   // Refresh button active states without rebuilding the chart DOM
   const btnContainer = document.getElementById('rpt-setter-btns');
@@ -3480,18 +3574,26 @@ function renderRptSetterChart() {
       }).join('');
   }
 
-  // If a filter is active, show that setter vs. combined rest
-  const displaySetters = rptSetterFilter
-    ? [rptSetterFilter, ...setterPnums.filter(p => p !== rptSetterFilter)].slice(0, 2)
-    : setterPnums.slice(0, 2);
-
-  // Aggregate combos per setter
+  // Aggregate combos per setter — rally-accurate (each attack attributed to whichever
+  // setter's Set actually preceded it), so this stays correct even when two setters
+  // share the same session. If a filter is active, show that setter vs. everyone else
+  // combined ("Other Setters"); otherwise show the top 2 setters by volume.
   const setterCombos = {};
-  for (const pnum of displaySetters) {
-    const sessions = rptSetterFilter === pnum
-      ? setterSessions[pnum]
-      : (rptSetterFilter ? new Set([...rptSelected].filter(id => !(setterSessionMap[id]||[]).includes(rptSetterFilter))) : setterSessions[pnum]);
-    setterCombos[pnum] = aggregateAttackBySessionIds(sessions);
+  let displaySetters;
+  if (rptSetterFilter) {
+    setterCombos[rptSetterFilter] = aggregateSetterComboTotals(rptSetterFilter, [...rptSelected]);
+    const restCombos = aggregateSetterComboTotalsExcluding(rptSetterFilter, [...rptSelected]);
+    const hasRest = Object.values(restCombos).some(c => c.a > 0);
+    displaySetters = [rptSetterFilter];
+    if (hasRest) {
+      setterCombos['__rest__'] = restCombos;
+      displaySetters.push('__rest__');
+    }
+  } else {
+    displaySetters = setterPnums.slice(0, 2);
+    for (const pnum of displaySetters) {
+      setterCombos[pnum] = aggregateSetterComboTotals(pnum, [...(setterSessions[pnum]||[])]);
+    }
   }
 
   // Collect all combo codes that appear
@@ -3557,10 +3659,15 @@ function renderRptSetterChart() {
     });
   }
 
-  // Rebuild the attack tables filtered to the selected setter's sessions
-  const filteredSids = rptSetterFilter ? setterSessions[rptSetterFilter] : rptSelected;
+  // Rebuild the attack tables — filtered to attacks actually SET by the selected
+  // setter (rally-accurate attribution), not just sessions that setter appeared in.
   const tablesEl = document.getElementById('rpt-attack-tables');
-  if (tablesEl) tablesEl.innerHTML = buildAttackSheet(buildPlayerGroups(filteredSids));
+  if (tablesEl) {
+    const groupsForTable = rptSetterFilter
+      ? buildPlayerGroupsForSetter(rptSetterFilter, [...rptSelected])
+      : buildPlayerGroups(rptSelected);
+    tablesEl.innerHTML = buildAttackSheet(groupsForTable);
+  }
 }
 
 // ── Attack by Set Type ────────────────────────────────────────────────────────
