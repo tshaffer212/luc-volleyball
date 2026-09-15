@@ -39,6 +39,9 @@ NAME_OVERRIDES = {
 POSITION_OVERRIDES = {
     '15': '4',   # Wil/William Hatch — entered as Outside ('2') in the first two Fall 2027
                  # files by mistake; he's a Middle ('4'). Consistent with every prior season.
+    '29': '2',   # Tyler Howard — entered as Opposite ('3') in the first Fall 2027 file
+                 # (9-8.dvw) by mistake; he's an Outside ('2'), matching every prior season
+                 # (Spring 2025 through Fall 2026) and the later Fall 2027 files (9-11, 9-15).
 }
 
 def is_loyola_team(team_str):
