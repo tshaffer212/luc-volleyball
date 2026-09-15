@@ -3349,7 +3349,7 @@ function buildZoneSheet(groups) {
 
 // Returns {sessionId: primarySetterPnum} for all selected sessions
 function getSessionSetterMap() {
-  const map = {};
+  const map = {}; // sid -> Array<pnum> (usually 1, but a session can have co-setters)
   // Group player_session entries by session_id
   const bySession = {};
   for (const ps of Object.values(DATA.player_session)) {
@@ -3357,14 +3357,21 @@ function getSessionSetterMap() {
     if (!bySession[ps.session_id]) bySession[ps.session_id] = [];
     bySession[ps.session_id].push(ps);
   }
-  // Primary setter = player with most E attempts that session
+  // A session can have more than one real setter (rotating groups through a single
+  // practice, or a split-squad scrimmage running two courts at once) — include
+  // everyone whose set volume is a substantial share of the session's peak, not
+  // just the single top setter.
   for (const [sid, players] of Object.entries(bySession)) {
-    let bestPnum = null, bestAtt = 0;
+    let bestAtt = 0;
+    const attByPnum = {};
     for (const ps of players) {
       const eAtt = ps.skills?.E?.attempts || 0;
-      if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
+      attByPnum[ps.player_num] = eAtt;
+      if (eAtt > bestAtt) bestAtt = eAtt;
     }
-    if (bestPnum && bestAtt >= 3) map[sid] = String(bestPnum);
+    const threshold = Math.max(3, bestAtt * 0.5);
+    const setters = Object.entries(attByPnum).filter(([,a]) => a >= threshold).map(([p]) => String(p));
+    if (setters.length) map[sid] = setters;
   }
   return map;
 }
@@ -3390,9 +3397,11 @@ function aggregateAttackBySessionIds(sessionIds) {
 function buildSetterAttackSectionHTML(setterSessionMap) {
   // Find distinct setters and their session sets
   const setterSessions = {}; // pnum → Set of session IDs
-  for (const [sid, pnum] of Object.entries(setterSessionMap)) {
-    if (!setterSessions[pnum]) setterSessions[pnum] = new Set();
-    setterSessions[pnum].add(sid);
+  for (const [sid, pnums] of Object.entries(setterSessionMap)) {
+    for (const pnum of pnums) {
+      if (!setterSessions[pnum]) setterSessions[pnum] = new Set();
+      setterSessions[pnum].add(sid);
+    }
   }
 
   const setterPnums = Object.keys(setterSessions).sort((a, b) => {
@@ -3442,9 +3451,11 @@ function renderRptSetterChart() {
 
   // Find distinct setters
   const setterSessions = {};
-  for (const [sid, pnum] of Object.entries(setterSessionMap)) {
-    if (!setterSessions[pnum]) setterSessions[pnum] = new Set();
-    setterSessions[pnum].add(sid);
+  for (const [sid, pnums] of Object.entries(setterSessionMap)) {
+    for (const pnum of pnums) {
+      if (!setterSessions[pnum]) setterSessions[pnum] = new Set();
+      setterSessions[pnum].add(sid);
+    }
   }
 
   let setterPnums = Object.keys(setterSessions).sort((a, b) => setterSessions[b].size - setterSessions[a].size);
@@ -3479,7 +3490,7 @@ function renderRptSetterChart() {
   for (const pnum of displaySetters) {
     const sessions = rptSetterFilter === pnum
       ? setterSessions[pnum]
-      : (rptSetterFilter ? new Set([...rptSelected].filter(id => setterSessionMap[id] !== rptSetterFilter)) : setterSessions[pnum]);
+      : (rptSetterFilter ? new Set([...rptSelected].filter(id => !(setterSessionMap[id]||[]).includes(rptSetterFilter))) : setterSessions[pnum]);
     setterCombos[pnum] = aggregateAttackBySessionIds(sessions);
   }
 
@@ -5997,14 +6008,23 @@ function getSetterSessionMap(seasons) {
   }
   const result = {}; // 'pnum|season' → Set<sid>
   for (const [sid, { players, season }] of Object.entries(bySession)) {
-    let bestPnum = null, bestAtt = 0;
+    // A session can have more than one real setter — rotating groups through a
+    // single practice, or a split-squad scrimmage running two courts at once (each
+    // side has its own starting setter). So instead of picking a single winner,
+    // include everyone whose set volume is a substantial share of the session's
+    // peak, not just someone who covered a couple of backup sets.
+    let bestAtt = 0;
+    const attByPnum = {};
     for (const ps of players) {
       if (playerInGroup(ps.player_num, season, 'liberos')) continue;
       const eAtt = ps.skills?.E?.attempts || 0;
-      if (eAtt > bestAtt) { bestAtt = eAtt; bestPnum = ps.player_num; }
+      attByPnum[ps.player_num] = eAtt;
+      if (eAtt > bestAtt) bestAtt = eAtt;
     }
-    if (bestPnum && bestAtt >= 3) {
-      const k = `${bestPnum}|${season}`;
+    const threshold = Math.max(3, bestAtt * 0.5);
+    for (const [pnum, eAtt] of Object.entries(attByPnum)) {
+      if (eAtt < threshold) continue;
+      const k = `${pnum}|${season}`;
       if (!result[k]) result[k] = new Set();
       result[k].add(sid);
     }
