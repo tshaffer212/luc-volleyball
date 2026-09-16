@@ -549,27 +549,33 @@
       <button onclick="setSessionType('practice',renderReports)" id="rpt-type-practice" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Practices</button>
       <button onclick="setSessionType('both',renderReports)" id="rpt-type-both" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Both</button>
     </div></div>
+    <div class="filter-sep"></div>
+    <div><label>Trend Group By</label><br><select id="rpt-trend-bucket" onchange="renderReports()">
+      <option value="month" selected>Month</option>
+      <option value="week">Week</option>
+      <option value="day">Day</option>
+    </select></div>
   </div>
 
-  <!-- Weekly Trend Section -->
-  <div class="section-title">Week-by-Week Trends</div>
+  <!-- Trend Section -->
+  <div class="section-title" id="rpt-trend-title">Monthly Trends</div>
   <div class="grid-2">
     <div class="card">
-      <h3>Attack Efficiency % by Month</h3>
+      <h3 id="rpt-trend-atk-title">Attack Efficiency % by Month</h3>
       <div class="chart-wrap"><canvas id="chart-wk-atk"></canvas></div>
     </div>
     <div class="card">
-      <h3>Reception AVG by Month</h3>
+      <h3 id="rpt-trend-rcv-title">Reception AVG by Month</h3>
       <div class="chart-wrap"><canvas id="chart-wk-rcv"></canvas></div>
     </div>
   </div>
   <div class="grid-2 mt-16">
     <div class="card">
-      <h3>Serve Ace % &amp; Error % by Month</h3>
+      <h3 id="rpt-trend-srv-title">Serve Ace % &amp; Error % by Month</h3>
       <div class="chart-wrap"><canvas id="chart-wk-srv"></canvas></div>
     </div>
     <div class="card">
-      <h3>Actions Coded by Month</h3>
+      <h3 id="rpt-trend-vol-title">Actions Coded by Month</h3>
       <div class="chart-wrap"><canvas id="chart-wk-vol"></canvas></div>
     </div>
   </div>
@@ -1726,9 +1732,20 @@ function renderReports() {
     .filter(s => seasons.includes(s.season) && s.type !== 'scout')
     .sort((a,b) => (a.date||'').localeCompare(b.date||''));
 
-  // ── Monthly trend ─────────────────────────────────────────────────────────
-  // Build month→sessionIds for current season + type filter
-  const { monthKeys: rptMoKeys, shortLabels, sessionIdsByMonth: rptMoSess } = getMonthBuckets(seasons);
+  // ── Trend charts (Group By: month/week/day) ─────────────────────────────────
+  // Build bucket→sessionIds for the current season + type filter, at whichever
+  // granularity the "Trend Group By" selector is set to. getTimeBuckets() is the
+  // same generic bucketer the Team tab's Group By filter uses.
+  const rptTrendBucket = document.getElementById('rpt-trend-bucket')?.value || 'month';
+  const { keys: rptMoKeys, labels: shortLabels, sessionIdsByBucket: rptMoSess } = getTimeBuckets(seasons, rptTrendBucket);
+  const rptTrendWord = { month:'Month', week:'Week', day:'Day' }[rptTrendBucket];
+  const rptTrendPeriodWord = { month:'Monthly', week:'Weekly', day:'Daily' }[rptTrendBucket];
+  const setRptTrendTitle = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  setRptTrendTitle('rpt-trend-title',     `${rptTrendPeriodWord} Trends`);
+  setRptTrendTitle('rpt-trend-atk-title', `Attack Efficiency % by ${rptTrendWord}`);
+  setRptTrendTitle('rpt-trend-rcv-title', `Reception AVG by ${rptTrendWord}`);
+  setRptTrendTitle('rpt-trend-srv-title', `Serve Ace % & Error % by ${rptTrendWord}`);
+  setRptTrendTitle('rpt-trend-vol-title', `Actions Coded by ${rptTrendWord}`);
 
   // Prune rptSelectedMonths: remove months that don't exist in this season at all
   // (season-wide, NOT restricted to the current session type — otherwise switching
