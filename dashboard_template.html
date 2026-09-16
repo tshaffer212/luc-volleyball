@@ -191,7 +191,7 @@
 
   /* Table */
   .table-scroll {
-    max-height: 420px; overflow-y: auto;
+    max-height: 420px; overflow-y: auto; overflow-x: auto;
     border-radius: 12px;
     border: 1px solid #3a3a3a;
     box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4),
@@ -706,7 +706,7 @@
       <div class="card">
         <h3 id="serve-table-title">Serve Stats by Player</h3>
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table rpt-sticky">
             <thead><tr>
               <th>#</th><th>Name</th>
               <th class="num">Att</th>
@@ -723,7 +723,7 @@
       <div class="card" id="sr-rcv-card">
         <h3>Reception Stats by Player</h3>
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table rpt-sticky">
             <thead><tr>
               <th>#</th><th>Name</th>
               <th class="num">Att</th>
@@ -767,7 +767,7 @@
         <div class="card">
           <h3>Float — Stats by Player</h3>
           <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table rpt-sticky">
               <thead><tr>
                 <th>#</th><th>Name</th>
                 <th class="num">Att</th>
@@ -791,7 +791,7 @@
         <div class="card">
           <h3>Top Spin — Stats by Player</h3>
           <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table rpt-sticky">
               <thead><tr>
                 <th>#</th><th>Name</th>
                 <th class="num">Att</th>
@@ -818,7 +818,7 @@
         <div class="card">
           <h3>Float — Reception by Player</h3>
           <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table rpt-sticky">
               <thead><tr>
                 <th>#</th><th>Name</th>
                 <th class="num">Att</th><th class="num">AVG</th>
@@ -840,7 +840,7 @@
         <div class="card">
           <h3>Top Spin — Reception by Player</h3>
           <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table rpt-sticky">
               <thead><tr>
                 <th>#</th><th>Name</th>
                 <th class="num">Att</th><th class="num">AVG</th>
@@ -890,7 +890,7 @@
       <div class="card">
         <h3>Zone by Player — vs Float</h3>
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table rpt-sticky">
             <thead><tr>
               <th>#</th><th>Name</th>
               <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
@@ -904,7 +904,7 @@
       <div class="card">
         <h3>Zone by Player — vs Top Spin</h3>
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table rpt-sticky">
             <thead><tr>
               <th>#</th><th>Name</th>
               <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
@@ -938,7 +938,7 @@
     <div class="card">
       <h3>Zone Breakdown — by Player</h3>
       <div class="table-scroll">
-        <table class="data-table" id="rcv-zone-player-table">
+        <table class="data-table rpt-sticky" id="rcv-zone-player-table">
           <thead><tr>
             <th>#</th><th>Name</th>
             <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
@@ -1963,11 +1963,11 @@ function buildSingleRotTable(rotData, rot, label) {
   return `<div>
     <div style="font-size:12px;font-weight:700;color:var(--maroon);margin-bottom:6px;white-space:nowrap">
       ${title} <span style="opacity:.45;font-weight:400;font-size:11px">(setter in ${zone})</span></div>
-    <table class="xlsx-tbl"><thead><tr>
+    <div class="xlsx-wrap"><table class="xlsx-tbl"><thead><tr>
       <th>Call</th><th>Type</th>
       <th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">A</th>
       <th class="num">Eff%</th><th class="num" style="color:var(--gold)">K%</th>
-    </tr></thead><tbody>${rows}</tbody></table></div>`;
+    </tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function buildRotationAtkPanel(rotData, closeData, gapData, title, showRoutes) {
@@ -3192,7 +3192,7 @@ function buildServeRcvSheet(groups) {
       <td colspan="2" style="font-weight:700">TEAM TOTAL</td>
       ${rRowUnified(rcvTeamTot, true)}
     </tr>`;
-    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl rpt-sticky">
       <thead>
         <tr><td colspan="${TOTAL_COLS}" style="${SH}">RECEIVING</td></tr>
         <tr style="${CH}">
@@ -3247,7 +3247,7 @@ function buildServeRcvSheet(groups) {
       <td colspan="2" style="font-weight:700">TEAM TOTAL</td>
       ${rowFn(sectionTot, true)}
     </tr>`;
-    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl rpt-sticky">
       <thead>
         <tr><td colspan="${colSpan+2}" style="${SH}">${secLabel}</td></tr>
         <tr style="${CH}">
@@ -3325,7 +3325,7 @@ function buildZoneSheet(groups) {
       }
     }
     if (!rows) return '<div class="empty">No zone data — zone tracking requires 2026+ seasons</div>';
-    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl rpt-sticky">
       <thead>
         <tr><td colspan="${TOTAL_COLS}" style="${SH}">RECEIVE BY ZONE</td></tr>
         <tr style="${CH}">
@@ -3770,7 +3770,7 @@ function buildAttackSheet(groups) {
 
     if (!rows.includes('<td style="color:var(--gold)')) return '';
 
-    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl rpt-sticky">
       <thead>
         <tr><td colspan="${2+NC1*4+5}" style="${SH}">${title}</td></tr>
         <tr style="${CH}">
@@ -3855,7 +3855,7 @@ function buildBlockDefSheet(groups) {
     rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
       <td colspan="2">TEAM TOTAL</td>${bRow(teamEv, teamAtt[0], true)}</tr>`;
     if (!hasData) return '';
-    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl rpt-sticky">
       <thead>
         <tr><td colspan="9" style="${SH}">BLOCKING</td></tr>
         <tr style="${CH}"><th>#</th><th>Player</th>
@@ -3911,7 +3911,7 @@ function buildBlockDefSheet(groups) {
     rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700">
       <td colspan="2">TEAM TOTAL</td>${dRow(teamEv, teamAtt[0], true, teamDigR[0], teamDigR[1])}</tr>`;
     if (!hasData) return '';
-    return `<div class="xlsx-wrap"><table class="xlsx-tbl">
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl rpt-sticky">
       <thead>
         <tr><td colspan="11" style="${SH}">DIGGING</td></tr>
         <tr style="${CH}"><th>#</th><th>Player</th>
@@ -4419,7 +4419,7 @@ function buildSkillBars(skills) {
 function buildPlayerMiniTable(players, skillCode) {
   if (!players.length) return '<div class="empty">No data</div>';
   const label = skillCode === 'A' ? ['Kill%','Eff%'] : ['Ace%','Err%'];
-  return `<table class="data-table">
+  return `<table class="data-table rpt-sticky">
     <thead><tr><th>#</th><th>Name</th><th class="num">Att</th><th class="num">${label[0]}</th><th class="num">${label[1]}</th></tr></thead>
     <tbody>${players.filter(p => p.skills?.[skillCode]?.attempts > 0).slice(0,10).map(p => {
       const sk = p.skills?.[skillCode];
@@ -5300,7 +5300,7 @@ function renderAttack() {
     return `<div style="margin-bottom:20px">
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">${title}</div>
       <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table rpt-sticky">
           <thead><tr><th>#</th><th>Player</th><th class="num">Total Att</th>${headerCells}${otherHeader}</tr></thead>
           <tbody>${rows || '<tr><td colspan="${colSpan}" class="empty">No data</td></tr>'}</tbody>
         </table>
@@ -5522,15 +5522,16 @@ function renderRcvUnified(containerId, floatPlayers, tsPlayers, allPlayers) {
     const ac = rm.avg>=3.0?'var(--green)':rm.avg<2.0?'var(--red)':'var(--text)';
     return `<td class="num">${p.rcv_att}</td><td class="num" style="color:${ac};font-weight:600">${rm.avg.toFixed(2)}</td><td class="num green">${pct(rm.perf_pct)}</td><td class="num">${pct(rm.gp_pct)}</td><td class="num">${pct(rm.med_pct)}</td><td class="num" style="color:var(--gold)">${pct(rm.oos_pct)}</td><td class="num">${pct(rm.over_pct)}</td><td class="num red">${pct(rm.err_pct)}</td>`;
   }
-  container.innerHTML = `<table class="data-table" style="min-width:900px;border-collapse:collapse;font-size:12px;white-space:nowrap">
+  container.innerHTML = `<table class="data-table rpt-sticky" style="min-width:900px;border-collapse:collapse;font-size:12px;white-space:nowrap">
     <thead>
       <tr>
-        <th rowspan="2">#</th><th rowspan="2">Name</th>
+        <th>#</th><th>Name</th>
         <th colspan="4" class="num" style="text-align:center;background:rgba(60,100,180,.25);color:#7aaaff;font-size:11px;padding:4px 6px">Float (RM)</th>
         <th colspan="4" class="num" style="text-align:center;background:rgba(120,60,160,.25);color:#cc99ff;font-size:11px;padding:4px 6px">Topspin (RQ)</th>
         <th colspan="8" class="num" style="text-align:center;background:rgba(141,0,52,.25);color:var(--gold);font-size:11px;padding:4px 6px">All Receives</th>
       </tr>
       <tr>
+        <th></th><th></th>
         <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
         <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
         <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">GP%</th><th class="num">Med%</th><th class="num">OoS%</th><th class="num">OvP%</th><th class="num">Err%</th>
