@@ -251,6 +251,11 @@
   table.rpt-sticky tr[style*="rgba(141,0,52,.07)"] td:nth-child(2){background:#1a1516;}
   table.rpt-sticky tbody tr:hover td:nth-child(1),
   table.rpt-sticky tbody tr:hover td:nth-child(2){background:#181509;}
+  /* Subtotal/total rows collapse the #+Player columns into one <td colspan="2">
+     label — without this, the CSS above would wrongly grab the very next (real
+     stat) cell as if it were the sticky Player column, since it's nth-child(2)
+     in that row's own DOM. That cell already reads fine with normal position. */
+  table.rpt-sticky tr:has(> td[colspan]:first-child) td:nth-child(2){position:static;left:auto;}
 
   /* Detail panel */
   .detail-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
