@@ -3536,13 +3536,16 @@ function buildSetterAttackSectionHTML(setterSessionMap) {
   }
 
   // Filter button HTML — id="rpt-setter-btns" so renderRptSetterChart can refresh active states
-  const filterBtns = `<div id="rpt-setter-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-    <button onclick="rptSetterFilter=null;renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${rptSetterFilter===null?'var(--maroon)':'var(--surface2)'};color:${rptSetterFilter===null?'#fff':'var(--text)'}">All Setters</button>
-    ${setterPnums.map(pnum => {
-      const active = rptSetterFilter === pnum;
-      const cnt = setterSessions[pnum].size;
-      return `<button onclick="rptSetterFilter='${pnum}';renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${active?'var(--maroon)':'var(--surface2)'};color:${active?'#fff':'var(--text)'}">#${pnum} ${setterNames[pnum]} <span style="opacity:.6">(${cnt})</span></button>`;
-    }).join('')}
+  const filterBtns = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px">
+    <div id="rpt-setter-btns" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="rptSetterFilter=null;renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${rptSetterFilter===null?'var(--maroon)':'var(--surface2)'};color:${rptSetterFilter===null?'#fff':'var(--text)'}">All Setters</button>
+      ${setterPnums.map(pnum => {
+        const active = rptSetterFilter === pnum;
+        const cnt = setterSessions[pnum].size;
+        return `<button onclick="rptSetterFilter='${pnum}';renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${active?'var(--maroon)':'var(--surface2)'};color:${active?'#fff':'var(--text)'}">#${pnum} ${setterNames[pnum]} <span style="opacity:.6">(${cnt})</span></button>`;
+      }).join('')}
+    </div>
+    <button onclick="exportSetterPDF()" title="Export current setter view as PDF" style="padding:6px 14px;border-radius:4px;border:1px solid var(--gold);cursor:pointer;font-size:12px;background:transparent;color:var(--gold);font-weight:600;white-space:nowrap;flex-shrink:0">⬇ Export PDF</button>
   </div>`;
 
   return `<div class="card" style="padding:16px;margin-top:0">
@@ -3690,6 +3693,111 @@ function renderRptSetterChart() {
       : buildPlayerGroups(rptSelected);
     tablesEl.innerHTML = buildAttackSheet(groupsForTable);
   }
+}
+
+// ── Setter PDF export ─────────────────────────────────────────────────────────
+function exportSetterPDF() {
+  const anySession = DATA.sessions.find(s => rptSelected.has(s.id));
+  const season = anySession?.season;
+
+  // Setter label
+  let setterLabel = 'All Setters';
+  if (rptSetterFilter) {
+    const name = getPlayerName(rptSetterFilter, season) || `#${rptSetterFilter}`;
+    setterLabel = `#${rptSetterFilter} — ${name}`;
+  }
+
+  // Session list for the header
+  const selectedSessions = DATA.sessions
+    .filter(s => rptSelected.has(s.id))
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const sessionLine = selectedSessions.map(s => {
+    const d = s.date
+      ? new Date(s.date+' 12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+      : 'Unknown';
+    const opp = s.type === 'match'
+      ? ' vs '+(s.opponent||'Unknown').replace(/\s*\(Men['']?s\)/gi,'').trim()
+      : ' (Practice)';
+    return d + opp;
+  }).join('  ·  ');
+
+  // Grab the already-rendered table HTML
+  const tablesEl = document.getElementById('rpt-attack-tables');
+  const tableHTML = tablesEl ? tablesEl.innerHTML : '<p style="padding:20px;color:#888">No data for selected sessions.</p>';
+
+  const dateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>LUC Volleyball — ${setterLabel}</title>
+<style>
+  /* Redefine theme vars for light/print */
+  :root {
+    --maroon:#6b0020; --gold:#8a6500; --green:#1a6e1a; --red:#b50000;
+    --surface:#fff; --surface2:#f7f7f7; --surface3:#e8e8e8;
+    --border:#ccc; --text:#1a1a1a; --text-muted:#555; --text-dim:#aaa;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
+
+  /* Header */
+  .pdf-hdr{background:#6b0020;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center}
+  .pdf-hdr-title{font-size:17px;font-weight:700;letter-spacing:.5px}
+  .pdf-hdr-sub{font-size:11px;opacity:.8;margin-top:3px}
+  .pdf-setter{font-size:14px;font-weight:700;color:#FEBC18;text-align:right}
+  .pdf-date{font-size:10px;opacity:.75;text-align:right;margin-top:2px}
+  .pdf-sessions{padding:5px 18px;background:#f0f0f0;border-bottom:1px solid #ccc;font-size:9px;color:#555}
+  .content{padding:14px 18px}
+
+  /* Table resets for light theme */
+  .xlsx-wrap{overflow-x:auto;border-radius:6px;border:1px solid #ccc;margin-bottom:18px}
+  .xlsx-tbl{border-collapse:collapse;min-width:100%;font-size:10px;white-space:nowrap}
+  .xlsx-tbl th,.xlsx-tbl td{padding:4px 8px;border:1px solid #ddd}
+  .xlsx-tbl th{text-align:left;font-weight:600}
+  .xlsx-tbl tbody tr:nth-child(even) td{background:#fafafa}
+  .xlsx-dim{color:#bbb}
+  .num{text-align:right}
+
+  /* rpt-sticky is a scrollable-table helper — not needed in print */
+  .rpt-sticky thead{position:static!important}
+  .rpt-sticky thead th,.rpt-sticky thead td{position:static!important}
+
+  @media print{
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:landscape;margin:.4in .45in}
+  }
+</style>
+</head>
+<body>
+<div class="pdf-hdr">
+  <div>
+    <div class="pdf-hdr-title">LUC VOLLEYBALL</div>
+    <div class="pdf-hdr-sub">Setter Attack Report</div>
+  </div>
+  <div>
+    <div class="pdf-setter">${setterLabel}</div>
+    <div class="pdf-date">Generated ${dateStr}</div>
+  </div>
+</div>
+${sessionLine ? `<div class="pdf-sessions">Sessions: ${sessionLine}</div>` : ''}
+<div class="content">${tableHTML}</div>
+<script>
+  // Remove hover/sticky behaviours that don't apply in print
+  document.querySelectorAll('.rpt-sticky').forEach(t => t.classList.remove('rpt-sticky'));
+  window.onload = function() {
+    window.print();
+    window.onafterprint = function() { window.close(); };
+  };
+<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=1200,height=800');
+  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 // ── Attack by Set Type ────────────────────────────────────────────────────────
