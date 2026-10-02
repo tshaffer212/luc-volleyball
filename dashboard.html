@@ -3766,7 +3766,12 @@ function exportSetterPDF() {
 
   @media print{
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    @page{size:landscape;margin:.4in .45in}
+    @page{size:landscape;margin:.35in .4in}
+    /* Tighter print sizing so wide tables fit */
+    .xlsx-tbl{font-size:7.5px!important}
+    .xlsx-tbl th,.xlsx-tbl td{padding:2px 4px!important}
+    .pdf-hdr{padding:8px 14px}
+    .content{padding:8px 14px}
   }
 </style>
 </head>
@@ -3784,9 +3789,23 @@ function exportSetterPDF() {
 ${sessionLine ? `<div class="pdf-sessions">Sessions: ${sessionLine}</div>` : ''}
 <div class="content">${tableHTML}</div>
 <script>
-  // Remove hover/sticky behaviours that don't apply in print
+  // Remove sticky-header behaviour (not needed in print)
   document.querySelectorAll('.rpt-sticky').forEach(t => t.classList.remove('rpt-sticky'));
+  // Remove overflow wrappers so tables expand to full width
+  document.querySelectorAll('.xlsx-wrap').forEach(w => { w.style.overflow = 'visible'; w.style.border = 'none'; });
+
   window.onload = function() {
+    // Measure the widest table AFTER the browser has laid it out
+    let maxTableW = 0;
+    document.querySelectorAll('.xlsx-tbl').forEach(t => {
+      if (t.scrollWidth > maxTableW) maxTableW = t.scrollWidth;
+    });
+    // Landscape Letter printable width at 96 dpi, ~0.75in margins = ~960px
+    const pageW = 960;
+    if (maxTableW > pageW) {
+      // CSS zoom scales the full layout (affects page flow, unlike transform:scale)
+      document.body.style.zoom = (pageW / maxTableW).toFixed(4);
+    }
     window.print();
     window.onafterprint = function() { window.close(); };
   };
