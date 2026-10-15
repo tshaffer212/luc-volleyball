@@ -383,6 +383,7 @@ def compute_rally_sequences(actions, loyola_side):
             if loyola_side != 'both' and rcv_side != loyola_side:
                 continue
 
+            # Count every serve as a receiving opportunity (aces = failed side-out).
             fbso['rcv_rallies'] += 1
 
             first_atk = next(
