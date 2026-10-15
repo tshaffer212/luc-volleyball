@@ -1056,8 +1056,231 @@ def main(raw_path, out_path):
                for (pn,se),v in player_season.items()}
 
     # ── Scout aggregation ─────────────────────────────────────────────────────
+    def opp_side_for_session(session):
+        """Determine which team_side ('home' or 'away') is the scouted opponent."""
+        opp   = (session.get('opponent') or '').lower()
+        home  = (session.get('home_team') or '').lower()
+        # Any significant word from opponent name appears in home_team → opp is home
+        skip  = {'university','college','men','men\'s','women','women\'s','the','of','at','a'}
+        words = [w for w in opp.split() if len(w) > 2 and w not in skip]
+        return 'home' if (words and any(w in home for w in words)) else 'away'
+
+    def get_opp_rotation(action, opp_side, set_lineups):
+        """Return the opponent's rotation (1-6) for this action, or None."""
+        if opp_side == 'home':
+            return action.get('rot_h')
+        # Away opponent: derive from opp_lineup vs starting lineup
+        opp_lineup = action.get('opp_lineup')
+        set_num    = action.get('set_number')
+        if not opp_lineup or not set_num:
+            return None
+        start = set_lineups.get(set_num) or set_lineups.get(str(set_num))
+        if not start or len(start) < 6:
+            return None
+        p1 = opp_lineup[0]
+        try:
+            j = start.index(p1)
+        except ValueError:
+            return None
+        return (6 - j) % 6 + 1
+
+    def atk_zone_cat(action):
+        """Categorize an attack by start zone into Left/Quick/Right/BR."""
+        sz = str(action.get('start_zone') or '')
+        if sz == '4':   return 'Left'
+        if sz == '3':   return 'Quick'
+        if sz == '2':   return 'Right'
+        if sz in ('1','5','6','7','8','9'): return 'BR'
+        return 'Other'
+
+    def compute_scout_rotation_stats(sessions_for_opp):
+        """
+        Compute per-rotation and team-level stats for a scouted opponent
+        across all their scout sessions.
+        Returns dict with keys 'team', 'rotations', 'setters'.
+        """
+        def new_rot():
+            return {
+                'atk':  {'att':0,'k':0,'e':0,'bk':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'BR':0,'Dump':0}},
+                'rcv':  {'att':0,'in_sys':0,'fbso_rallies':0,'fbso_kills':0,'zones':{}},
+                'dig':  {'att':0,'err':0},
+                'set':  {'att':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'BR':0}},
+            }
+
+        rotations = {str(r): new_rot() for r in range(1, 7)}
+        setters   = {}  # jersey_str → {name, sets, rot_counts, rcv_in_sys, rcv_att, rotations_set}
+        team = {'att':0,'k':0,'e':0,'bk':0,'so_rallies':0,'so_kills':0,
+                'fbso_rallies':0,'fbso_kills':0,'rcv_att':0,'rcv_in_sys':0}
+
+        for session in sessions_for_opp:
+            opp_side   = opp_side_for_session(session)
+            set_lineups = session.get('away_set_lineups' if opp_side == 'away' else 'home_set_lineups', {})
+            # Convert string keys to int if needed
+            set_lineups_int = {}
+            for k, v in set_lineups.items():
+                try:
+                    set_lineups_int[int(k)] = v
+                except:
+                    set_lineups_int[k] = v
+            actions = session.get('actions', [])
+
+            # Group by rally_seq
+            rally_groups = defaultdict(list)
+            for a in actions:
+                rally_groups[a.get('rally_seq', 0)].append(a)
+
+            for rs in sorted(rally_groups):
+                rally = rally_groups[rs]
+                opp_acts = [a for a in rally if a.get('team_side') == opp_side]
+                if not opp_acts:
+                    continue
+
+                # Determine rotation for this rally from the first receive action or first opp action
+                first_rcv  = next((a for a in opp_acts if a.get('skill_code') == 'R'), None)
+                first_act  = opp_acts[0]
+                rot_action = first_rcv or first_act
+                opp_rot    = get_opp_rotation(rot_action, opp_side, set_lineups_int)
+                rot_key    = str(opp_rot) if opp_rot and 1 <= opp_rot <= 6 else None
+
+                # ── Reception ──────────────────────────────────────────────────
+                has_rcv = bool(first_rcv)
+                if has_rcv:
+                    ev  = first_rcv.get('evaluation','')
+                    in_sys = 1 if ev in ('#','+') else 0
+                    zone   = str(first_rcv.get('end_zone') or '')
+                    team['rcv_att']    += 1
+                    team['rcv_in_sys'] += in_sys
+                    if rot_key:
+                        rb = rotations[rot_key]['rcv']
+                        rb['att']    += 1
+                        rb['in_sys'] += in_sys
+                        rb['fbso_rallies'] += 1
+                        # Zone-level reception
+                        if zone in ('1','5','6'):
+                            if zone not in rb['zones']:
+                                rb['zones'][zone] = {'att':0,'in_sys':0,'fbso':0}
+                            rb['zones'][zone]['att']    += 1
+                            rb['zones'][zone]['in_sys'] += in_sys
+
+                # ── FBSO ───────────────────────────────────────────────────────
+                if has_rcv:
+                    first_atk = next((a for a in opp_acts if a.get('skill_code') == 'A'), None)
+                    is_fbso   = bool(first_atk and first_atk.get('evaluation') == '#')
+                    team['fbso_rallies'] += 1
+                    if is_fbso:
+                        team['fbso_kills'] += 1
+                    if rot_key:
+                        rotations[rot_key]['rcv']['fbso_kills'] += (1 if is_fbso else 0)
+                        if zone in ('1','5','6'):
+                            rotations[rot_key]['rcv']['zones'][zone]['fbso'] += (1 if is_fbso else 0)
+
+                # ── Sideout ────────────────────────────────────────────────────
+                # Find the last decisive action (kill=# or error==) in the rally.
+                # Sideout = opp scored = last kill by opp OR last error by non-opp.
+                if has_rcv:
+                    team['so_rallies'] += 1
+                    srv_side = 'home' if opp_side == 'away' else 'away'
+                    for a in reversed(rally):
+                        ev = a.get('evaluation', '')
+                        side = a.get('team_side', '')
+                        if ev == '#':
+                            # Kill: opp scored if opp killed
+                            team['so_kills'] += (1 if side == opp_side else 0)
+                            break
+                        elif ev == '=':
+                            # Error: opp scored if server (non-opp) errored
+                            team['so_kills'] += (1 if side == srv_side else 0)
+                            break
+
+                # ── Attacks ───────────────────────────────────────────────────
+                for a in opp_acts:
+                    if a.get('skill_code') != 'A':
+                        continue
+                    ev  = a.get('evaluation', '')
+                    cat = atk_zone_cat(a)
+                    k   = 1 if ev == '#' else 0
+                    er  = 1 if ev == '=' else 0
+                    bk  = 1 if ev == '/' else 0
+                    team['att'] += 1
+                    team['k']   += k
+                    team['e']   += er
+                    team['bk']  += bk
+                    if rot_key:
+                        rb = rotations[rot_key]['atk']
+                        rb['att'] += 1
+                        rb['k']   += k
+                        rb['e']   += er
+                        rb['bk']  += bk
+                        rb['by_zone'][cat] = rb['by_zone'].get(cat, 0) + 1
+
+                # ── Setter actions ──────────────────────────────────────────────
+                for a in opp_acts:
+                    if a.get('skill_code') != 'E':
+                        continue
+                    s_rot  = get_opp_rotation(a, opp_side, set_lineups_int)
+                    s_key  = str(s_rot) if s_rot and 1 <= s_rot <= 6 else None
+                    pnum   = a.get('player_num', '')
+                    pname  = a.get('player_name', '') or f'#{pnum}'
+                    if pnum not in setters:
+                        setters[pnum] = {'name':pname,'sets':0,'rcv_att':0,'rcv_in_sys':0,
+                                         'rot_count':defaultdict(int)}
+                    setters[pnum]['sets'] += 1
+                    if s_key:
+                        setters[pnum]['rot_count'][s_key] += 1
+                    # Find the next attack in this rally for set distribution
+                    a_idx = opp_acts.index(a)
+                    nxt = next((x for x in opp_acts[a_idx+1:] if x.get('skill_code') == 'A'), None)
+                    if nxt and s_key:
+                        cat = atk_zone_cat(nxt)
+                        rotations[s_key]['set']['att']    += 1
+                        rotations[s_key]['set']['by_zone'][cat] = \
+                            rotations[s_key]['set']['by_zone'].get(cat, 0) + 1
+
+                # ── Digs ───────────────────────────────────────────────────────
+                for a in opp_acts:
+                    if a.get('skill_code') != 'D':
+                        continue
+                    ev = a.get('evaluation', '')
+                    if rot_key:
+                        rb = rotations[rot_key]['dig']
+                        rb['att'] += 1
+                        if ev == '=':
+                            rb['err'] += 1
+
+        # ── Derive percentages ─────────────────────────────────────────────────
+        t = team
+        t['eff']       = round((t['k']-t['e']-t['bk'])/t['att'],3) if t['att'] else 0
+        t['k_pct']     = round(t['k']/t['att']*100,1)              if t['att'] else 0
+        t['fbso_pct']  = round(t['fbso_kills']/t['fbso_rallies']*100,1) if t['fbso_rallies'] else 0
+        t['so_pct']    = round(t['so_kills']/t['so_rallies']*100,1)     if t['so_rallies'] else 0
+        t['in_sys_pct']= round(t['rcv_in_sys']/t['rcv_att']*100,1)     if t['rcv_att'] else 0
+
+        for rk, rv in rotations.items():
+            a = rv['atk']
+            a['eff']   = round((a['k']-a['e']-a['bk'])/a['att'],3) if a['att'] else 0
+            a['k_pct'] = round(a['k']/a['att']*100,1)              if a['att'] else 0
+            r = rv['rcv']
+            r['in_sys_pct']  = round(r['in_sys']/r['att']*100,1)              if r['att'] else 0
+            r['fbso_pct']    = round(r['fbso_kills']/r['fbso_rallies']*100,1) if r['fbso_rallies'] else 0
+            for zk, zv in r['zones'].items():
+                zv['in_sys_pct'] = round(zv['in_sys']/zv['att']*100,1) if zv['att'] else 0
+                zv['fbso_pct']   = round(zv['fbso']/zv['att']*100,1)   if zv['att'] else 0
+            d = rv['dig']
+            d['err_pct'] = round(d['err']/d['att']*100,1) if d['att'] else 0
+
+        # Clean setters: convert defaultdict to dict
+        for sv in setters.values():
+            sv['rot_count']  = dict(sv['rot_count'])
+            rots = sv['rot_count']
+            total_sets = sv['sets']
+            sv['arot'] = round(sum(int(k)*v for k,v in rots.items())/total_sets,1) if total_sets else 0
+
+        return {'team': team, 'rotations': rotations, 'setters': setters}
+
     scout_index    = []
     opponent_stats = defaultdict(lambda: {'files':0,'actions':0,'skills':{}})
+    # Group scout sessions by opponent for rotation stats
+    opp_sessions   = defaultdict(list)
 
     print("Aggregating scout sessions ...", file=sys.stderr)
     for s in scouts_raw:
@@ -1076,9 +1299,18 @@ def main(raw_path, out_path):
         os_['actions'] += s.get('action_count', 0)
         for action in s.get('actions', []):
             add_action(os_['skills'], action)
+        opp_sessions[opp].append(s)
 
     for os_ in opponent_stats.values():
         derive(os_['skills'])
+
+    # Compute rotation-level stats for each opponent
+    print("Computing scout rotation stats ...", file=sys.stderr)
+    opp_rotation_stats = {}
+    for opp, sess_list in opp_sessions.items():
+        if opp == 'Unknown':
+            continue
+        opp_rotation_stats[opp] = compute_scout_rotation_stats(sess_list)
 
     # ── Output ────────────────────────────────────────────────────────────────
     total_loyola_actions = sum(v['actions'] for v in season_stats.values())
@@ -1102,6 +1334,7 @@ def main(raw_path, out_path):
         'player_season':  pse_out,
         'scout_index':    scout_index,
         'opponent_stats': dict(opponent_stats),
+        'opp_rotation_stats': opp_rotation_stats,
         'call_attacks': {
             season: {
                 k: {cc: dict(cv) for cc, cv in combos.items()}

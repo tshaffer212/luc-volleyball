@@ -5037,48 +5037,163 @@ function selectOpp(name) {
 }
 
 function renderScoutDetail(name) {
-  const os = DATA.opponent_stats[name];
-  const files = DATA.scout_index.filter(s => s.opponent === name);
+  const os       = DATA.opponent_stats[name];
+  const rotData  = DATA.opp_rotation_stats?.[name];
+  const files    = DATA.scout_index.filter(s => s.opponent === name);
   const container = document.getElementById('scout-detail');
   if (!os) { container.innerHTML = '<div class="empty">No data</div>'; return; }
 
   const A = os.skills?.A, S = os.skills?.S, R = os.skills?.R;
+  const team = rotData?.team;
+  const rots = rotData?.rotations || {};
+  const setters = rotData?.setters || {};
 
-  container.innerHTML = `
-    <div class="card">
-      <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">${name}</h2>
-      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">${os.files} scouted file${os.files!==1?'s':''} · ${fmt(os.actions)} total actions</p>
+  // ── helper: bar chart for set distribution ───────────────────────────────
+  function distBar(byZone) {
+    const total = (byZone.Left||0) + (byZone.Quick||0) + (byZone.Right||0) + (byZone.BR||0);
+    if (!total) return '<span style="color:var(--text-dim);font-size:11px">No set data</span>';
+    const bar = (label, val, color) => {
+      const pct = Math.round(val/total*100);
+      if (!pct) return '';
+      return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+        <div style="width:32px;font-size:10px;color:var(--text-muted)">${label}</div>
+        <div style="flex:1;height:10px;background:var(--surface3);border-radius:3px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+        </div>
+        <div style="width:28px;font-size:10px;text-align:right;color:var(--text-muted)">${pct}%</div>
+      </div>`;
+    };
+    return `<div style="margin-top:4px">
+      ${bar('Left',  byZone.Left||0,  '#e05a70')}
+      ${bar('Quick', byZone.Quick||0, '#FEBC18')}
+      ${bar('Right', byZone.Right||0, '#7ec8f5')}
+      ${bar('BR',    byZone.BR||0,    '#8888ff')}
+    </div>`;
+  }
 
-      <div class="grid-3">
-        ${A ? `<div class="stat-box highlight">
-          <div class="stat-val green">${pct(A.kill_pct)}</div>
-          <div class="stat-lbl">Attack Kill%</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(A.attempts)} attacks · ${pct(A.error_pct)} err</div>
-        </div>` : '<div class="stat-box"><div class="stat-lbl">No attack data</div></div>'}
-        ${S ? `<div class="stat-box">
-          <div class="stat-val" style="color:var(--blue)">${pct(S.kill_pct)}</div>
-          <div class="stat-lbl">Serve Ace%</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(S.attempts)} serves · ${pct(S.error_pct)} err</div>
-        </div>` : ''}
-        ${R ? `<div class="stat-box">
-          <div class="stat-val" style="color:var(--gold)">${pct(R.kill_pct)}</div>
-          <div class="stat-lbl">Rcv Perfect%</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${fmt(R.attempts)} receptions</div>
-        </div>` : ''}
+  // ── helper: efficiency badge color ───────────────────────────────────────
+  function effColor(e) {
+    if (e >= 0.35) return 'var(--red)';
+    if (e >= 0.25) return '#f0a030';
+    if (e >= 0.15) return 'var(--text-muted)';
+    return 'var(--green)';
+  }
+
+  // ── helper: rotation card (2 rows × 3 cols grid, order matches Excel: 4,3,2 / 5,6,1)
+  const ROT_ORDER = [4,3,2,5,6,1];
+  function rotCard(r) {
+    const rv  = rots[String(r)] || {};
+    const atk = rv.atk || {att:0,k:0,e:0,bk:0,eff:0,k_pct:0,by_zone:{}};
+    const rcv = rv.rcv || {att:0,in_sys_pct:0,fbso_pct:0};
+    const set = rv.set || {att:0,by_zone:{}};
+    const hasData = atk.att > 0 || rcv.att > 0;
+    if (!hasData) return `<div class="card-sm" style="opacity:0.4;min-height:120px">
+      <div style="font-weight:700;font-size:13px;color:var(--gold);margin-bottom:8px">R${r}</div>
+      <div style="color:var(--text-dim);font-size:11px">No data</div>
+    </div>`;
+
+    return `<div class="card-sm" style="min-height:180px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-weight:700;font-size:13px;color:var(--gold)">R${r}</span>
+        <span style="font-size:10px;color:var(--text-dim)">${atk.att} atk · ${rcv.att} rcv</span>
       </div>
 
-      <div class="section-title">Skill Breakdown</div>
-      ${buildSkillBars(os.skills)}
+      <!-- Attack stats row -->
+      <div style="display:flex;gap:10px;margin-bottom:8px;padding:6px 8px;background:var(--surface3);border-radius:5px;font-size:11px">
+        <div><div style="color:var(--text-dim)">K%</div><div style="font-weight:600;color:var(--red)">${atk.k_pct}%</div></div>
+        <div><div style="color:var(--text-dim)">Eff</div><div style="font-weight:600;color:${effColor(atk.eff)}">${atk.eff.toFixed(3)}</div></div>
+        <div><div style="color:var(--text-dim)">K</div><div>${atk.k}</div></div>
+        <div><div style="color:var(--text-dim)">E</div><div>${atk.e}</div></div>
+        <div><div style="color:var(--text-dim)">BK</div><div>${atk.bk}</div></div>
+      </div>
 
+      <!-- Set distribution -->
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Set Dist</div>
+      ${distBar(set.by_zone)}
+
+      <!-- Reception -->
+      ${rcv.att > 0 ? `<div style="display:flex;gap:10px;margin-top:8px;padding:5px 8px;background:rgba(254,188,24,0.06);border:1px solid rgba(254,188,24,0.12);border-radius:5px;font-size:11px">
+        <div><div style="color:var(--text-dim)">In-Sys%</div><div style="font-weight:600">${rcv.in_sys_pct}%</div></div>
+        <div><div style="color:var(--text-dim)">FBSO%</div><div style="font-weight:600;color:var(--gold)">${rcv.fbso_pct}%</div></div>
+        <div><div style="color:var(--text-dim)">Rcv</div><div>${rcv.att}</div></div>
+      </div>` : ''}
+    </div>`;
+  }
+
+  // ── Setters section ───────────────────────────────────────────────────────
+  const setterRows = Object.entries(setters)
+    .filter(([,sv]) => sv.sets >= 3)
+    .sort((a,b) => b[1].sets - a[1].sets)
+    .slice(0, 8);
+
+  const setterTableRows = setterRows.map(([num, sv]) => {
+    const rotDist = [1,2,3,4,5,6].map(r => (sv.rot_count?.[r]||sv.rot_count?.[String(r)]||0));
+    const total   = rotDist.reduce((a,b)=>a+b,0);
+    return `<tr>
+      <td style="font-weight:600;color:var(--gold)">#${num}</td>
+      <td>${sv.name || (''+num)}</td>
+      <td class="num">${sv.sets}</td>
+      <td class="num" style="color:var(--text-muted)">${sv.arot}</td>
+      ${rotDist.map(v => `<td class="num" style="color:${v>0?'var(--text)':'var(--text-dim)'}">${v>0?(Math.round(v/total*100)+'%'):'-'}</td>`).join('')}
+    </tr>`;
+  }).join('');
+
+  // ── Main HTML ─────────────────────────────────────────────────────────────
+  container.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+        <div>
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">${name}</h2>
+          <p style="color:var(--text-muted);font-size:13px">${os.files} scouted file${os.files!==1?'s':''} · ${fmt(os.actions)} total actions</p>
+        </div>
+      </div>
+
+      <!-- Team Metrics Strip -->
+      ${team ? `<div style="display:flex;gap:0;margin-bottom:20px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        ${[
+          ['SO%',        team.so_pct+'%',    'Sideout rate (receive → win rally)', 'var(--gold)'],
+          ['FBSO%',      team.fbso_pct+'%',  'First ball sideout (1st attack kill)', '#7ec8f5'],
+          ['Kill%',      team.k_pct+'%',     'Attack kill rate (K/ATT)', 'var(--red)'],
+          ['Efficiency', team.eff.toFixed(3),'(K−E−BLK)/ATT', effColor(team.eff)],
+          ['In-Sys Rcv', team.in_sys_pct+'%','Reception in-system (# or +)', 'var(--green)'],
+        ].map(([lbl,val,tip,col],i) => `
+          <div style="flex:1;padding:12px 14px;background:var(--surface2);${i?'border-left:1px solid var(--border)':''};text-align:center" title="${tip}">
+            <div style="font-size:18px;font-weight:700;color:${col}">${val}</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.4px">${lbl}</div>
+          </div>`).join('')}
+      </div>` : ''}
+
+      <!-- Rotation Grid (2×3: R4 R3 R2 / R5 R6 R1) -->
+      <div class="section-title">Rotation Breakdown</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+        ${ROT_ORDER.map(r => rotCard(r)).join('')}
+      </div>
+
+      <!-- Setter Breakdown -->
+      ${setterRows.length > 0 ? `
+      <div class="section-title">Setter Breakdown</div>
+      <div style="overflow-x:auto;margin-bottom:20px">
+        <table class="data-table" style="font-size:12px;min-width:560px">
+          <thead><tr>
+            <th>#</th><th>Name</th><th class="num">Sets</th><th class="num">aROT</th>
+            <th class="num">R1%</th><th class="num">R2%</th><th class="num">R3%</th>
+            <th class="num">R4%</th><th class="num">R5%</th><th class="num">R6%</th>
+          </tr></thead>
+          <tbody>${setterTableRows}</tbody>
+        </table>
+      </div>` : ''}
+
+      <!-- Attack Combinations -->
       ${A?.combos && Object.keys(A.combos).length > 0 ? `
       <div class="section-title">Attack Combinations</div>
-      <div class="chart-wrap" style="margin-top:8px"><canvas id="chart-scout-combos"></canvas></div>` : ''}
+      <div class="chart-wrap" style="margin-top:8px;margin-bottom:20px"><canvas id="chart-scout-combos"></canvas></div>` : ''}
 
+      <!-- Scouted Files -->
       <div class="section-title">Scouted Files</div>
       <table class="data-table" style="font-size:12px">
         <thead><tr><th>File</th><th>Date</th><th>Season</th><th class="num">Actions</th></tr></thead>
         <tbody>${files.map(f => `<tr>
-          <td style="color:var(--text-muted)">${f.file}</td>
+          <td style="color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.file}</td>
           <td>${f.date||'—'}</td>
           <td>${f.season||'—'}</td>
           <td class="num">${fmt(f.action_count)}</td>

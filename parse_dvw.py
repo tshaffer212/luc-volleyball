@@ -203,7 +203,9 @@ def parse_date(raw):
 
 
 def parse_players(lines):
-    """Parse [3PLAYERS-H] or [3PLAYERS-V] block → dict keyed by player number."""
+    """Parse [3PLAYERS-H] or [3PLAYERS-V] block → dict keyed by player number.
+    Also captures starting positions per set: parts[3..6] = set 1-4 starting position (1-6, or '*'=libero, ''=bench).
+    """
     players = {}
     for line in lines:
         parts = line.split(';')
@@ -217,6 +219,15 @@ def parse_players(lines):
         first = parts[10].strip()
         role     = parts[12].strip() if len(parts) > 12 else ''
         pos_code = parts[13].strip() if len(parts) > 13 else ''
+        # Starting positions per set (sets 1-4 in parts[3..6])
+        start_pos = {}
+        for si in range(4):
+            raw = parts[3 + si].strip() if len(parts) > 3 + si else ''
+            if raw and raw != '*':
+                try:
+                    start_pos[si + 1] = int(raw)  # set number → court position (1-6)
+                except ValueError:
+                    pass
         players[str(number)] = {
             'number':        number,
             'last_name':     last,
@@ -224,8 +235,42 @@ def parse_players(lines):
             'name':          f"{first} {last}".strip(),
             'is_libero':     role == 'L',
             'position_code': pos_code,   # 1=Libero, 2=Outside, 3=Opposite, 4=Middle, 5=Setter (confirmed 2026-09-11)
+            'start_pos':     start_pos,  # {set_num: court_position}
         }
     return players
+
+
+def build_set_lineup(players, set_num):
+    """Return [jersey_pos1, jersey_pos2, ..., jersey_pos6] for a given set number.
+    Returns None if fewer than 6 starters have starting position data for that set.
+    """
+    pos_to_jersey = {}
+    for jersey_str, p in players.items():
+        pos = p.get('start_pos', {}).get(set_num)
+        if pos and 1 <= pos <= 6:
+            pos_to_jersey[pos] = int(jersey_str) if jersey_str.isdigit() else None
+    if len(pos_to_jersey) < 6:
+        return None
+    return [pos_to_jersey.get(i) for i in range(1, 7)]
+
+
+def derive_opp_rotation(opp_lineup_now, opp_start_lineup):
+    """Given the current away-team lineup and the set-start lineup,
+    compute the rotation number (1-6) by finding how many times they've rotated.
+    The player in position 1 (opp_lineup_now[0]) tells us which starting position
+    is now at position 1, from which we derive rotation count.
+    Returns None if data is insufficient.
+    """
+    if not opp_lineup_now or not opp_start_lineup or len(opp_start_lineup) < 6:
+        return None
+    p1 = opp_lineup_now[0]
+    if p1 is None:
+        return None
+    try:
+        j = opp_start_lineup.index(p1)
+    except ValueError:
+        return None
+    return (6 - j) % 6 + 1
 
 
 def parse_attack_combos(lines):
@@ -603,8 +648,10 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         else:
             luc_rot = rot_v  # fallback (may be 1 for Volleymetrics away matches)
 
-        # Lineup: positions 1-6 as player jersey numbers
-        lu_start = 14 if luc_side == 'home' else 20
+        # Lineup: positions 1-6 as player jersey numbers (both LUC side and opponent side)
+        lu_start  = 14 if luc_side == 'home' else 20
+        opp_start = 20 if luc_side == 'home' else 14
+        opp_lineup = None
         if len(fields) > lu_start + 5:
             try:
                 nums = [int(fields[lu_start + i].strip()) for i in range(6)
@@ -613,6 +660,22 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
                     luc_lineup = nums
             except:
                 pass
+        if len(fields) > opp_start + 5:
+            try:
+                nums = [int(fields[opp_start + i].strip()) for i in range(6)
+                        if fields[opp_start + i].strip().isdigit()]
+                if len(nums) == 6:
+                    opp_lineup = nums
+            except:
+                pass
+        # Derive opponent rotation from opp_lineup + per-set start lineup
+        # For scout files (luc_side='home'): opponent is the away team (opp_lineup = away lineup).
+        # rot_h gives home team rotation; for away-team opponent we derive from opp_lineup.
+        opp_rot = None
+        if set_num and opp_lineup:
+            # Use prebuilt opp set lineups (filled in below after the loop, or carry forward)
+            # We store opp_lineup raw; aggregate.py will compute opp_rot from set start lineups.
+            pass
 
         # ── Result code: chars 15-16 of code_str ('+1'/'-1'/'00') ────────
         # '+1' = home won rally, '-1' = away won rally, '00' = rally continues
@@ -657,7 +720,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
             # Rotation / set / rally context
             'set_number':   set_num,
             'rotation':     luc_rot,
+            'rot_h':        rot_h,
             'luc_lineup':   luc_lineup,
+            'opp_lineup':   opp_lineup,
             'rally_seq':    current_rally_seq,  # rally counter (increments on p-markers)
             'action_seq':   action_seq,          # raw DVW action sequence number
             'luc_won_rally': luc_won_rally,      # True/False/None (None = rally ongoing)
@@ -683,6 +748,17 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         elif luc_side == 'away' and home_team:
             opponent = home_team
 
+    # ── Per-set starting lineups for both teams (used by aggregate.py for opp rotation) ──
+    home_set_lineups = {}
+    away_set_lineups = {}
+    for sn in range(1, 6):
+        hl = build_set_lineup(home_players, sn)
+        al = build_set_lineup(away_players, sn)
+        if hl:
+            home_set_lineups[sn] = hl
+        if al:
+            away_set_lineups[sn] = al
+
     session = {
         # Identity
         'file':            filename,
@@ -699,11 +775,16 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         'away_team':       away_team,
         'opponent':        opponent,
         'luc_side':        luc_side,        # 'home' or 'away'
+        # Per-set starting lineups for both teams (list of 6 jersey ints, ordered by position 1-6)
+        'home_set_lineups': home_set_lineups,  # {set_num: [pos1..pos6]}
+        'away_set_lineups': away_set_lineups,
         # Counts
         'player_count':    len(players),
         'action_count':    len(actions),
         # Lookup tables (embedded so each session is self-contained)
         'players':         players,
+        'home_players':    home_players,
+        'away_players':    away_players,
         'attack_combos':   attack_combos,
         'setter_calls':    setter_calls,
         # Actions
