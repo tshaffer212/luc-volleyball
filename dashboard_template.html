@@ -3303,13 +3303,73 @@ function buildZoneSheet(groups) {
     return v > 2.5 ? 'var(--green)' : v < 1.5 ? 'var(--red)' : 'var(--text)';
   }
 
+  // Helper: merge zone records from an array of players into one aggregate record per zone
+  function mergeGroupZones(players) {
+    const byZone = {};   // zk -> {attempts, evals, rcv_pts}
+    const byZoneM = {};  // float
+    const byZoneQ = {};  // topspin
+    for (const z of ZONES) {
+      byZone[z.k]  = { attempts:0, evals:{}, rcv_pts: null };
+      byZoneM[z.k] = { attempts:0, evals:{} };
+      byZoneQ[z.k] = { attempts:0, evals:{} };
+    }
+    for (const p of players) {
+      for (const z of ZONES) {
+        const zd = p.rZones[z.k]  || {};
+        const zm = p.rmZones[z.k] || {};
+        const zq = p.rqZones[z.k] || {};
+        byZone[z.k].attempts += zd.attempts||0;
+        if (zd.rcv_pts != null) byZone[z.k].rcv_pts = (byZone[z.k].rcv_pts||0) + zd.rcv_pts;
+        for (const [e,n] of Object.entries(zd.evals||{})) byZone[z.k].evals[e]=(byZone[z.k].evals[e]||0)+n;
+        byZoneM[z.k].attempts += zm.attempts||0;
+        for (const [e,n] of Object.entries(zm.evals||{})) byZoneM[z.k].evals[e]=(byZoneM[z.k].evals[e]||0)+n;
+        byZoneQ[z.k].attempts += zq.attempts||0;
+        for (const [e,n] of Object.entries(zq.evals||{})) byZoneQ[z.k].evals[e]=(byZoneQ[z.k].evals[e]||0)+n;
+      }
+    }
+    // clean up null rcv_pts
+    for (const z of ZONES) if (byZone[z.k].rcv_pts === null) delete byZone[z.k].rcv_pts;
+    return { byZone, byZoneM, byZoneQ };
+  }
+
+  function subtotalRow(label, players, style='background:var(--surface3)') {
+    const { byZone, byZoneM, byZoneQ } = mergeGroupZones(players);
+    const totZd = { attempts:0, evals:{}, rcv_pts: null };
+    for (const z of ZONES) {
+      totZd.attempts += byZone[z.k].attempts;
+      if (byZone[z.k].rcv_pts != null) totZd.rcv_pts = (totZd.rcv_pts||0) + byZone[z.k].rcv_pts;
+      for (const [e,n] of Object.entries(byZone[z.k].evals||{})) totZd.evals[e]=(totZd.evals[e]||0)+n;
+    }
+    if (totZd.rcv_pts === null) delete totZd.rcv_pts;
+    const totAvg = zoneAvgFromRecord(totZd);
+    const totFAvg = zoneAvgFromRecord({ attempts: ZONES.reduce((s,z)=>s+(byZoneM[z.k].attempts||0),0), evals: ZONES.reduce((acc,z)=>{for(const[e,n]of Object.entries(byZoneM[z.k].evals||{}))acc[e]=(acc[e]||0)+n;return acc;},{}) });
+    const totTAvg = zoneAvgFromRecord({ attempts: ZONES.reduce((s,z)=>s+(byZoneQ[z.k].attempts||0),0), evals: ZONES.reduce((acc,z)=>{for(const[e,n]of Object.entries(byZoneQ[z.k].evals||{}))acc[e]=(acc[e]||0)+n;return acc;},{}) });
+    return `<tr style="${style}">
+      <td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">${label}</td>
+      ${ZONES.map(z => {
+        const zd = byZone[z.k], zm = byZoneM[z.k], zq = byZoneQ[z.k];
+        const za = zd.attempts||0, zavg = zoneAvgFromRecord(zd), fAvg = zoneAvgFromRecord(zm), tAvg = zoneAvgFromRecord(zq);
+        return `<td class="num">${za||'—'}</td>
+                <td class="num" style="color:${fAvg!==null?'#7aaaff':'var(--text-dim)'}">${fAvg!==null?fAvg.toFixed(2):'—'}</td>
+                <td class="num" style="color:${tAvg!==null?'#cc99ff':'var(--text-dim)'}">${tAvg!==null?tAvg.toFixed(2):'—'}</td>
+                <td class="num" style="color:${avgColor(zavg)};font-weight:700">${zavg!==null?zavg.toFixed(2):'—'}</td>`;
+      }).join('')}
+      <td class="num" style="font-weight:700">${totZd.attempts||'—'}</td>
+      <td class="num" style="color:#7aaaff">${totFAvg!==null?totFAvg.toFixed(2):'—'}</td>
+      <td class="num" style="color:#cc99ff">${totTAvg!==null?totTAvg.toFixed(2):'—'}</td>
+      <td class="num" style="color:${totAvg!==null?totAvg>2.5?'var(--green)':totAvg<1.5?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
+    </tr>`;
+  }
+
   function buildTable(players) {
     const PASS_GROUPS = ['OUTSIDES', 'LIBEROS'];
     let rows = '';
+    const allRelevant = [];
     for (const gName of PASS_GROUPS) {
       const grp = (groups[gName]||[]).filter(p => p.rAtt > 0);
       const relevant = grp.filter(p => Object.keys(p.rZones||{}).length > 0);
       if (!relevant.length) continue;
+      allRelevant.push(...relevant);
       rows += `<tr><td colspan="${TOTAL_COLS}" style="${GH}">${gName}</td></tr>`;
       for (const p of relevant) {
         // Build merged zone record for the Overall column
@@ -3345,7 +3405,11 @@ function buildZoneSheet(groups) {
           <td class="num" style="color:${totAvg!==null?totAvg>2.5?'var(--green)':totAvg<1.5?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
         </tr>`;
       }
+      // Group subtotal row
+      rows += subtotalRow(`* ${gName}`, relevant);
     }
+    // Team total row
+    if (allRelevant.length) rows += subtotalRow('TEAM TOTAL', allRelevant, 'background:var(--maroon);color:#fff;font-weight:700');
     if (!rows) return '<div class="empty">No zone data — zone tracking requires 2026+ seasons</div>';
     return `<div class="xlsx-wrap"><table class="xlsx-tbl rpt-sticky">
       <thead>
