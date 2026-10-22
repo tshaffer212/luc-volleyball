@@ -1689,8 +1689,8 @@ function getTimeBuckets(seasons, bucketType) {
     } else if (bucketType === 'month') {
       key = sess.date.slice(0, 7);
     } else if (bucketType === 'week') {
-      // Monday of ISO week
-      const d = new Date(sess.date);
+      // Monday of ISO week — use noon to avoid UTC-midnight timezone shift
+      const d = new Date(sess.date + 'T12:00:00');
       const dow = d.getDay();
       const diff = dow === 0 ? -6 : 1 - dow;
       const mon = new Date(d);
@@ -1712,7 +1712,9 @@ function getTimeBuckets(seasons, bucketType) {
 
   const labels = keys.map(k => {
     if (bucketType === 'season') return k;
-    const d = new Date(k.length === 7 ? k + '-15' : k);
+    // Append T12:00:00 so the date is noon local time — avoids UTC-midnight
+    // shifting the label one day back in US timezones.
+    const d = new Date((k.length === 7 ? k + '-15' : k) + 'T12:00:00');
     if (bucketType === 'month') {
       return `${d.toLocaleString('default',{month:'short'})} '${String(d.getFullYear()).slice(2)}`;
     }
@@ -5337,7 +5339,7 @@ function populatePeriodDropdown(seasonVal, elId) {
 
   const weekMap = {};
   for (const sess of sessions) {
-    const d = new Date(sess.date), dow = d.getDay();
+    const d = new Date(sess.date + 'T12:00:00'), dow = d.getDay();
     const mon = new Date(d);
     mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
     weekMap[mon.toISOString().slice(0,10)] = true;
@@ -5348,7 +5350,7 @@ function populatePeriodDropdown(seasonVal, elId) {
     wg.label = 'By Week';
     for (const wk of weekKeys) {
       wg.appendChild(new Option(
-        `Wk of ${new Date(wk).toLocaleString('default',{month:'short',day:'numeric'})}`,
+        `Wk of ${new Date(wk + 'T12:00:00').toLocaleString('default',{month:'short',day:'numeric'})}`,
         'week:' + wk
       ));
     }
@@ -5381,7 +5383,7 @@ function buildPeriodSids(seasons, periodVal) {
       if (sess.date.startsWith(periodVal.slice(6))) sids.add(sess.id);
     } else if (periodVal.startsWith('week:')) {
       const wkStart = periodVal.slice(5);
-      const d = new Date(sess.date), dow = d.getDay();
+      const d = new Date(sess.date + 'T12:00:00'), dow = d.getDay();
       const mon = new Date(d);
       mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
       if (mon.toISOString().slice(0,10) === wkStart) sids.add(sess.id);
@@ -5404,7 +5406,7 @@ function buildTrendBuckets(sids, bucketType) {
     if (bucketType === 'month') {
       key = sess.date.slice(0,7);
     } else if (bucketType === 'week') {
-      const d = new Date(sess.date), dow = d.getDay();
+      const d = new Date(sess.date + 'T12:00:00'), dow = d.getDay();
       const mon = new Date(d);
       mon.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
       key = mon.toISOString().slice(0,10);
@@ -5416,7 +5418,7 @@ function buildTrendBuckets(sids, bucketType) {
   }
   const keys = Object.keys(byBucket).sort();
   const labels = keys.map(k => {
-    const d = new Date(k.length === 7 ? k+'-15' : k);
+    const d = new Date((k.length === 7 ? k+'-15' : k) + 'T12:00:00');
     if (bucketType === 'month')
       return `${d.toLocaleString('default',{month:'short'})} '${String(d.getFullYear()).slice(2)}`;
     return d.toLocaleString('default', {month:'short', day:'numeric'});
