@@ -555,6 +555,11 @@
       <option value="week">Week</option>
       <option value="day">Day</option>
     </select></div>
+    <div class="filter-sep"></div>
+    <div><label>Pass Scale</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setRcvPassScale('4')" id="rpt-scale-4" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">4-pt</button>
+      <button onclick="setRcvPassScale('3')" id="rpt-scale-3" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">3-pt</button>
+    </div></div>
   </div>
 
   <!-- Trend Section -->
@@ -904,7 +909,7 @@
       <div class="card">
         <h3>Zone by Player — vs Float</h3>
         <div class="table-scroll">
-          <table class="data-table rpt-sticky">
+          <table class="data-table">
             <thead><tr>
               <th>#</th><th>Name</th>
               <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
@@ -918,7 +923,7 @@
       <div class="card">
         <h3>Zone by Player — vs Top Spin</h3>
         <div class="table-scroll">
-          <table class="data-table rpt-sticky">
+          <table class="data-table">
             <thead><tr>
               <th>#</th><th>Name</th>
               <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
@@ -952,7 +957,7 @@
     <div class="card">
       <h3>Zone Breakdown — by Player</h3>
       <div class="table-scroll">
-        <table class="data-table rpt-sticky" id="rcv-zone-player-table">
+        <table class="data-table" id="rcv-zone-player-table">
           <thead><tr>
             <th>#</th><th>Name</th>
             <th class="num">Z1 Att</th><th class="num">Z1 AVG</th>
@@ -1247,14 +1252,7 @@ function serveMetrics(evals, attempts) {
 function rcvMetrics(evals, attempts, rcv_pts, rcv_cat) {
   if (!evals || !attempts) return null;
   let avg;
-  if (rcvPassScale === '3') {
-    // Always recalculate from raw evals on 3-pt scale
-    avg = passAvgFromEvals(evals, attempts);
-  } else if (rcv_pts != null) {
-    avg = rcv_pts / attempts;  // pre-scaled 4-pt
-  } else {
-    avg = passAvgFromEvals(evals, attempts);
-  }
+  avg = passAvgFromEvals(evals, attempts);   // scale-aware (3-pt / 4-pt toggle)
   let perf_pct, gp_pct, med_pct, oos_pct, over_pct, err_pct;
   if (rcv_cat) {
     perf_pct = (rcv_cat.perf||0) / attempts * 100;
@@ -1512,13 +1510,16 @@ function syncSeason(value) {
 // ── Pass scale toggle (S&R tab) ───────────────────────────────────────────────
 function setRcvPassScale(scale) {
   rcvPassScale = scale;
-  ['4','3'].forEach(s => {
-    const btn = document.getElementById('sr-scale-' + s);
+  // Keep both toggles (S&R tab + Reports tab) in sync
+  ['sr','rpt'].forEach(pfx => ['4','3'].forEach(s => {
+    const btn = document.getElementById(`${pfx}-scale-${s}`);
     if (!btn) return;
     btn.style.background = (s === scale) ? 'var(--maroon)' : 'var(--surface2)';
     btn.style.color = (s === scale) ? '#fff' : 'var(--text)';
-  });
-  renderServRcv();
+  }));
+  // Re-render whichever tab is visible
+  if (document.getElementById('tab-reports')?.classList.contains('active')) renderReports();
+  else renderServRcv();
 }
 
 // ── Serve type filter (S&R tab only) ─────────────────────────────────────────
@@ -1798,9 +1799,7 @@ function renderReports() {
   });
   const rcvAvg = monthMetric(sk => {
     const R = sk['R']; if (!R?.attempts) return null;
-    if (R.rcv_pts != null) return +(R.rcv_pts / R.attempts).toFixed(3);
-    const ev = R.evals||{};
-    return +((3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts).toFixed(3);
+    return +passAvgFromEvals(R.evals, R.attempts).toFixed(3);
   });
   const srvAce = monthMetric(sk => {
     const S = sk['S']; if (!S?.attempts) return null;
@@ -2328,21 +2327,21 @@ function buildMatchOverviewPanel(sessionIds) {
     }
     if (sk.R&&sk.R.attempts>0) {
       const cat=sk.R.rcv_cat||{};
-      p.R.att+=sk.R.attempts; p.R.pts+=sk.R.rcv_pts||0;
+      p.R.att+=sk.R.attempts; p.R.pts+=passPtsFromEvals(sk.R.evals);
       p.R.perf+=cat.perf||0; p.R.good+=cat.good||0; p.R.med+=cat.med||0;
       p.R.oos+=cat.oos||0; p.R.over+=cat.over||0; p.R.err+=cat.err||0;
     }
     for (const [rk, zk, zoneKey] of [['RM','zonesM','rcv_zones_m'],['RQ','zonesQ','rcv_zones_q']]) {
       if (sk[rk]&&sk[rk].attempts>0) {
         const cat=sk[rk].rcv_cat||{};
-        p[rk].att+=sk[rk].attempts; p[rk].pts+=sk[rk].rcv_pts||0;
+        p[rk].att+=sk[rk].attempts; p[rk].pts+=passPtsFromEvals(sk[rk].evals);
         p[rk].perf+=cat.perf||0; p[rk].good+=cat.good||0; p[rk].med+=cat.med||0;
         p[rk].oos+=cat.oos||0; p[rk].over+=cat.over||0; p[rk].err+=cat.err||0;
       }
       for (const [z,zd] of Object.entries(ps[zoneKey]||{})) {
         if (!p[zk][z]) p[zk][z]={att:0,pts:0,perf:0,err:0};
         const ev=zd.evals||{};
-        p[zk][z].att+=zd.attempts||0; p[zk][z].pts+=zd.rcv_pts||0;
+        p[zk][z].att+=zd.attempts||0; p[zk][z].pts+=passPtsFromEvals(zd.evals);
         p[zk][z].perf+=ev['#']||0; p[zk][z].err+=ev['=']||0;
       }
     }
@@ -2353,7 +2352,7 @@ function buildMatchOverviewPanel(sessionIds) {
     for (const [z,zd] of Object.entries(ps.rcv_zones||{})) {
       if (!p.zones[z]) p.zones[z]={att:0,pts:0,perf:0,err:0};
       const ev=zd.evals||{};
-      p.zones[z].att+=zd.attempts||0; p.zones[z].pts+=zd.rcv_pts||0;
+      p.zones[z].att+=zd.attempts||0; p.zones[z].pts+=passPtsFromEvals(zd.evals);
       p.zones[z].perf+=ev['#']||0; p.zones[z].err+=ev['=']||0;
     }
   }
@@ -2521,7 +2520,7 @@ function buildMatchOverviewPanel(sessionIds) {
   function rcvCells4(r) {
     if (!r.att) return `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
     const avg=(r.pts/r.att).toFixed(2);
-    const ac=+avg>=3.0?'var(--green)':+avg<2.0?'var(--red)':'var(--text)';
+    const ac=passAvgColor(+avg);
     return `<td class="num">${r.att}</td><td class="num" style="color:${ac};font-weight:600">${avg}</td><td class="num">${pct(r.perf,r.att)}</td><td class="num" style="color:var(--red)">${pct(r.err,r.att)}</td>`;
   }
   function rcvCells4sum(att,pts,perf,err) { return rcvCells4({att,pts,perf,err}); }
@@ -2581,7 +2580,7 @@ function buildMatchOverviewPanel(sessionIds) {
       </tr></thead><tbody>`;
     function zoneAvg(zd) { return zd?.att ? (zd.pts/zd.att) : null; }
     function zoneAvgStr(zd) { const a=zoneAvg(zd); return a!==null ? a.toFixed(2) : '—'; }
-    function zoneAvgColor(zd) { const a=zoneAvg(zd); return a===null?'var(--text-dim)':a>=3.0?'var(--green)':a<2.0?'var(--red)':'var(--text)'; }
+    function zoneAvgColor(zd) { return passAvgColor(zoneAvg(zd)); }
     for (const z of activeZones) {
       const zd=teamZones[z], zm=teamZonesM[z]||{att:0,pts:0,perf:0,err:0}, zq=teamZonesQ[z]||{att:0,pts:0,perf:0,err:0};
       html+=`<tr>
@@ -3474,7 +3473,7 @@ function renderRptDetail() {
   const A=skills['A']||{}, R=skills['R']||{}, S=skills['S']||{};
   const Aatt=A.attempts||0, Ratt=R.attempts||0, Satt=S.attempts||0;
   const atkEffVal = Aatt ? ((((A.evals||{})['#']||0)-((A.evals||{})['=']||0))/Aatt*100).toFixed(1)+'%' : '—';
-  const rcvAvgVal = Ratt ? rcvAvg(R.evals||{}, Ratt, R.rcv_pts).toFixed(2) : '—';
+  const rcvAvgVal = Ratt ? passAvgFromEvals(R.evals||{}, Ratt).toFixed(2) : '—';
   const aceVal    = Satt ? (((S.evals||{})['#']||0)/Satt*100).toFixed(1)+'%' : '—';
   const errVal    = Satt ? (((S.evals||{})['=']||0)/Satt*100).toFixed(1)+'%' : '—';
 
@@ -5237,21 +5236,23 @@ const ZONE_COLORS_SR = { '1': MAROON, '5': '#888888', '6': GOLD };
 // '4' = 4-point (#=4,+=3,!=2,-=1,/=0.5), '3' = 3-point (#=3,+=2,-=1,/=0.5)
 let rcvPassScale = '4';
 
-function passAvgFromEvals(ev, att) {
-  if (!att) return null;
+// Total pass points for an evals dict on the selected scale. Every pass average in
+// the dashboard is computed from raw evals through here, so the toggle applies everywhere.
+//   4-pt: #=4  +=3  !=2  -=1  /=0.5  ==0
+//   3-pt: #=3  +=2  !=2  -=1  /=0.5  ==0   (medium '!' folds into the 2-pt "good" bucket)
+function passPtsFromEvals(ev) {
+  ev = ev || {};
   if (rcvPassScale === '4')
-    return (4*(ev['#']||0) + 3*(ev['+']||0) + 2*(ev['!']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
-  return   (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
+    return 4*(ev['#']||0) + 3*(ev['+']||0) + 2*(ev['!']||0) + (ev['-']||0) + 0.5*(ev['/']||0);
+  return   3*(ev['#']||0) + 2*(ev['+']||0) + 2*(ev['!']||0) + (ev['-']||0) + 0.5*(ev['/']||0);
+}
+function passAvgFromEvals(ev, att) {
+  return att ? passPtsFromEvals(ev) / att : null;
 }
 
 function zoneAvgFromRecord(zd) {
   if (!zd?.attempts) return null;
-  const ev = zd.evals||{}, att = zd.attempts;
-  // If 3-pt is selected, always recalculate from raw evals (ignore pre-scaled rcv_pts)
-  if (rcvPassScale === '3') return passAvgFromEvals(ev, att);
-  // 4-pt: use pre-scaled rcv_pts when available (already correct 4-pt for matches)
-  if (zd.rcv_pts != null) return zd.rcv_pts / att;
-  return passAvgFromEvals(ev, att);
+  return passAvgFromEvals(zd.evals, zd.attempts);
 }
 
 // Thresholds scale with the system: 4-pt uses higher cutoffs
@@ -5276,7 +5277,7 @@ function renderZoneTeamPanel(zones, containerId) {
     const avg = zoneAvgFromRecord(zd);
     const gp  = ((ev['#']||0)+(ev['+']||0)+(ev['/']||0))/att*100;
     const err = (ev['=']||0)/att*100;
-    const bar = Math.min(100,(avg/4)*100);  // 4-pt max for match scale
+    const bar = Math.min(100,(avg/(rcvPassScale==="4"?4:3))*100);  // bar max follows pass scale
     return `<div style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <span style="font-size:12px;font-weight:700;color:${ZONE_COLORS_SR[z]}">${ZONE_LABELS_SR[z]}</span>
@@ -5307,8 +5308,7 @@ function renderZonePlayerTbody(activeSids, seasons, group, zoneKey, tbodyId) {
     const p = pzDisplay[pid];
     for (const [z, zd] of Object.entries(ps[zoneKey]||{})) {
       const att = zd.attempts||0;
-      const wgt = zd.rcv_pts != null ? zd.rcv_pts
-        : (()=>{ const ev=zd.evals||{}; return 3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0); })();
+      const wgt = passPtsFromEvals(zd.evals);
       if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
       if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
       if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
@@ -5332,7 +5332,7 @@ function renderZonePlayerTbody(activeSids, seasons, group, zoneKey, tbodyId) {
     .filter(p => p.z1a+p.z5a+p.z6a > 0)
     .sort((a,b) => (b.z1a+b.z5a+b.z6a)-(a.z1a+a.z5a+a.z6a));
   tbody.innerHTML = rows.map(p => `<tr>
-    <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+    <td class="gold">#${p.pnum}</td><td style="white-space:nowrap">${p.name}</td>
     <td class="num">${p.z1a||'—'}</td>
     <td class="num gold">${p.z1a?(p.z1s/p.z1a).toFixed(2):'—'}</td>
     <td class="num">${p.z5a||'—'}</td>
@@ -5438,8 +5438,7 @@ function renderServRcv() {
             if (!sids?.size) return null;
             const { skills } = aggregateSessionStats(sids);
             const R = skills['RM']; if (!R?.attempts) return null;
-            const avg = R.rcv_pts != null ? R.rcv_pts / R.attempts
-              : (()=>{ const ev=R.evals||{}; return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts; })();
+            const avg = passAvgFromEvals(R.evals, R.attempts);
             return +avg.toFixed(3);
           }),
           borderColor:'#888888', backgroundColor:'#88888833',
@@ -5448,8 +5447,7 @@ function renderServRcv() {
             if (!sids?.size) return null;
             const { skills } = aggregateSessionStats(sids);
             const R = skills['RQ']; if (!R?.attempts) return null;
-            const avg = R.rcv_pts != null ? R.rcv_pts / R.attempts
-              : (()=>{ const ev=R.evals||{}; return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts; })();
+            const avg = passAvgFromEvals(R.evals, R.attempts);
             return +avg.toFixed(3);
           }),
           borderColor: GOLD, backgroundColor: GOLD+'33',
@@ -5554,8 +5552,7 @@ function renderServRcv() {
         if (!sids?.size) return null;
         const { skills } = aggregateSessionStats(sids);
         const R = skills[rKeyForTrend]; if (!R?.attempts) return null;
-        const avg = R.rcv_pts != null ? R.rcv_pts / R.attempts
-          : (()=>{ const ev=R.evals||{}; return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/R.attempts; })();
+        const avg = passAvgFromEvals(R.evals, R.attempts);
         return +avg.toFixed(3);
       }),
       borderColor: GOLD, backgroundColor: GOLD+'33',
@@ -5600,8 +5597,7 @@ function renderServRcv() {
     for (const [z, zd] of Object.entries(ps[zKey]||{})) {
       const att = zd.attempts||0;
       // Use rcv_pts when available for correct match/practice scale weighting
-      const wgt = zd.rcv_pts != null ? zd.rcv_pts
-        : (()=>{ const ev=zd.evals||{}; return 3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0); })();
+      const wgt = passPtsFromEvals(zd.evals);
       if (z==='1'){ p.z1a+=att; p.z1s+=wgt; }
       if (z==='5'){ p.z5a+=att; p.z5s+=wgt; }
       if (z==='6'){ p.z6a+=att; p.z6s+=wgt; }
@@ -5625,7 +5621,7 @@ function renderServRcv() {
     .filter(p => p.z1a+p.z5a+p.z6a > 0)
     .sort((a,b) => (b.z1a+b.z5a+b.z6a)-(a.z1a+a.z5a+a.z6a));
   zoneTbody.innerHTML = pzRows.map(p => `<tr>
-    <td class="gold">#${p.pnum}</td><td>${p.name}</td>
+    <td class="gold">#${p.pnum}</td><td style="white-space:nowrap">${p.name}</td>
     <td class="num">${p.z1a||'—'}</td>
     <td class="num gold">${p.z1a?(p.z1s/p.z1a).toFixed(2):'—'}</td>
     <td class="num">${p.z5a||'—'}</td>
