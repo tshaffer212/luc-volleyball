@@ -747,12 +747,12 @@
               <th>#</th><th>Name</th>
               <th class="num">Att</th>
               <th class="num">AVG</th>
-              <th class="num">Perfect %</th>
-              <th class="num">GP %</th>
-              <th class="num">Med %</th>
-              <th class="num">OoS %</th>
-              <th class="num">Over %</th>
-              <th class="num">Err %</th>
+              <th class="num" data-rcvcat="perf">Perf</th>
+              <th class="num" data-rcvcat="good">Good</th>
+              <th class="num" data-rcvcat="med">Med</th>
+              <th class="num" data-rcvcat="oos">OoS</th>
+              <th class="num" data-rcvcat="over">Over</th>
+              <th class="num" data-rcvcat="err">Err</th>
             </tr></thead>
             <tbody id="rcv-tbody"></tbody>
           </table>
@@ -1270,8 +1270,12 @@ function rcvMetrics(evals, attempts, rcv_pts, rcv_cat) {
     over_pct = (evals['/']||0) / attempts * 100;
     err_pct  = (evals['=']||0) / attempts * 100;
   }
+  const c = rcv_cat || { perf:evals['#']||0, good:evals['+']||0, med:evals['!']||0,
+                         oos:evals['-']||0, over:evals['/']||0, err:evals['=']||0 };
   return {
     attempts,
+    perf_n: c.perf||0, gp_n: c.good||0, med_n: c.med||0,
+    oos_n:  c.oos||0,  over_n: c.over||0, err_n: c.err||0,
     avg:      +avg.toFixed(3),
     perf_pct: +perf_pct.toFixed(1),
     gp_pct:   +gp_pct.toFixed(1),
@@ -1517,6 +1521,7 @@ function setRcvPassScale(scale) {
     btn.style.background = (s === scale) ? 'var(--maroon)' : 'var(--surface2)';
     btn.style.color = (s === scale) ? '#fff' : 'var(--text)';
   }));
+  refreshRcvHeaders();
   // Re-render whichever tab is visible
   if (document.getElementById('tab-reports')?.classList.contains('active')) renderReports();
   else renderServRcv();
@@ -2521,25 +2526,25 @@ function buildMatchOverviewPanel(sessionIds) {
     if (!r.att) return `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
     const avg=(r.pts/r.att).toFixed(2);
     const ac=passAvgColor(+avg);
-    return `<td class="num">${r.att}</td><td class="num" style="color:${ac};font-weight:600">${avg}</td><td class="num">${pct(r.perf,r.att)}</td><td class="num" style="color:var(--red)">${pct(r.err,r.att)}</td>`;
+    return `<td class="num">${r.att}</td><td class="num" style="color:${ac};font-weight:600">${avg}</td><td class="num">${cntPct(r.perf,r.att)}</td><td class="num" style="color:var(--red)">${cntPct(r.err,r.att)}</td>`;
   }
   function rcvCells4sum(att,pts,perf,err) { return rcvCells4({att,pts,perf,err}); }
   // Full 9-cell block for total R: ATT AVG # + ! - / ERR ERR%
   function rcvCells9(r) {
     const avg=r.att?(r.pts/r.att).toFixed(2):'---';
-    return `<td class="num">${r.att||'—'}</td><td class="num" style="color:var(--gold)">${avg}</td><td class="num" style="color:var(--green)">${r.perf||'—'}</td><td class="num">${r.good||'—'}</td><td class="num">${r.med||'—'}</td><td class="num">${r.oos||'—'}</td><td class="num">${r.over||'—'}</td><td class="num" style="color:var(--red)">${r.err||'—'}</td><td class="num">${pct(r.err,r.att)}</td>`;
+    return `<td class="num">${r.att||'—'}</td><td class="num" style="color:var(--gold)">${avg}</td><td class="num" style="color:var(--green)">${cntPct(r.perf,r.att)}</td><td class="num">${cntPct(r.good,r.att)}</td><td class="num">${cntPct(r.med,r.att)}</td><td class="num">${cntPct(r.oos,r.att)}</td><td class="num">${cntPct(r.over,r.att)}</td><td class="num" style="color:var(--red)">${cntPct(r.err,r.att)}</td>`;
   }
   // 17 cols after the colspan=2 header cell (4+4+9)
   html+=`<div style="overflow-x:auto;margin-bottom:24px"><table class="xlsx-tbl rpt-sticky"><thead>
     <tr><th rowspan="2">#</th><th rowspan="2">PLAYER</th>
       <th class="num" colspan="4" style="text-align:center;background:rgba(60,100,180,.2);color:#7aaaff;font-size:11px">Float (RM)</th>
       <th class="num" colspan="4" style="text-align:center;background:rgba(120,60,160,.2);color:#cc99ff;font-size:11px">Topspin (RQ)</th>
-      <th class="num" colspan="9" style="text-align:center;background:rgba(141,0,52,.2);color:var(--gold);font-size:11px">All Receives</th>
+      <th class="num" colspan="8" style="text-align:center;background:rgba(141,0,52,.2);color:var(--gold);font-size:11px">All Receives</th>
     </tr>
     <tr>
-      <th class="num">ATT</th><th class="num">AVG</th><th class="num">PERF%</th><th class="num">ERR%</th>
-      <th class="num">ATT</th><th class="num">AVG</th><th class="num">PERF%</th><th class="num">ERR%</th>
-      <th class="num">ATT</th><th class="num" style="color:var(--gold)">AVG</th><th class="num"># Perf</th><th class="num">+ Good</th><th class="num">! Med</th><th class="num">- OoS</th><th class="num">/ OVP</th><th class="num">ERR</th><th class="num">ERR%</th>
+      <th class="num">ATT</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('err')}</th>
+      <th class="num">ATT</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('err')}</th>
+      <th class="num">ATT</th><th class="num" style="color:var(--gold)">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('good')}</th><th class="num">${rcvHdr('med')}</th><th class="num">${rcvHdr('oos')}</th><th class="num">${rcvHdr('over')}</th><th class="num">${rcvHdr('err')}</th>
     </tr></thead><tbody>`;
   for (const {key,code,lib} of POS_GROUPS) {
     const nums=grpNums(code,lib).filter(n=>pstats[n].R.att>0||pstats[n].RM.att>0||pstats[n].RQ.att>0);
@@ -2547,7 +2552,7 @@ function buildMatchOverviewPanel(sessionIds) {
     let gAtt=0,gPts=0,gPerf=0,gGood=0,gMed=0,gOos=0,gOver=0,gErr=0;
     let gMatt=0,gMpts=0,gMperf=0,gMerr=0;
     let gQatt=0,gQpts=0,gQperf=0,gQerr=0;
-    html+=grpHdr(key,19);
+    html+=grpHdr(key,18);
     for (const n of nums) {
       const r=pstats[n].R, rm=pstats[n].RM, rq=pstats[n].RQ;
       gAtt+=r.att; gPts+=r.pts; gPerf+=r.perf; gGood+=r.good; gMed+=r.med;
@@ -2556,10 +2561,10 @@ function buildMatchOverviewPanel(sessionIds) {
       gQatt+=rq.att; gQpts+=rq.pts; gQperf+=rq.perf; gQerr+=rq.err;
       html+=`<tr><td style="font-weight:600">#${n}</td><td>${pName(n)}</td>${rcvCells4(rm)}${rcvCells4(rq)}${rcvCells9(r)}</tr>`;
     }
-    html+=subRow(key,`${rcvCells4sum(gMatt,gMpts,gMperf,gMerr)}${rcvCells4sum(gQatt,gQpts,gQperf,gQerr)}<td class="num">${gAtt}</td><td class="num">${gAtt?(gPts/gAtt).toFixed(2):'---'}</td><td class="num">${gPerf||'—'}</td><td class="num">${gGood||'—'}</td><td class="num">${gMed||'—'}</td><td class="num">${gOos||'—'}</td><td class="num">${gOver||'—'}</td><td class="num">${gErr||'—'}</td><td class="num">${pct(gErr,gAtt)}</td>`);
+    html+=subRow(key,`${rcvCells4sum(gMatt,gMpts,gMperf,gMerr)}${rcvCells4sum(gQatt,gQpts,gQperf,gQerr)}<td class="num">${gAtt}</td><td class="num">${gAtt?(gPts/gAtt).toFixed(2):'---'}</td><td class="num">${cntPct(gPerf,gAtt)}</td><td class="num">${cntPct(gGood,gAtt)}</td><td class="num">${cntPct(gMed,gAtt)}</td><td class="num">${cntPct(gOos,gAtt)}</td><td class="num">${cntPct(gOver,gAtt)}</td><td class="num">${cntPct(gErr,gAtt)}</td>`);
   }
   const ttAvg=tRAtt?(tRPts/tRAtt).toFixed(2):'---';
-  html+=totRow(`${rcvCells4sum(tRMAtt,tRMPts,tRMPerf,tRMErr)}${rcvCells4sum(tRQAtt,tRQPts,tRQPerf,tRQErr)}<td class="num">${tRAtt}</td><td class="num" style="color:var(--gold)">${ttAvg}</td><td class="num">${tRPerf||'—'}</td><td class="num">${tRGood||'—'}</td><td class="num">${tRMed||'—'}</td><td class="num">${tROos||'—'}</td><td class="num">${tROver||'—'}</td><td class="num">${tRErr||'—'}</td><td class="num">${pct(tRErr,tRAtt)}</td>`);
+  html+=totRow(`${rcvCells4sum(tRMAtt,tRMPts,tRMPerf,tRMErr)}${rcvCells4sum(tRQAtt,tRQPts,tRQPerf,tRQErr)}<td class="num">${tRAtt}</td><td class="num" style="color:var(--gold)">${ttAvg}</td><td class="num">${cntPct(tRPerf,tRAtt)}</td><td class="num">${cntPct(tRGood,tRAtt)}</td><td class="num">${cntPct(tRMed,tRAtt)}</td><td class="num">${cntPct(tROos,tRAtt)}</td><td class="num">${cntPct(tROver,tRAtt)}</td><td class="num">${cntPct(tRErr,tRAtt)}</td>`);
   html+='</tbody></table></div>';
 
   // ── Receive by Zone (Float / Topspin / Total) ─────────────────────────────
@@ -3106,8 +3111,8 @@ function buildServeRcvSheet(groups) {
     const rmCells = rmAtt
       ? `<td ${ns(BL_FLOAT)}>${rmAtt}</td>
          <td ${mns()}>${rmM&&rmM.avg!==null?rmM.avg.toFixed(2):'—'}</td>
-         <td ${gns()}>${rmM?xpct(rmM.perf_pct/100):'—'}</td>
-         <td ${rns()}>${rmM?xpct(rmM.err_pct/100):'—'}</td>`
+         <td ${gns()}>${rmM?cntPct(rmM.perf_n,rmM.attempts):'—'}</td>
+         <td ${rns()}>${rmM?cntPct(rmM.err_n,rmM.attempts):'—'}</td>`
       : `<td colspan="4" style="${B}text-align:center;color:var(--text-dim)${BL_FLOAT}">—</td>`;
 
     // Topspin (RQ) — 4 cols: Att AVG Perf% Err%
@@ -3116,8 +3121,8 @@ function buildServeRcvSheet(groups) {
     const rqCells = rqAtt
       ? `<td ${ns(BL_TS)}>${rqAtt}</td>
          <td ${mns()}>${rqM&&rqM.avg!==null?rqM.avg.toFixed(2):'—'}</td>
-         <td ${gns()}>${rqM?xpct(rqM.perf_pct/100):'—'}</td>
-         <td ${rns()}>${rqM?xpct(rqM.err_pct/100):'—'}</td>`
+         <td ${gns()}>${rqM?cntPct(rqM.perf_n,rqM.attempts):'—'}</td>
+         <td ${rns()}>${rqM?cntPct(rqM.err_n,rqM.attempts):'—'}</td>`
       : `<td colspan="4" style="${B}text-align:center;color:var(--text-dim)${BL_TS}">—</td>`;
 
     // All (R) — 8 cols: Att AVG Perf% Good% Med% OOS% Over% Err%
@@ -3126,12 +3131,12 @@ function buildServeRcvSheet(groups) {
     const rCells = att
       ? `<td ${ns(BL_ALL)}>${att}</td>
          <td ${mns()}>${m&&m.avg!==null?m.avg.toFixed(2):'—'}</td>
-         <td ${gns()}>${m?xpct(m.perf_pct/100):'—'}</td>
-         <td ${gns()}>${m?xpct(m.gp_pct/100):'—'}</td>
-         <td ${mns()}>${m&&m.med_pct?xpct(m.med_pct/100):'—'}</td>
-         <td ${rns()}>${m?xpct(m.oos_pct/100):'—'}</td>
-         <td ${dns()}>${m?xpct(m.over_pct/100):'—'}</td>
-         <td ${rns()}>${m?xpct(m.err_pct/100):'—'}</td>`
+         <td ${gns()}>${m?cntPct(m.perf_n,m.attempts):'—'}</td>
+         <td ${gns()}>${m?cntPct(m.gp_n,m.attempts):'—'}</td>
+         <td ${mns()}>${m&&m.med_n?cntPct(m.med_n,m.attempts):'—'}</td>
+         <td ${rns()}>${m?cntPct(m.oos_n,m.attempts):'—'}</td>
+         <td ${dns()}>${m?cntPct(m.over_n,m.attempts):'—'}</td>
+         <td ${rns()}>${m?cntPct(m.err_n,m.attempts):'—'}</td>`
       : `<td colspan="8" style="${B}text-align:center;color:var(--text-dim)${BL_ALL}">—</td>`;
 
     return rmCells + rqCells + rCells;
@@ -3173,9 +3178,9 @@ function buildServeRcvSheet(groups) {
         </tr>
         <tr style="${CH}">
           <th></th><th></th>
-          <th class="num" style="border-left:2px solid #3a5a8f">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
-          <th class="num" style="border-left:2px solid #6a3a8f">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
-          <th class="num" style="border-left:2px solid #6a5800">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Good%</th><th class="num">Med%</th><th class="num">OOS%</th><th class="num">Over%</th><th class="num">Err%</th>
+          <th class="num" style="border-left:2px solid #3a5a8f">Att</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('err')}</th>
+          <th class="num" style="border-left:2px solid #6a3a8f">Att</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('err')}</th>
+          <th class="num" style="border-left:2px solid #6a5800">Att</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('good')}</th><th class="num">${rcvHdr('med')}</th><th class="num">${rcvHdr('oos')}</th><th class="num">${rcvHdr('over')}</th><th class="num">${rcvHdr('err')}</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -5751,12 +5756,12 @@ function renderRcvTbody(tbodyId, players) {
       <td class="gold">#${p.pnum}</td><td>${p.name}</td>
       <td class="num">${p.rcv_att}</td>
       <td class="num gold">${rm?.avg.toFixed(2) || '—'}</td>
-      <td class="num green">${pct(rm?.perf_pct)}</td>
-      <td class="num">${pct(rm?.gp_pct)}</td>
-      <td class="num">${pct(rm?.med_pct)}</td>
-      <td class="num" style="color:var(--gold)">${pct(rm?.oos_pct)}</td>
-      <td class="num">${pct(rm?.over_pct)}</td>
-      <td class="num red">${pct(rm?.err_pct)}</td>
+      <td class="num green">${rm?cntPct(rm.perf_n,rm.attempts):'—'}</td>
+      <td class="num">${rm?cntPct(rm.gp_n,rm.attempts):'—'}</td>
+      <td class="num">${rm?cntPct(rm.med_n,rm.attempts):'—'}</td>
+      <td class="num" style="color:var(--gold)">${rm?cntPct(rm.oos_n,rm.attempts):'—'}</td>
+      <td class="num">${rm?cntPct(rm.over_n,rm.attempts):'—'}</td>
+      <td class="num red">${rm?cntPct(rm.err_n,rm.attempts):'—'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="10" class="empty">No reception data</td></tr>';
 }
@@ -5786,15 +5791,16 @@ function renderRcvUnified(containerId, floatPlayers, tsPlayers, allPlayers) {
     if (!p?.rcv_att) return '<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>';
     const rm = rcvMetrics(p.rcv_ev, p.rcv_att, p.rPts, p.rCat);
     if (!rm) return '<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>';
-    const ac = rm.avg>=3.0?'var(--green)':rm.avg<2.0?'var(--red)':'var(--text)';
-    return `<td class="num">${p.rcv_att}</td><td class="num" style="color:${ac};font-weight:600">${rm.avg.toFixed(2)}</td><td class="num green">${pct(rm.perf_pct)}</td><td class="num red">${pct(rm.err_pct)}</td>`;
+    const ac = passAvgColor(rm.avg);
+    return `<td class="num">${p.rcv_att}</td><td class="num" style="color:${ac};font-weight:600">${rm.avg.toFixed(2)}</td><td class="num green">${cntPct(rm.perf_n,rm.attempts)}</td><td class="num red">${cntPct(rm.err_n,rm.attempts)}</td>`;
   }
   function c8(p) {
     if (!p?.rcv_att) return '<td class="num">—</td>'.repeat(8);
     const rm = rcvMetrics(p.rcv_ev, p.rcv_att, p.rPts, p.rCat);
     if (!rm) return '<td class="num">—</td>'.repeat(8);
-    const ac = rm.avg>=3.0?'var(--green)':rm.avg<2.0?'var(--red)':'var(--text)';
-    return `<td class="num">${p.rcv_att}</td><td class="num" style="color:${ac};font-weight:600">${rm.avg.toFixed(2)}</td><td class="num green">${pct(rm.perf_pct)}</td><td class="num">${pct(rm.gp_pct)}</td><td class="num">${pct(rm.med_pct)}</td><td class="num" style="color:var(--gold)">${pct(rm.oos_pct)}</td><td class="num">${pct(rm.over_pct)}</td><td class="num red">${pct(rm.err_pct)}</td>`;
+    const ac = passAvgColor(rm.avg);
+    const n = rm.attempts;
+    return `<td class="num">${p.rcv_att}</td><td class="num" style="color:${ac};font-weight:600">${rm.avg.toFixed(2)}</td><td class="num green">${cntPct(rm.perf_n,n)}</td><td class="num">${cntPct(rm.gp_n,n)}</td><td class="num">${cntPct(rm.med_n,n)}</td><td class="num" style="color:var(--gold)">${cntPct(rm.oos_n,n)}</td><td class="num">${cntPct(rm.over_n,n)}</td><td class="num red">${cntPct(rm.err_n,n)}</td>`;
   }
   container.innerHTML = `<table class="data-table rpt-sticky" style="min-width:900px;border-collapse:collapse;font-size:12px;white-space:nowrap">
     <thead>
@@ -5806,9 +5812,9 @@ function renderRcvUnified(containerId, floatPlayers, tsPlayers, allPlayers) {
       </tr>
       <tr>
         <th></th><th></th>
-        <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
-        <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">Err%</th>
-        <th class="num">Att</th><th class="num">AVG</th><th class="num">Perf%</th><th class="num">GP%</th><th class="num">Med%</th><th class="num">OoS%</th><th class="num">OvP%</th><th class="num">Err%</th>
+        <th class="num">Att</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('err')}</th>
+        <th class="num">Att</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('err')}</th>
+        <th class="num">Att</th><th class="num">AVG</th><th class="num">${rcvHdr('perf')}</th><th class="num">${rcvHdr('good')}</th><th class="num">${rcvHdr('med')}</th><th class="num">${rcvHdr('oos')}</th><th class="num">${rcvHdr('over')}</th><th class="num">${rcvHdr('err')}</th>
       </tr>
     </thead>
     <tbody>
@@ -5903,6 +5909,28 @@ function passAvgColor(v) {
   return v >= hi ? 'var(--green)' : v < lo ? 'var(--red)' : 'var(--text)';
 }
 
+// ── Pass-category counts + point-value headers ──────────────────────────────
+const RCV_CAT_NAME = { perf:'Perf', good:'Good', med:'Med', oos:'OoS', over:'Over', err:'Err' };
+function rcvPtVal(cat) {
+  const four  = { perf:'4', good:'3', med:'2', oos:'1', over:'½', err:'0' };
+  const three = { perf:'3', good:'2', med:'2', oos:'1', over:'½', err:'0' };
+  return (rcvPassScale === '4' ? four : three)[cat];
+}
+// Header label like "Perf · 4pt"
+function rcvHdr(cat) {
+  return `${RCV_CAT_NAME[cat]} <span style="opacity:.55;font-weight:400">${rcvPtVal(cat)}pt</span>`;
+}
+// Re-label any static header cell tagged data-rcvcat="perf|good|med|oos|over|err"
+function refreshRcvHeaders() {
+  document.querySelectorAll('[data-rcvcat]').forEach(el => { el.innerHTML = rcvHdr(el.dataset.rcvcat); });
+}
+// Cell content: count + percentage, e.g. "12 34.5%"
+function cntPct(n, att) {
+  if (!att) return '—';
+  n = n || 0;
+  return `${n} <span style="opacity:.6;font-size:.88em">${(n/att*100).toFixed(1)}%</span>`;
+}
+
 function renderZoneTeamPanel(zones, containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -5983,6 +6011,7 @@ function renderZonePlayerTbody(activeSids, seasons, group, zoneKey, tbodyId) {
 }
 
 function renderServRcv() {
+  refreshRcvHeaders();
   syncTypeButtons('sr');
   const seasonVal  = document.getElementById('sr-season').value;
   const group      = document.getElementById('sr-group').value;
