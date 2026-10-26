@@ -3960,9 +3960,46 @@ function buildAttackSheet(groups) {
   const pinHtml = buildTable(PIN_COMBOS, 'ATTACK BY SET TYPE — PINS & BACKROW', ['OUTSIDES','OPPOSITES']);
   const midHtml = buildTable(MID_COMBOS, 'ATTACK BY SET TYPE — MIDDLES',        ['MIDDLES']);
 
+  // ── Full team total (pins + middles) ─────────────────────────────────────
+  // Uses the same player filters as the two tables above, so each group line
+  // matches that table's TOTAL column and the bottom line is their sum.
+  function fullTeamHtml() {
+    const lines = [
+      ['Outsides',  'OUTSIDES',  PIN_COMBOS],
+      ['Opposites', 'OPPOSITES', PIN_COMBOS],
+      ['Middles',   'MIDDLES',   MID_COMBOS],
+    ];
+    const T = {k:0,e:0,b:0,a:0};
+    const cells = (s, bold='') => {
+      const eff = s.a ? (s.k-s.e-s.b)/s.a : null;
+      const kp  = s.a ? s.k/s.a : null;
+      const f = v => v===null ? '—' : (v>=0?'+':'')+Math.round(v*100)+'%';
+      return `<td class="num" style="color:var(--green);${bold}">${s.k}</td><td class="num" style="color:var(--red);${bold}">${s.e}</td><td class="num" style="${bold}">${s.b||'—'}</td><td class="num" style="${bold}">${s.a}</td><td class="num" style="color:${effColor(eff)};${bold}">${f(eff)}</td><td class="num" style="${bold}">${kp===null?'—':Math.round(kp*100)+'%'}</td>`;
+    };
+    let rows = '';
+    for (const [label, gName, combos] of lines) {
+      const grp = (groups[gName]||[]).filter(p => combos.some(cc => (p.aC[cc]?.att||0) > 0));
+      if (!grp.length) continue;
+      const s = {k:0,e:0,b:0,a:0};
+      for (const p of grp) { s.k+=p.aEv['#']||0; s.e+=p.aEv['=']||0; s.b+=p.aEv['/']||0; s.a+=p.aAtt||0; }
+      T.k+=s.k; T.e+=s.e; T.b+=s.b; T.a+=s.a;
+      rows += `<tr><td colspan="2" style="font-weight:700;font-size:11px;color:var(--text-muted)">${label.toUpperCase()}</td>${cells(s)}</tr>`;
+    }
+    if (!T.a) return '';
+    rows += `<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="2">FULL TEAM TOTAL</td>${cells(T,'color:#fff;')}</tr>`;
+    return `<div class="xlsx-wrap"><table class="xlsx-tbl" style="max-width:640px">
+      <thead>
+        <tr><td colspan="8" style="${SH}">ATTACK — FULL TEAM TOTAL (PINS + MIDDLES)</td></tr>
+        <tr style="${CH}"><th colspan="2">Group</th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff%</th><th class="num">K%</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
   return `<div style="display:flex;flex-direction:column;gap:24px">
     ${pinHtml || '<div class="empty">No pin/backrow attack data for selected sessions</div>'}
     ${midHtml || '<div class="empty">No middle attack data for selected sessions</div>'}
+    ${fullTeamHtml()}
   </div>`;
 }
 
