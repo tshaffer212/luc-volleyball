@@ -707,6 +707,11 @@
       <button onclick="setSrServeType('topspin')" id="sr-sv-topspin" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Top Spin</button>
       <button onclick="setSrServeType('split')" id="sr-sv-split" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Side by Side</button>
     </div></div>
+    <div class="filter-sep"></div>
+    <div><label>Pass Scale</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setRcvPassScale('4')" id="sr-scale-4" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">4-pt</button>
+      <button onclick="setRcvPassScale('3')" id="sr-scale-3" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">3-pt</button>
+    </div></div>
   </div>
 
   <div class="grid-4" id="sr-kpi-row"></div>
@@ -1244,11 +1249,13 @@ function serveMetrics(evals, attempts) {
 function rcvMetrics(evals, attempts, rcv_pts, rcv_cat) {
   if (!evals || !attempts) return null;
   let avg;
-  if (rcv_pts != null) {
-    avg = rcv_pts / attempts;
+  if (rcvPassScale === '3') {
+    // Always recalculate from raw evals on 3-pt scale
+    avg = passAvgFromEvals(evals, attempts);
+  } else if (rcv_pts != null) {
+    avg = rcv_pts / attempts;  // pre-scaled 4-pt
   } else {
-    const perf = evals['#']||0, good = evals['+']||0, poor = evals['-']||0, over = evals['/']||0;
-    avg = (3*perf + 2*good + poor + 0.5*over) / attempts;
+    avg = passAvgFromEvals(evals, attempts);
   }
   let perf_pct, gp_pct, med_pct, oos_pct, over_pct, err_pct;
   if (rcv_cat) {
@@ -1502,6 +1509,18 @@ function syncSeason(value) {
   renderSetter();
   renderFbso();
   onPlayerSeasonChange(); // prunes pinned players for the new season, then renders the player list
+}
+
+// ── Pass scale toggle (S&R tab) ───────────────────────────────────────────────
+function setRcvPassScale(scale) {
+  rcvPassScale = scale;
+  ['4','3'].forEach(s => {
+    const btn = document.getElementById('sr-scale-' + s);
+    if (!btn) return;
+    btn.style.background = (s === scale) ? 'var(--maroon)' : 'var(--surface2)';
+    btn.style.color = (s === scale) ? '#fff' : 'var(--text)';
+  });
+  renderServRcv();
 }
 
 // ── Serve type filter (S&R tab only) ─────────────────────────────────────────
@@ -3300,10 +3319,8 @@ function buildZoneSheet(groups) {
   const ZONE_COLS = 4;
   const TOTAL_COLS = 2 + (ZONES.length + 1) * ZONE_COLS; // 2 + 4*4 = 18
 
-  function avgColor(v) {
-    if (v === null) return 'var(--text-dim)';
-    return v > 2.5 ? 'var(--green)' : v < 1.5 ? 'var(--red)' : 'var(--text)';
-  }
+  // Delegate to global passAvgColor so it respects the 3pt/4pt toggle
+  const avgColor = passAvgColor;
 
   // Helper: merge zone records from an array of players into one aggregate record per zone
   function mergeGroupZones(players) {
@@ -3359,7 +3376,7 @@ function buildZoneSheet(groups) {
       <td class="num" style="font-weight:700">${totZd.attempts||'—'}</td>
       <td class="num" style="color:#7aaaff">${totFAvg!==null?totFAvg.toFixed(2):'—'}</td>
       <td class="num" style="color:#cc99ff">${totTAvg!==null?totTAvg.toFixed(2):'—'}</td>
-      <td class="num" style="color:${totAvg!==null?totAvg>2.5?'var(--green)':totAvg<1.5?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
+      <td class="num" style="color:${passAvgColor(totAvg)};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
     </tr>`;
   }
 
@@ -3404,7 +3421,7 @@ function buildZoneSheet(groups) {
           <td class="num"><strong>${totalZd.attempts||'—'}</strong></td>
           <td class="num" style="color:#7aaaff">${(() => { const zdM={}; for(const z of ZONES){const d=p.rmZones[z.k]||{};for(const[e,n]of Object.entries(d.evals||{}))zdM[e]=(zdM[e]||0)+n;} const rmTotAtt=ZONES.reduce((s,z)=>s+(p.rmZones[z.k]?.attempts||0),0); const fA=zoneAvgFromRecord({attempts:rmTotAtt,evals:zdM}); return fA!==null?fA.toFixed(2):'—'; })()}</td>
           <td class="num" style="color:#cc99ff">${(() => { const zdQ={}; for(const z of ZONES){const d=p.rqZones[z.k]||{};for(const[e,n]of Object.entries(d.evals||{}))zdQ[e]=(zdQ[e]||0)+n;} const rqTotAtt=ZONES.reduce((s,z)=>s+(p.rqZones[z.k]?.attempts||0),0); const tA=zoneAvgFromRecord({attempts:rqTotAtt,evals:zdQ}); return tA!==null?tA.toFixed(2):'—'; })()}</td>
-          <td class="num" style="color:${totAvg!==null?totAvg>2.5?'var(--green)':totAvg<1.5?'var(--red)':'var(--gold)':'var(--text-dim)'};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
+          <td class="num" style="color:${passAvgColor(totAvg)};font-weight:700">${totAvg!==null?totAvg.toFixed(2):'—'}</td>
         </tr>`;
       }
       // Group subtotal row
@@ -5928,12 +5945,33 @@ function renderRcvDonut(chartId, teamRcvEv) {
 const ZONE_LABELS_SR = { '1':'Zone 1 (Back Right)', '5':'Zone 5 (Back Left)', '6':'Zone 6 (Back Middle)' };
 const ZONE_COLORS_SR = { '1': MAROON, '5': '#888888', '6': GOLD };
 
+// ── Pass-scale toggle ─────────────────────────────────────────────────────────
+// '4' = 4-point (#=4,+=3,!=2,-=1,/=0.5), '3' = 3-point (#=3,+=2,-=1,/=0.5)
+let rcvPassScale = '4';
+
+function passAvgFromEvals(ev, att) {
+  if (!att) return null;
+  if (rcvPassScale === '4')
+    return (4*(ev['#']||0) + 3*(ev['+']||0) + 2*(ev['!']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
+  return   (3*(ev['#']||0) + 2*(ev['+']||0) + (ev['-']||0) + 0.5*(ev['/']||0)) / att;
+}
+
 function zoneAvgFromRecord(zd) {
   if (!zd?.attempts) return null;
-  // Use pre-scaled rcv_pts when available (correct 4-pt match / 3-pt practice weighting)
-  if (zd.rcv_pts != null) return zd.rcv_pts / zd.attempts;
   const ev = zd.evals||{}, att = zd.attempts;
-  return (3*(ev['#']||0)+2*(ev['+']||0)+(ev['-']||0)+0.5*(ev['/']||0))/att;
+  // If 3-pt is selected, always recalculate from raw evals (ignore pre-scaled rcv_pts)
+  if (rcvPassScale === '3') return passAvgFromEvals(ev, att);
+  // 4-pt: use pre-scaled rcv_pts when available (already correct 4-pt for matches)
+  if (zd.rcv_pts != null) return zd.rcv_pts / att;
+  return passAvgFromEvals(ev, att);
+}
+
+// Thresholds scale with the system: 4-pt uses higher cutoffs
+function passAvgColor(v) {
+  if (v === null) return 'var(--text-dim)';
+  const hi = rcvPassScale === '4' ? 3.0 : 2.0;
+  const lo = rcvPassScale === '4' ? 2.0 : 1.5;
+  return v >= hi ? 'var(--green)' : v < lo ? 'var(--red)' : 'var(--text)';
 }
 
 function renderZoneTeamPanel(zones, containerId) {

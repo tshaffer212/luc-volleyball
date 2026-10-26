@@ -707,6 +707,10 @@ def main(raw_path, out_path):
             old = roster[num]['name']
             if old != correct_name:
                 roster[num]['name'] = correct_name
+                # Also fix first_name / last_name so no stale misspelling leaks into the output
+                parts = correct_name.split(' ', 1)
+                roster[num]['first_name'] = parts[0]
+                roster[num]['last_name']  = parts[1] if len(parts) > 1 else ''
                 print(f"  Name override: #{num} ({season}) '{old}' → '{correct_name}'", file=sys.stderr)
             # Also update name_canon so any variant maps to the override, scoped by
             # (num, variant) — safe here since name_canon lookup happens per (num, name)
