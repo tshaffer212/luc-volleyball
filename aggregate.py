@@ -544,6 +544,19 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
             # Blocks
             rot_so[rot]['blk'] += luc_blks
 
+        # Reception-quality buckets for this rally (shared by setter + MISC attribution)
+        quality_buckets = ['all']
+        if has_rcv:
+            quality_buckets.append('fbso')
+            if   rcv_ev == '#': quality_buckets.append('perf')
+            elif rcv_ev == '+': quality_buckets.append('good')
+            elif rcv_ev == '!': quality_buckets.append('med')
+            elif rcv_ev == '-': quality_buckets.append('oos')
+        else:
+            quality_buckets.append('transition')
+
+        linked_atk_ids = set()   # attacks credited to a setter's set this rally
+
         # Each setter action → find next attack in same rally (LUC only)
         for i, a in enumerate(rally):
             if a.get('skill_code') != 'E':
@@ -565,6 +578,10 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
             if not next_atk:
                 continue
 
+            # A doubled set code (two E's before one swing) must not count the attack twice
+            if id(next_atk) in linked_atk_ids:
+                continue
+            linked_atk_ids.add(id(next_atk))
             atk_num = next_atk.get('player_num', '')
             cc      = next_atk.get('combo_code') or 'OVR'
             ev      = next_atk.get('evaluation', '')
@@ -587,16 +604,6 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
                 continue
 
             # ── Attack by Setter — bucketed by reception quality ──────────────
-            quality_buckets = ['all']
-            if has_rcv:
-                quality_buckets.append('fbso')
-                if   rcv_ev == '#': quality_buckets.append('perf')
-                elif rcv_ev == '+': quality_buckets.append('good')
-                elif rcv_ev == '!': quality_buckets.append('med')
-                elif rcv_ev == '-': quality_buckets.append('oos')
-            else:
-                quality_buckets.append('transition')
-
             for bkt in quality_buckets:
                 add_atk(setter_atk[setter_num][atk_num][bkt][cc], ev)
                 if cc != 'OVR':
@@ -604,6 +611,23 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
                 add_atk(setter_atk[setter_num]['OVR'][bkt][cc], ev)
                 if cc != 'OVR':
                     add_atk(setter_atk[setter_num]['OVR'][bkt]['OVR'], ev)
+
+        # ── MISC: LUC attacks with no coded set before them (no setter to credit) ──
+        # Stored under pseudo-setter 'MISC' so Setter Breakdown totals match Overview.
+        for a in rally:
+            if a.get('skill_code') != 'A' or id(a) in linked_atk_ids:
+                continue
+            if loyola_side != 'both' and a.get('team_side') != loyola_side:
+                continue
+            atk_num = a.get('player_num', '')
+            if not atk_num:
+                continue
+            cc = a.get('combo_code') or 'OVR'
+            ev = a.get('evaluation', '')
+            for bkt in quality_buckets:
+                add_atk(setter_atk['MISC'][atk_num][bkt][cc], ev)
+                if cc != 'OVR':
+                    add_atk(setter_atk['MISC'][atk_num][bkt]['OVR'], ev)
 
     def ser_rot(d):
         return {r: {cc: dict(v) for cc, v in combos.items()} for r, combos in d.items()}

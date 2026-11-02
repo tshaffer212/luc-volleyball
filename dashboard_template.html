@@ -2067,7 +2067,7 @@ function toggleSetterSelect(snm) {
 function getAttackerMerged(atkNum, setterAtk) {
   const result = {};
   const snms = setterSelected === 'all'
-    ? Object.keys(setterAtk).filter(s => s !== 'OVR')
+    ? Object.keys(setterAtk).filter(s => s !== 'OVR' && s !== 'MISC')
     : [setterSelected];
   for (const snm of snms) {
     const atkData = (setterAtk[snm]||{})[atkNum]||{};
@@ -2080,6 +2080,19 @@ function getAttackerMerged(atkNum, setterAtk) {
     }
   }
   return result;
+}
+
+// MISC = attacks with no coded set before them (no setter to credit). Only shown
+// when Setter = All, since those attacks don't belong to any one setter.
+function getAttackerMisc(atkNum, setterAtk) {
+  const r = {k:0,e:0,bk:0,a:0};
+  if (setterSelected !== 'all') return r;
+  const atkData = (setterAtk.MISC||{})[atkNum]||{};
+  for (const bkt of setterBucketFilter) {
+    const v = (atkData[bkt]||{}).OVR;   // every MISC attack is rolled into OVR
+    if (v) { r.k+=v.k||0; r.e+=v.e||0; r.bk+=v.bk||0; r.a+=v.a||0; }
+  }
+  return r;
 }
 
 function buildSetterBreakdownTable(setterAtk) {
@@ -2113,7 +2126,13 @@ function buildSetterBreakdownTable(setterAtk) {
   if (!ccs.length) return '<div class="empty">No attack data for selected filter</div>';
 
   // All columns: K,E,BLK,ATT,EFF% (5 cells each) — displayed combos + OTHER + TOTAL
-  const colSpan = 2 + (ccs.length + 1) * 5 + 5; // +1 for OTHER column
+  const showMisc = setterSelected === 'all' && [...allAtkNums].some(n => getAttackerMisc(n, setterAtk).a > 0);
+  const colSpan = 2 + (ccs.length + 1 + (showMisc?1:0)) * 5 + 5; // +1 OTHER, +1 MISC
+  function miscCells(m, bold='') {
+    if (!showMisc) return '';
+    if (!m.a) return `<td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td><td class="num xlsx-dim">—</td>`;
+    return `<td class="num" style="${bold}">${m.k||'—'}</td><td class="num" style="${bold}">${m.e||'—'}</td><td class="num" style="${bold}">${m.bk||'—'}</td><td class="num" style="${bold}">${m.a}</td><td class="num" style="${bold}">${fmtEff(m.k,m.e,m.bk,m.a)}</td>`;
+  }
 
   function statCells(merged, cc) {
     const b=merged[cc]||{}; const k=b.k||0, e=b.e||0, bk=b.bk||0, a=b.a||0;
@@ -2131,6 +2150,7 @@ function buildSetterBreakdownTable(setterAtk) {
     const merged = getAttackerMerged(anm, setterAtk);
     // True totals from pre-aggregated OVR (includes all combos, even those outside CALL_ORDER)
     const ovr = merged['OVR'] || {};
+    const mi  = getAttackerMisc(anm, setterAtk);
     const ovrK=ovr.k||0, ovrE=ovr.e||0, ovrBK=ovr.bk||0, ovrA=ovr.a||0;
     let row = `<tr><td style="font-weight:600">#${anm}</td><td style="white-space:nowrap">${name}</td>`;
     let dispK=0, dispE=0, dispBK=0, dispA=0;
@@ -2140,18 +2160,22 @@ function buildSetterBreakdownTable(setterAtk) {
     }
     // OTHER column — attacks in combos outside CALL_ORDER (XM, XL, X9, etc.)
     row += otherCells5(ovrK-dispK, ovrE-dispE, ovrBK-dispBK, ovrA-dispA, 'font-weight:600');
-    // TOTAL from OVR (true total, all combos)
-    row += `<td class="num" style="font-weight:600">${ovrK||'—'}</td><td class="num" style="font-weight:600">${ovrE||'—'}</td><td class="num" style="font-weight:600">${ovrBK||'—'}</td><td class="num" style="font-weight:600">${ovrA||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(ovrK,ovrE,ovrBK,ovrA)}</td>`;
+    row += miscCells(mi, 'font-weight:600');
+    // TOTAL = all set attacks (OVR) + MISC
+    const tk=ovrK+mi.k, te=ovrE+mi.e, tb=ovrBK+mi.bk, ta=ovrA+mi.a;
+    row += `<td class="num" style="font-weight:600">${tk||'—'}</td><td class="num" style="font-weight:600">${te||'—'}</td><td class="num" style="font-weight:600">${tb||'—'}</td><td class="num" style="font-weight:600">${ta||'—'}</td><td class="num" style="font-weight:600;color:var(--gold)">${fmtEff(tk,te,tb,ta)}</td>`;
     return row + '</tr>';
   }
 
   function subtotalRow(nums, label) {
     const totals={};
     let grpOvrK=0,grpOvrE=0,grpOvrBK=0,grpOvrA=0;
+    const gMi={k:0,e:0,bk:0,a:0};
     for (const anm of nums) {
       const m=getAttackerMerged(anm,setterAtk);
       const ovr=m['OVR']||{};
       grpOvrK+=ovr.k||0; grpOvrE+=ovr.e||0; grpOvrBK+=ovr.bk||0; grpOvrA+=ovr.a||0;
+      const mi=getAttackerMisc(anm,setterAtk); gMi.k+=mi.k; gMi.e+=mi.e; gMi.bk+=mi.bk; gMi.a+=mi.a;
       for (const cc of ccs) {
         if (!totals[cc]) totals[cc]={k:0,e:0,bk:0,a:0};
         const b=m[cc]||{}; totals[cc].k+=b.k||0; totals[cc].e+=b.e||0; totals[cc].bk+=b.bk||0; totals[cc].a+=b.a||0;
@@ -2166,7 +2190,9 @@ function buildSetterBreakdownTable(setterAtk) {
       row+=`<td class="num">${t.k||'—'}</td><td class="num">${t.e||'—'}</td><td class="num">${t.bk||'—'}</td><td class="num">${t.a||'—'}</td><td class="num">${fmtEff(t.k||0,t.e||0,t.bk||0,t.a||0)}</td>`;
     }
     row += otherCells5(grpOvrK-gK, grpOvrE-gE, grpOvrBK-gBK, grpOvrA-gA, 'font-weight:700');
-    row+=`<td class="num" style="font-weight:700">${grpOvrK||'—'}</td><td class="num" style="font-weight:700">${grpOvrE||'—'}</td><td class="num" style="font-weight:700">${grpOvrBK||'—'}</td><td class="num" style="font-weight:700">${grpOvrA||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(grpOvrK,grpOvrE,grpOvrBK,grpOvrA)}</td>`;
+    row += miscCells(gMi, 'font-weight:700');
+    const sk=grpOvrK+gMi.k, se=grpOvrE+gMi.e, sb=grpOvrBK+gMi.bk, sa=grpOvrA+gMi.a;
+    row+=`<td class="num" style="font-weight:700">${sk||'—'}</td><td class="num" style="font-weight:700">${se||'—'}</td><td class="num" style="font-weight:700">${sb||'—'}</td><td class="num" style="font-weight:700">${sa||'—'}</td><td class="num" style="font-weight:700;color:var(--gold)">${fmtEff(sk,se,sb,sa)}</td>`;
     return row+'</tr>';
   }
 
@@ -2174,7 +2200,7 @@ function buildSetterBreakdownTable(setterAtk) {
     // Only show attackers with actual data under current filter
     const active = nums.filter(anm => {
       const m=getAttackerMerged(anm,setterAtk); const ovr=m['OVR']||{};
-      return (ovr.a||0) > 0;
+      return (ovr.a||0) + getAttackerMisc(anm,setterAtk).a > 0;
     });
     if (!active.length) return '';
     let s=`<tr style="background:var(--maroon);color:#fff">
@@ -2199,11 +2225,13 @@ function buildSetterBreakdownTable(setterAtk) {
   for (const cc of ccs)
     html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(141,0,52,.2);font-size:11px;color:var(--gold)">${CALL_LABELS[cc]||cc}</th>`;
   html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(100,100,100,.2);font-size:11px;color:#aaa">OTHER</th>`;
+  if (showMisc) html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(100,100,100,.2);font-size:11px;color:#aaa" title="Attacks with no coded set before them">MISC</th>`;
   html+=`<th class="num" colspan="5" style="text-align:center;background:rgba(141,0,52,.35);font-size:11px;color:var(--gold)">TOTAL</th>`;
   html+='</tr><tr><th></th><th></th>';
   for (let i=0;i<ccs.length;i++)
     html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
   html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:#aaa">EFF%</th>';
+  if (showMisc) html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:#aaa">EFF%</th>';
   html+='<th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">ATT</th><th class="num" style="color:var(--gold)">EFF%</th>';
   html+='</tr></thead><tbody>';
 
@@ -2219,11 +2247,13 @@ function buildSetterBreakdownTable(setterAtk) {
 
   // Team total (across all visible attacker nums with data)
   const allActive=[...allAtkNums].filter(anm=>{
-    const ovr=(getAttackerMerged(anm,setterAtk)['OVR']||{}); return (ovr.a||0)>0;
+    const ovr=(getAttackerMerged(anm,setterAtk)['OVR']||{}); return (ovr.a||0)+getAttackerMisc(anm,setterAtk).a>0;
   });
   const teamTotals={};
   let teamOvrK=0,teamOvrE=0,teamOvrBK=0,teamOvrA=0;
+  const tMi={k:0,e:0,bk:0,a:0};
   for (const anm of allActive) {
+    const mi=getAttackerMisc(anm,setterAtk); tMi.k+=mi.k; tMi.e+=mi.e; tMi.bk+=mi.bk; tMi.a+=mi.a;
     const m=getAttackerMerged(anm,setterAtk);
     const ovr=m['OVR']||{};
     teamOvrK+=ovr.k||0; teamOvrE+=ovr.e||0; teamOvrBK+=ovr.bk||0; teamOvrA+=ovr.a||0;
@@ -2243,8 +2273,10 @@ function buildSetterBreakdownTable(setterAtk) {
   // OTHER column for team total
   const tOthK=teamOvrK-tDispK, tOthE=teamOvrE-tDispE, tOthBK=teamOvrBK-tDispBK, tOthA=teamOvrA-tDispA;
   html+=`<td class="num">${tOthK||'—'}</td><td class="num">${tOthE||'—'}</td><td class="num">${tOthBK||'—'}</td><td class="num">${tOthA||'—'}</td><td class="num">${fmtEff(tOthK,tOthE,tOthBK,tOthA)}</td>`;
-  // TOTAL from OVR (true total, all combos)
-  html+=`<td class="num">${teamOvrK||'—'}</td><td class="num">${teamOvrE||'—'}</td><td class="num">${teamOvrBK||'—'}</td><td class="num">${teamOvrA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(teamOvrK,teamOvrE,teamOvrBK,teamOvrA)}</td>`;
+  html += miscCells(tMi);
+  // TOTAL = set attacks (OVR) + MISC
+  const TK=teamOvrK+tMi.k, TE=teamOvrE+tMi.e, TB=teamOvrBK+tMi.bk, TA=teamOvrA+tMi.a;
+  html+=`<td class="num">${TK||'—'}</td><td class="num">${TE||'—'}</td><td class="num">${TB||'—'}</td><td class="num">${TA||'—'}</td><td class="num" style="color:var(--gold)">${fmtEff(TK,TE,TB,TA)}</td>`;
   html+='</tr></tbody></table></div>';
   return html;
 }
