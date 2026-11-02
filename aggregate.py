@@ -307,6 +307,38 @@ def compute_rally_sequences(actions, loyola_side):
     player_dig = {}   # pnum → {dig_rallies, dig_kill_rallies}
     fbso = {'rcv_rallies': 0, 'fbso_kills': 0}
 
+    # Match files that code BOTH teams (current Volleymetrics/Volleystation exports):
+    # group by rally_seq and only count `loyola_side`'s receptions/digs/attacks.
+    # (The linear scan below assumes a LUC-only file; on a two-sided file it would
+    #  count both teams' receptions and digs.)
+    two_sided = match_mode and len({a.get('team_side') for a in actions if a.get('team_side')}) > 1 \
+                and any('rally_seq' in a for a in actions)
+    if two_sided:
+        by_rally = defaultdict(list)
+        for a in actions:
+            by_rally[a.get('rally_seq', 0)].append(a)
+        for rs in sorted(by_rally):
+            rally = by_rally[rs]
+            mine  = [a for a in rally if a.get('team_side') == loyola_side]
+            # FBSO: rally where this side received; first attack by this side a kill?
+            if any(a.get('skill_code') == 'R' for a in mine):
+                fbso['rcv_rallies'] += 1
+                first_atk = next((a for a in mine if a.get('skill_code') == 'A'), None)
+                if first_atk and first_atk.get('evaluation') == '#':
+                    fbso['fbso_kills'] += 1
+            # Dig → kill: this side's dig, followed later in the rally by this side's kill
+            for i, a in enumerate(mine):
+                if a.get('skill_code') != 'D':
+                    continue
+                pnum = a.get('player_num', '')
+                if not pnum:
+                    continue
+                pd = player_dig.setdefault(pnum, {'dig_rallies': 0, 'dig_kill_rallies': 0})
+                pd['dig_rallies'] += 1
+                if any(b.get('skill_code') == 'A' and b.get('evaluation') == '#' for b in mine[i+1:]):
+                    pd['dig_kill_rallies'] += 1
+        return player_dig, fbso
+
     if match_mode:
         # ── Match mode: linear scan over LUC-only actions ────────────────────────
         # rally_id increments per action (not per rally), so we can't group by it.
@@ -395,6 +427,56 @@ def compute_rally_sequences(actions, loyola_side):
                 fbso['fbso_kills'] += 1
 
     return player_dig, fbso
+
+
+def add_rcv_extras(stores, action, is_match):
+    """Reception extras: pre-scaled pass points, pass categories, and float/topspin
+    split (RM/RQ skills + typed zone records) for every store in `stores`."""
+    if action.get('skill_code') != 'R':
+        return
+    if True:
+        ev_code = action.get('evaluation', '')
+        is_m    = is_match
+        pts     = rcv_points(ev_code, is_m)
+        cat     = rcv_category(ev_code, is_m)
+        zone    = action.get('end_zone')
+        for store in stores:
+            rsk = store['skills'].setdefault('R', empty_skill())
+            rsk['rcv_pts']  = rsk.get('rcv_pts', 0) + pts
+            rsk['rcv_cat']  = rsk.get('rcv_cat', {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0})
+            rsk['rcv_cat'][cat] = rsk['rcv_cat'].get(cat, 0) + 1
+            # Add pre-scaled pts to the main zone record too
+            if zone and str(zone) in store.get('rcv_zones', {}):
+                store['rcv_zones'][str(zone)]['rcv_pts'] = \
+                    store['rcv_zones'][str(zone)].get('rcv_pts', 0) + pts
+        # Tag reception by serve type — technique field on the reception action
+        # encodes the incoming serve type: Q=topspin, M=float, H=jump-float
+        tech = action.get('technique', '')
+        tech = tech if tech in ('Q', 'M', 'H') else None
+        if tech in ('Q', 'M', 'H'):
+            # Normalize H (jump float) → M (float bucket)
+            tech = 'M' if tech == 'H' else tech
+        if tech in ('Q', 'M'):
+            t_key = 'R' + tech   # 'RQ' or 'RM'
+            for store in stores:
+                rsk_t = store['skills'].setdefault(t_key, empty_skill())
+                rsk_t['attempts'] += 1
+                rsk_t['evals'][ev_code] = rsk_t['evals'].get(ev_code, 0) + 1
+                rsk_t['rcv_pts'] = rsk_t.get('rcv_pts', 0) + pts
+                if 'rcv_cat' not in rsk_t:
+                    rsk_t['rcv_cat'] = {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0}
+                rsk_t['rcv_cat'][cat] = rsk_t['rcv_cat'].get(cat, 0) + 1
+                if zone:
+                    zk_typed = 'rcv_zones_q' if tech == 'Q' else 'rcv_zones_m'
+                    if zk_typed not in store:
+                        store[zk_typed] = {}
+                    if str(zone) not in store[zk_typed]:
+                        store[zk_typed][str(zone)] = empty_zone()
+                    store[zk_typed][str(zone)]['attempts'] += 1
+                    store[zk_typed][str(zone)]['evals'][ev_code] = \
+                        store[zk_typed][str(zone)]['evals'].get(ev_code, 0) + 1
+                    store[zk_typed][str(zone)]['rcv_pts'] = \
+                        store[zk_typed][str(zone)].get('rcv_pts', 0) + pts
 
 
 def derive(skill_stats):
@@ -890,6 +972,125 @@ def main(raw_path, out_path):
             return None
         return {'atk': atk, 'srv': srv}
 
+    # ── Opponent-side match data (for the Reports "Opponent" view) ─────────────
+    # Same report structures as LUC, computed for the other team in each match
+    # file that codes both sides. Opponent rosters are often incomplete in the
+    # DVW (placeholder names, no positions), so names fall back to "#<num>" and
+    # positions are inferred from what each player actually did.
+    def _opp_rotation(a, opp_side, set_lineups):
+        if opp_side == 'home':
+            return a.get('rot_h')
+        lu, sn = a.get('opp_lineup'), a.get('set_number')
+        start = (set_lineups.get(sn) or set_lineups.get(str(sn))) if sn else None
+        if not lu or not start or len(start) < 6:
+            return None
+        try:
+            return (6 - start.index(lu[0])) % 6 + 1
+        except ValueError:
+            return None
+
+    def _is_placeholder_name(name):
+        n = (name or '').strip()
+        letters = n.replace(' ', '').lower()
+        return (not n) or n.startswith('#') or len(set(letters)) <= 1
+
+    def _opp_roster(s, opp_side, opp_acts):
+        src = s.get('away_players' if opp_side == 'away' else 'home_players') or {}
+        from collections import Counter as _C
+        by_p = defaultdict(list)
+        for a in opp_acts:
+            if a.get('player_num') not in (None, ''):
+                by_p[a['player_num']].append(a)
+        total = len(opp_acts) or 1
+        roster = {}
+        for pn, acts_p in by_p.items():
+            info = src.get(pn, {})
+            name = info.get('name', '')
+            known = not _is_placeholder_name(name)
+            skills = _C(a.get('skill_code') for a in acts_p)
+            pos = info.get('position_code', '') if known else ''
+            is_lib = bool(info.get('is_libero')) if known else False
+            if pos not in ('1', '2', '3', '4', '5'):
+                atk_z = _C(str(a.get('start_zone') or '') for a in acts_p if a.get('skill_code') == 'A')
+                n_e, n_a, n_r = skills.get('E', 0), skills.get('A', 0), skills.get('R', 0)
+                if n_e >= 5 and n_e >= 0.3 * len(acts_p):
+                    pos = '5'
+                elif n_a >= 3:
+                    z = atk_z.most_common(1)[0][0]
+                    pos = '4' if z == '3' else '3' if z in ('2', '1') else '2'
+                elif n_r >= 5:
+                    pos, is_lib = '1', True
+                else:
+                    pos = '2'
+            if pos == '1':
+                is_lib = True
+            if len(acts_p) / total >= 0.5 and not known:
+                disp, last = 'Opponent (no jerseys coded)', 'Team'
+            elif known:
+                disp = name
+                parts = name.split(' ', 1)
+                last = parts[1] if len(parts) > 1 else name
+            else:
+                disp = last = f'#{pn}'
+            roster[pn] = {'number': pn, 'name': disp, 'last_name': last, 'first_name': '',
+                          'position_code': pos, 'is_libero': is_lib}
+        return roster
+
+    opp_match = {}           # sid -> {'rot_stats','fbso','roster','luc_stats'}
+    opp_player_session = {}  # "pnum|sid" -> same shape as player_session entries
+    for s in sessions_raw:
+        if s.get('type') != 'match':
+            continue
+        ls = loyola_side_for_session(s)
+        if ls not in ('home', 'away'):
+            continue
+        sid      = f"{s['season']}|{s['file']}"
+        opp_side = 'away' if ls == 'home' else 'home'
+        acts     = s.get('actions', [])
+        opp_acts = [a for a in acts if a.get('team_side') == opp_side]
+        if len(opp_acts) < 20:
+            continue
+        set_lu = s.get('away_set_lineups' if opp_side == 'away' else 'home_set_lineups') or {}
+        # DataVolley convention: rotation = court zone of the setter.
+        #   opponent at home → home rotation field (rot_h)
+        #   opponent away    → last 'az{N}' marker, else the away rotation field
+        #   (fallback for old parses: count rotations from the set's starting lineup)
+        acts_o = []
+        for a in acts:
+            b = dict(a)
+            if opp_side == 'home':
+                rot = a.get('rot_h')
+            else:
+                rot = a.get('az_zone') or a.get('rot_v')
+            b['rotation'] = rot if rot else _opp_rotation(a, opp_side, set_lu)
+            acts_o.append(b)
+        dig_o, fbso_o = compute_rally_sequences(acts_o, opp_side)
+        roster = _opp_roster(s, opp_side, opp_acts)
+        opp_match[sid] = {
+            'rot_stats': compute_match_rotation_stats(acts_o, opp_side),
+            'fbso':      fbso_o,
+            'roster':    roster,
+            'luc_stats': compute_opp_stats(s, opp_side),   # LUC totals, for comparison KPIs
+        }
+        store = defaultdict(lambda: {'actions': 0, 'skills': {}, 'rcv_zones': {}})
+        for a in opp_acts:
+            pn = a.get('player_num', '')
+            if pn in (None, '') or pn not in roster:
+                continue
+            ps_ = store[pn]
+            ps_['actions'] += 1
+            add_action(ps_['skills'], a, ps_['rcv_zones'])
+            add_rcv_extras((ps_,), a, True)
+        for pn, dstats in dig_o.items():
+            if pn in store:
+                store[pn]['dig_kill_rallies']  = dstats['dig_kill_rallies']
+                store[pn]['dig_total_rallies'] = dstats['dig_rallies']
+        for pn, ps_ in store.items():
+            derive(ps_['skills'])
+            derive_zones(ps_['rcv_zones'], is_match=True)
+            opp_player_session[f"{pn}|{sid}"] = {'player_num': pn, 'session_id': sid, **ps_}
+
+
     sessions_index = []
     for s in sessions_raw:
         sid  = f"{s['season']}|{s['file']}"
@@ -918,6 +1119,12 @@ def main(raw_path, out_path):
                             any(a.get('team_side') != ls for a in s.get('actions', []))
                          else None,
             'zone_charts': compute_zone_charts(s, ls),
+            # Opponent view (Reports tab) — None when the file doesn't code the other side
+            'match_rot_stats_opp': opp_match.get(sid, {}).get('rot_stats'),
+            'opp_fbso_rcv':        opp_match[sid]['fbso']['rcv_rallies'] if sid in opp_match else None,
+            'opp_fbso_kills':      opp_match[sid]['fbso']['fbso_kills']  if sid in opp_match else None,
+            'opp_roster':          opp_match.get(sid, {}).get('roster'),
+            'luc_stats':           opp_match.get(sid, {}).get('luc_stats'),
         })
 
     # ── Aggregation accumulators ──────────────────────────────────────────────
@@ -995,49 +1202,7 @@ def main(raw_path, out_path):
             # Accumulate pre-scaled pass points and category counts so the
             # dashboard can compute correct averages and breakdowns across
             # mixed match/practice sessions.
-            if action.get('skill_code') == 'R':
-                ev_code = action.get('evaluation', '')
-                is_m    = (stype == 'match')
-                pts     = rcv_points(ev_code, is_m)
-                cat     = rcv_category(ev_code, is_m)
-                zone    = action.get('end_zone')
-                for store in (psk, pse, ss):
-                    rsk = store['skills'].setdefault('R', empty_skill())
-                    rsk['rcv_pts']  = rsk.get('rcv_pts', 0) + pts
-                    rsk['rcv_cat']  = rsk.get('rcv_cat', {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0})
-                    rsk['rcv_cat'][cat] = rsk['rcv_cat'].get(cat, 0) + 1
-                    # Add pre-scaled pts to the main zone record too
-                    if zone and str(zone) in store.get('rcv_zones', {}):
-                        store['rcv_zones'][str(zone)]['rcv_pts'] = \
-                            store['rcv_zones'][str(zone)].get('rcv_pts', 0) + pts
-                # Tag reception by serve type — technique field on the reception action
-                # encodes the incoming serve type: Q=topspin, M=float, H=jump-float
-                tech = action.get('technique', '')
-                tech = tech if tech in ('Q', 'M', 'H') else None
-                if tech in ('Q', 'M', 'H'):
-                    # Normalize H (jump float) → M (float bucket)
-                    tech = 'M' if tech == 'H' else tech
-                if tech in ('Q', 'M'):
-                    t_key = 'R' + tech   # 'RQ' or 'RM'
-                    for store in (psk, pse, ss):
-                        rsk_t = store['skills'].setdefault(t_key, empty_skill())
-                        rsk_t['attempts'] += 1
-                        rsk_t['evals'][ev_code] = rsk_t['evals'].get(ev_code, 0) + 1
-                        rsk_t['rcv_pts'] = rsk_t.get('rcv_pts', 0) + pts
-                        if 'rcv_cat' not in rsk_t:
-                            rsk_t['rcv_cat'] = {'perf':0,'good':0,'med':0,'oos':0,'over':0,'err':0}
-                        rsk_t['rcv_cat'][cat] = rsk_t['rcv_cat'].get(cat, 0) + 1
-                        if zone:
-                            zk_typed = 'rcv_zones_q' if tech == 'Q' else 'rcv_zones_m'
-                            if zk_typed not in store:
-                                store[zk_typed] = {}
-                            if str(zone) not in store[zk_typed]:
-                                store[zk_typed][str(zone)] = empty_zone()
-                            store[zk_typed][str(zone)]['attempts'] += 1
-                            store[zk_typed][str(zone)]['evals'][ev_code] = \
-                                store[zk_typed][str(zone)]['evals'].get(ev_code, 0) + 1
-                            store[zk_typed][str(zone)]['rcv_pts'] = \
-                                store[zk_typed][str(zone)].get('rcv_pts', 0) + pts
+            add_rcv_extras((psk, pse, ss), action, stype == 'match')
 
         # ── Season FBSO ───────────────────────────────────────────────────────
         fbso = session_rally[sid]['fbso']
@@ -1359,6 +1524,7 @@ def main(raw_path, out_path):
         'sessions':          sessions_index,
         'season_stats':   dict(season_stats),
         'player_session': ps_out,
+        'opp_player_session': opp_player_session,   # opponent players, match files only
         'player_season':  pse_out,
         'scout_index':    scout_index,
         'opponent_stats': dict(opponent_stats),

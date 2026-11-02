@@ -560,6 +560,12 @@
       <button onclick="setRcvPassScale('4')" id="rpt-scale-4" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">4-pt</button>
       <button onclick="setRcvPassScale('3')" id="rpt-scale-3" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">3-pt</button>
     </div></div>
+    <div class="filter-sep" id="rpt-side-sep" style="display:none"></div>
+    <div id="rpt-side-filter" style="display:none"><label>Team</label><br><div style="display:flex;gap:4px;margin-top:4px">
+      <button onclick="setRptTeamSide('luc')" id="rpt-side-luc" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Loyola</button>
+      <button onclick="setRptTeamSide('opp')" id="rpt-side-opp" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">Opponent</button>
+      <span id="rpt-side-note" style="font-size:11px;color:var(--text-muted);align-self:center;margin-left:6px"></span>
+    </div></div>
   </div>
 
   <!-- Trend Section -->
@@ -1800,7 +1806,7 @@ function renderReports() {
 
   const atkEff = monthMetric(sk => {
     const A = sk['A']; if (!A?.attempts) return null;
-    return +(((A.evals['#']||0) - (A.evals['=']||0)) / A.attempts * 100).toFixed(1);
+    return +(((A.evals['#']||0) - (A.evals['=']||0) - (A.evals['/']||0)) / A.attempts * 100).toFixed(1);   // (K−E−B)/A
   });
   const rcvAvg = monthMetric(sk => {
     const R = sk['R']; if (!R?.attempts) return null;
@@ -2051,7 +2057,7 @@ function toggleSetterBucket(bkt) {
     btn.classList.toggle('active', setterBucketFilter.has(btn.dataset.bkt));
   });
   const el = document.getElementById('setter-breakdown-table');
-  if (el && _cachedSetterAtk) el.innerHTML = buildSetterBreakdownTable(_cachedSetterAtk);
+  if (el && _cachedSetterAtk) el.innerHTML = withRptSide(() => buildSetterBreakdownTable(_cachedSetterAtk));
 }
 
 function toggleSetterSelect(snm) {
@@ -2060,7 +2066,7 @@ function toggleSetterSelect(snm) {
     btn.classList.toggle('active', btn.dataset.snm === snm);
   });
   const el = document.getElementById('setter-breakdown-table');
-  if (el && _cachedSetterAtk) el.innerHTML = buildSetterBreakdownTable(_cachedSetterAtk);
+  if (el && _cachedSetterAtk) el.innerHTML = withRptSide(() => buildSetterBreakdownTable(_cachedSetterAtk));
 }
 
 // Merge data for a specific attacker across selected setter(s) and buckets → {cc:{k,e,b,a}}
@@ -2468,7 +2474,8 @@ function buildMatchOverviewPanel(sessionIds) {
   const oppFbsoPct   = hasOpp && oppFbsoRcv ? oppFbsoKills/oppFbsoRcv*100  : null;
 
   // label: single match → "opp", multiple → "Nm opp"
-  const oppLbl = oppMatchCount === 1 ? 'opp' : `${oppMatchCount}m opp`;
+  const _vs = rptTeamSide === 'opp' ? 'LUC' : 'opp';
+  const oppLbl = oppMatchCount === 1 ? _vs : `${oppMatchCount}m ${_vs}`;
 
   function kpiTicker(lucRaw, oppRaw, higherBetter) {
     if (oppRaw === null || lucRaw === null) return '';
@@ -2896,7 +2903,7 @@ function buildRotationOverviewPanel(mrs) {
       <tbody>${rows}</tbody>
     </table></div>
     <div style="font-size:10px;color:var(--text-dim);margin-top:6px;padding:0 2px">
-      SO% = sideout % (won rally when receiving) &nbsp;|&nbsp; PSP% = point scoring % (won rally when serving) &nbsp;|&nbsp; Got Blk = times our attack was blocked &nbsp;|&nbsp; Our BLK = block kills by LUC &nbsp;|&nbsp; Eff% = (K−E−BLK)/Att
+      SO% = sideout % (won rally when receiving) &nbsp;|&nbsp; PSP% = point scoring % (won rally when serving) &nbsp;|&nbsp; Got Blk = times our attack was blocked &nbsp;|&nbsp; Our BLK = block kills by ${rptTeamLabel()} &nbsp;|&nbsp; Eff% = (K−E−BLK)/Att
     </div>
   </div>`;
 }
@@ -2908,8 +2915,8 @@ function renderMatchRotationReport() {
   const setterEl   = document.getElementById('rpt-panel-setter');
   const overviewEl = document.getElementById('rpt-panel-match-overview');
 
-  rotEl.innerHTML   = buildRotationAtkPanel(mrs.rotation_atk, null, null, 'LUC Attack by Rotation', false);
-  routeEl.innerHTML = buildRotationAtkPanel(null, mrs.rotation_atk_close, mrs.rotation_atk_gap, 'LUC Attack by Rotation — Close vs Gap Routes', true);
+  rotEl.innerHTML   = buildRotationAtkPanel(mrs.rotation_atk, null, null, `${rptTeamLabel()} Attack by Rotation`, false);
+  routeEl.innerHTML = buildRotationAtkPanel(null, mrs.rotation_atk_close, mrs.rotation_atk_gap, `${rptTeamLabel()} Attack by Rotation — Close vs Gap Routes`, true);
 
   setterBucketFilter = new Set(['all']);
   setterSelected     = 'all';
@@ -4162,7 +4169,83 @@ function buildBlockDefSheet(groups) {
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
+// ── Team side (Reports, match mode): 'luc' | 'opp' ───────────────────────────
+// Opponent view reuses every match-report builder unchanged by temporarily
+// swapping the data they read (player stats, roster, per-session match stats)
+// for the opponent's equivalents, then restoring LUC data afterwards.
+let rptTeamSide = 'luc';
+
+function paintRptSideButtons() {
+  ['luc','opp'].forEach(s => {
+    const b = document.getElementById('rpt-side-' + s);
+    if (!b) return;
+    b.style.background = s === rptTeamSide ? 'var(--maroon)' : 'var(--surface2)';
+    b.style.color      = s === rptTeamSide ? '#fff' : 'var(--text)';
+  });
+}
+
+function setRptTeamSide(side) {
+  rptTeamSide = side;
+  paintRptSideButtons();
+  renderRptDetail();
+}
+
+function rptTeamLabel() { return rptTeamSide === 'opp' ? 'Opponent' : 'LUC'; }
+
+function withRptSide(fn) {
+  if (rptTeamSide !== 'opp') return fn();
+  const saved = { ps: DATA.player_session, pbs: DATA.players_by_season, pl: DATA.players, sess: [] };
+  // Opponent roster for the selected matches (first listing of a jersey wins)
+  const bySeason = {}, merged = {};
+  for (const s of DATA.sessions) {
+    if (!rptSelected.has(s.id) || !s.opp_roster) continue;
+    bySeason[s.season] = bySeason[s.season] || {};
+    for (const [n, p] of Object.entries(s.opp_roster)) {
+      if (!bySeason[s.season][n]) bySeason[s.season][n] = p;
+      if (!merged[n]) merged[n] = p;
+    }
+  }
+  try {
+    DATA.player_session    = DATA.opp_player_session || {};
+    DATA.players_by_season = bySeason;
+    DATA.players           = merged;
+    for (const s of DATA.sessions) {
+      if (s.type !== 'match') continue;
+      saved.sess.push([s, s.match_rot_stats, s.fbso_rcv, s.fbso_kills, s.opp_stats]);
+      s.match_rot_stats = s.match_rot_stats_opp || null;
+      s.fbso_rcv        = s.opp_fbso_rcv || 0;
+      s.fbso_kills      = s.opp_fbso_kills || 0;
+      s.opp_stats       = s.luc_stats || null;   // comparison KPIs now compare against LUC
+    }
+    return fn();
+  } finally {
+    DATA.player_session = saved.ps; DATA.players_by_season = saved.pbs; DATA.players = saved.pl;
+    for (const [s, mrs, fr, fk, os] of saved.sess) {
+      s.match_rot_stats = mrs; s.fbso_rcv = fr; s.fbso_kills = fk; s.opp_stats = os;
+    }
+  }
+}
+
 function renderRptDetail() {
+  // Team toggle only applies to match reports
+  const isMatch = (sessionTypeFilter === 'match');
+  ['rpt-side-filter','rpt-side-sep'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = isMatch ? '' : 'none';
+  });
+  if (!isMatch && rptTeamSide !== 'luc') { rptTeamSide = 'luc'; paintRptSideButtons(); }
+  const note = document.getElementById('rpt-side-note');
+  if (note) {
+    const sel  = DATA.sessions.filter(s => rptSelected.has(s.id) && s.type === 'match');
+    const withOpp = sel.filter(s => s.match_rot_stats_opp);
+    const opps = new Set(withOpp.map(s => (s.opponent||'').replace(/\(\d+\)$/,'').trim()));
+    note.textContent = rptTeamSide !== 'opp' || !sel.length ? ''
+      : (withOpp.length < sel.length ? `${withOpp.length} of ${sel.length} matches have opponent coding` : '')
+        + (opps.size > 1 ? `${withOpp.length < sel.length ? ' · ' : ''}${opps.size} opponents combined — jersey numbers merge` : '');
+  }
+  return withRptSide(renderRptDetailInner);
+}
+
+function renderRptDetailInner() {
   const kpiEl   = document.getElementById('rpt-kpi-row');
   const xlsxEl  = document.getElementById('rpt-xlsx-area');
   const emptyEl = document.getElementById('rpt-empty');
@@ -4186,7 +4269,7 @@ function renderRptDetail() {
   const { skills } = aggregateSessionStats(rptSelected);
   const A=skills['A']||{}, R=skills['R']||{}, S=skills['S']||{};
   const Aatt=A.attempts||0, Ratt=R.attempts||0, Satt=S.attempts||0;
-  const atkEffVal = Aatt ? ((((A.evals||{})['#']||0)-((A.evals||{})['=']||0))/Aatt*100).toFixed(1)+'%' : '—';
+  const atkEffVal = Aatt ? ((((A.evals||{})['#']||0)-((A.evals||{})['=']||0)-((A.evals||{})['/']||0))/Aatt*100).toFixed(1)+'%' : '—';   // (K−E−B)/A
   const rcvAvgVal = Ratt ? passAvgFromEvals(R.evals||{}, Ratt).toFixed(2) : '—';
   const aceVal    = Satt ? (((S.evals||{})['#']||0)/Satt*100).toFixed(1)+'%' : '—';
   const errVal    = Satt ? (((S.evals||{})['=']||0)/Satt*100).toFixed(1)+'%' : '—';

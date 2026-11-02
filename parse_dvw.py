@@ -721,6 +721,8 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
             'set_number':   set_num,
             'rotation':     luc_rot,
             'rot_h':        rot_h,
+            'rot_v':        rot_v,               # away rotation field (setter zone) when the file updates it
+            'az_zone':      current_away_zone,   # last 'az{N}' marker = away team's setter zone
             'luc_lineup':   luc_lineup,
             'opp_lineup':   opp_lineup,
             'rally_seq':    current_rally_seq,  # rally counter (increments on p-markers)
