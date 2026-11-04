@@ -256,6 +256,13 @@
      stat) cell as if it were the sticky Player column, since it's nth-child(2)
      in that row's own DOM. That cell already reads fine with normal position. */
   table.rpt-sticky tr:has(> td[colspan]:first-child) td:nth-child(2){position:static;left:auto;}
+  /* Safari can't paint sticky table cells inside a box that scrolls both ways
+     (.table-scroll: max-height + overflow auto) — the # / Name cells render blank.
+     These .data-table tables are narrow enough not to need pinned columns, so turn
+     pinning off for them and keep jersey + name on one readable line. */
+  table.data-table.rpt-sticky th, table.data-table.rpt-sticky td { position: static !important; left: auto !important; }
+  table.data-table.rpt-sticky td:nth-child(1), table.data-table.rpt-sticky td:nth-child(2),
+  table.data-table.rpt-sticky th:nth-child(1), table.data-table.rpt-sticky th:nth-child(2) { white-space: nowrap; }
 
   /* Detail panel */
   .detail-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
