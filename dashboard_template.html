@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LUC Volleyball Analytics</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+  // Safari (incl. iOS / iPad, where every browser is WebKit) → disable sticky table columns
+  (function(){ var ua=navigator.userAgent;
+    if (/Safari/.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|EdgiOS|Edg\//.test(ua) || /iPad|iPhone|iPod/.test(ua))
+      document.documentElement.classList.add('is-safari'); })();
+</script>
 <style>
   :root {
     --maroon: #8D0034;
@@ -261,6 +267,10 @@
      These .data-table tables are narrow enough not to need pinned columns, so turn
      pinning off for them and keep jersey + name on one readable line. */
   table.data-table.rpt-sticky th, table.data-table.rpt-sticky td { position: static !important; left: auto !important; }
+  /* Safari (macOS + iOS) also mis-paints pinned columns in the wide Reports tables —
+     disable pinning in every table there; other browsers keep it. Class set in <head>. */
+  html.is-safari table.rpt-sticky th, html.is-safari table.rpt-sticky td { position: static !important; left: auto !important; }
+  html.is-safari table.rpt-sticky td:nth-child(1), html.is-safari table.rpt-sticky td:nth-child(2) { white-space: nowrap; }
   table.data-table.rpt-sticky td:nth-child(1), table.data-table.rpt-sticky td:nth-child(2),
   table.data-table.rpt-sticky th:nth-child(1), table.data-table.rpt-sticky th:nth-child(2) { white-space: nowrap; }
 
