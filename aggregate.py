@@ -264,6 +264,84 @@ def compute_setter_player_attacks(actions, loyola_side):
             for sp, attackers in result.items()}
 
 
+def compute_setter_tab(actions, loyola_side):
+    """
+    Setter-tab data for one session, attributed rally by rally:
+      { setter_pnum: { situation: {
+            'atk':      {atk_combo: {a,k,e,b}},          # attack right after this setter's set
+            'calls':    {k_code: n},                       # setter's own call codes (K1/K2/K7...)
+            'call_atk': {k_code: {atk_combo: {a,k,e,b}}}   # attack outcome by the call made
+      } } }
+    situation: 'all' | 'fbso' (first set after own team's reception) | 'perf' | 'good' |
+               'med' | 'oos' (pass quality of that reception) | 'transition' (any later set)
+    Each attack is credited to at most one set (a doubled set code can't count it twice).
+    """
+    rallies, cur = [], []
+    for a in actions:
+        if a.get('skill_code') == 'S' and cur:
+            rallies.append(cur); cur = []
+        cur.append(a)
+    if cur:
+        rallies.append(cur)
+
+    def e4(): return {'a': 0, 'k': 0, 'e': 0, 'b': 0}
+    out = defaultdict(lambda: defaultdict(lambda: {
+        'atk': defaultdict(e4), 'calls': defaultdict(int),
+        'call_atk': defaultdict(lambda: defaultdict(e4))}))
+    PASS_BKT = {'#': 'perf', '+': 'good', '!': 'med', '-': 'oos'}
+
+    for rally in rallies:
+        linked = set()
+        first_set_seen = set()          # sides whose first set of the rally we've passed
+        for i, a in enumerate(rally):
+            if a.get('skill_code') != 'E':
+                continue
+            side = a.get('team_side')
+            if loyola_side != 'both' and side != loyola_side:
+                continue
+            setter = a.get('player_num') or ''
+            if not setter:
+                continue
+            # Situation: first set after this side's reception = first ball, else transition
+            rcv = next((b for b in rally[:i] if b.get('skill_code') == 'R' and b.get('team_side') == side), None)
+            sits = ['all']
+            if rcv is not None and side not in first_set_seen:
+                sits.append('fbso')
+                q = PASS_BKT.get(rcv.get('evaluation', ''))
+                if q: sits.append(q)
+            else:
+                sits.append('transition')
+            first_set_seen.add(side)
+
+            call = a.get('combo_code') or ''
+            nxt = next((j for j in range(i + 1, len(rally))
+                        if rally[j].get('skill_code') == 'A' and rally[j].get('team_side') == side), None)
+            atk = rally[nxt] if nxt is not None and nxt not in linked else None
+            if atk is not None:
+                linked.add(nxt)
+            for sit in sits:
+                bucket = out[setter][sit]
+                if call:
+                    bucket['calls'][call] += 1
+                if atk is None:
+                    continue
+                cc = atk.get('combo_code') or ''
+                if not cc:
+                    continue
+                ev = atk.get('evaluation', '')
+                for rec in ([bucket['atk'][cc], bucket['call_atk'][call][cc]] if call else [bucket['atk'][cc]]):
+                    rec['a'] += 1
+                    if ev == '#':   rec['k'] += 1
+                    elif ev == '=': rec['e'] += 1
+                    elif ev == '/': rec['b'] += 1
+
+    return {sp: {sit: {'atk': {cc: dict(v) for cc, v in b['atk'].items()},
+                       'calls': dict(b['calls']),
+                       'call_atk': {k: {cc: dict(v) for cc, v in m.items()} for k, m in b['call_atk'].items()}}
+                 for sit, b in sits_.items()}
+            for sp, sits_ in out.items()}
+
+
 def compute_rally_sequences(actions, loyola_side):
     """
     Split actions into rallies and compute:
@@ -1113,6 +1191,7 @@ def main(raw_path, out_path):
             'call_attacks':   session_rally[sid]['call_atk'],
             'setter_attacks': session_rally[sid]['setter_atk'],  # setter_pnum -> attacker_pnum -> combo -> {attempts,kills,errors,blocks}
             'match_rot_stats': session_rally[sid]['rot_stats'],  # None for practice
+            'setter_tab':     compute_setter_tab(s.get('actions', []), ls),  # Setter tab: setter → situation → combos/calls
             # opp_stats: only populated when the file contains both teams' actions
             'opp_stats': compute_opp_stats(s, ls)
                          if s.get('type') == 'match' and

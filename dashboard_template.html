@@ -999,7 +999,13 @@
     </select></div>
     <div class="filter-sep"></div>
     <div><label>Situation</label><br><select id="set-situation" onchange="renderSetter()">
-      <option value="all">All Attacks</option>
+      <option value="all">All Sets</option>
+      <option value="fbso">First Ball (after our pass)</option>
+      <option value="perf">Perfect Pass (#)</option>
+      <option value="good">Good Pass (+)</option>
+      <option value="med">Medium Pass (!)</option>
+      <option value="oos">Poor Pass (-)</option>
+      <option value="transition">Transition</option>
     </select></div>
     <div class="filter-sep"></div>
     <div id="set-type-filter"><label>Session Type</label><br><div style="display:flex;gap:4px;margin-top:4px">
@@ -6698,6 +6704,43 @@ function getSetterCallStats(seasons) {
   return calls;
 }
 
+// ── Setter tab aggregation (rally-accurate: each attack credited to the set before it)
+// setterKey: null = all setters, else 'pnum|name' (name check keeps reused jersey numbers apart)
+function setterTabAgg(sids, setterKey, sit) {
+  const combos = {}, calls = {}, callAtk = {};
+  const [fPnum, fName] = setterKey ? setterKey.split('|') : [null, null];
+  for (const s of DATA.sessions) {
+    if (!sids.has(s.id) || !s.setter_tab) continue;
+    for (const [sp, bySit] of Object.entries(s.setter_tab)) {
+      if (fPnum !== null && (sp !== fPnum || getPlayerName(sp, s.season) !== fName)) continue;
+      const b = bySit[sit];
+      if (!b) continue;
+      for (const [cc, v] of Object.entries(b.atk || {})) {
+        const c = combos[cc] || (combos[cc] = {attempts:0, kills:0, errors:0, blocked:0});
+        c.attempts += v.a; c.kills += v.k; c.errors += v.e; c.blocked += v.b;
+      }
+      for (const [kc, n] of Object.entries(b.calls || {})) {
+        (calls[kc] || (calls[kc] = {attempts:0})).attempts += n;
+      }
+      for (const [kc, m] of Object.entries(b.call_atk || {})) {
+        callAtk[kc] = callAtk[kc] || {};
+        for (const [cc, v] of Object.entries(m)) {
+          const c = callAtk[kc][cc] || (callAtk[kc][cc] = {att:0, kills:0, errors:0, blocks:0});
+          c.att += v.a; c.kills += v.k; c.errors += v.e; c.blocks += v.b;
+        }
+      }
+    }
+  }
+  for (const c of Object.values(combos)) {
+    const a = c.attempts;
+    c.evals = {'#':c.kills, '=':c.errors, '/':c.blocked};
+    c.kill_pct   = a ? +(c.kills/a*100).toFixed(1) : 0;
+    c.error_pct  = a ? +(c.errors/a*100).toFixed(1) : 0;
+    c.efficiency = a ? +((c.kills-c.errors-c.blocked)/a*100).toFixed(1) : 0;
+  }
+  return { combos, calls, callAtk };
+}
+
 // ═══════════════════════════ SETTER TAB ═══════════════════════════════════════
 function renderSetter() {
   syncTypeButtons('set');
@@ -6708,7 +6751,12 @@ function renderSetter() {
   // Only show setters who actually set in the currently selected season(s),
   // with session counts scoped to that season — so the list updates per season
   // instead of listing every setter from the program's whole history.
+  const poolIds = new Set(sessionPool().map(s => s.id));   // respects Matches / Practices / Both
   const fullSetterMap = getSetterSessionMap(seasons); // 'pnum|season' → Set<sid>
+  for (const k of Object.keys(fullSetterMap)) {
+    fullSetterMap[k] = new Set([...fullSetterMap[k]].filter(sid => poolIds.has(sid)));
+    if (!fullSetterMap[k].size) delete fullSetterMap[k];
+  }
 
   // Group by pnum|name so same person across seasons = one dropdown entry
   const settersByPlayer = {}; // 'pnum|name' → { pnum, name, allSids: Set }
@@ -6733,51 +6781,49 @@ function renderSetter() {
   const periodVal  = document.getElementById('set-period')?.value || 'all';
   const periodSids = buildPeriodSids(seasons, periodVal); // null = no period filter
 
-  let activeSids = null;
-  if (setterPnumFilter && settersByPlayer[setterPnumFilter]) {
-    const seasonSids = new Set(sessionPool().filter(s => seasons.includes(s.season)).map(s => s.id));
-    const filtered = [...settersByPlayer[setterPnumFilter].allSids].filter(sid => seasonSids.has(sid));
-    activeSids = new Set(filtered);
-  }
-  // Apply period filter on top of setter filter
-  if (periodSids) {
-    activeSids = activeSids
-      ? new Set([...activeSids].filter(sid => periodSids.has(sid)))
-      : periodSids;
-  }
+  // Sessions in scope: season + Matches/Practices/Both + period
+  let activeSids = new Set(sessionPool().filter(s => seasons.includes(s.season)).map(s => s.id));
+  if (periodSids) activeSids = new Set([...activeSids].filter(sid => periodSids.has(sid)));
+  const setterKey = (setterPnumFilter && settersByPlayer[setterPnumFilter]) ? setterPnumFilter : null;
+  const situation = document.getElementById('set-situation')?.value || 'all';
 
   // ── Empty-state guard ────────────────────────────────────────────────────────
   if (showEmptyState(activeSids, 'set-kpi-row')) return;
 
-  // ── Aggregate combos (session-filtered when a setter is selected) ───────────
-  const pinCombos  = activeSids ? getComboStatsBySessions(activeSids,'pins')    : getComboStats(seasons,'pins');
-  const midCombos  = activeSids ? getComboStatsBySessions(activeSids,'middles') : getComboStats(seasons,'middles');
-  const allCombos  = activeSids ? getComboStatsBySessions(activeSids,'all')     : getComboStats(seasons,'all');
+  // ── Aggregate: only attacks that came off the selected setter's sets, in the
+  //    selected situation (first ball by pass quality, or transition) ─────────
+  const setAgg    = setterTabAgg(activeSids, setterKey, situation);
+  const allCombos = setAgg.combos;
+  const BIC_COMBOS = ['XP','X8'];
+  const sumOf = codes => codes.reduce((s,cc)=>s+(allCombos[cc]?.attempts||0),0);
+  const bicAtt  = sumOf(BIC_COMBOS);
+  const pinAtt  = sumOf(PIN_COMBOS.filter(cc => !BIC_COMBOS.includes(cc)));   // front-row pins only
+  const midAtt  = sumOf(MIDDLE_COMBOS);
+  const totalAtt = pinAtt + midAtt + bicAtt;
+  const effOf = codes => {
+    let k=0,e=0,b=0,a=0;
+    for (const cc of codes) { const c=allCombos[cc]; if (!c) continue; k+=c.kills; e+=c.errors; b+=c.blocked; a+=c.attempts; }
+    return a ? `Eff ${((k-e-b)/a*100>=0?'+':'')}${((k-e-b)/a*100).toFixed(1)}%` : '';
+  };
+  const sitLabel = document.getElementById('set-situation')?.selectedOptions?.[0]?.textContent || 'All Sets';
 
-  const pinAtt  = PIN_COMBOS.reduce((s,cc)=>s+(pinCombos[cc]?.attempts||0),0);
-  const midAtt  = MIDDLE_COMBOS.reduce((s,cc)=>s+(midCombos[cc]?.attempts||0),0);
-  const totalAtt = pinAtt + midAtt;
-
-  // BIC / back-row as separate category
-  const bicAtt  = (allCombos['XP']?.attempts||0) + (allCombos['PP']?.attempts||0) + (allCombos['X8']?.attempts||0);
-
-  // KPI
+  // KPI — Pin / Quick / BIC-Back Row are separate buckets that add up to 100%
   document.getElementById('set-kpi-row').innerHTML = `
     <div class="card-sm"><div class="card-title">Total Sets</div>
-      <div class="stat-val big">${fmt(totalAtt)}</div></div>
+      <div class="stat-val big">${fmt(totalAtt)}</div>
+      <div class="stat-lbl">${sitLabel} · ${effOf([...PIN_COMBOS,...MIDDLE_COMBOS])}</div></div>
     <div class="card-sm"><div class="card-title">Pin %</div>
       <div class="stat-val big" style="color:var(--maroon)">${totalAtt ? pct(pinAtt/totalAtt*100) : '—'}</div>
-      <div class="stat-lbl">${fmt(pinAtt)} sets</div></div>
+      <div class="stat-lbl">${fmt(pinAtt)} sets · ${effOf(PIN_COMBOS.filter(cc=>!BIC_COMBOS.includes(cc)))}</div></div>
     <div class="card-sm"><div class="card-title">Quick %</div>
       <div class="stat-val big" style="color:#888888">${totalAtt ? pct(midAtt/totalAtt*100) : '—'}</div>
-      <div class="stat-lbl">${fmt(midAtt)} sets</div></div>
+      <div class="stat-lbl">${fmt(midAtt)} sets · ${effOf(MIDDLE_COMBOS)}</div></div>
     <div class="card-sm"><div class="card-title">BIC / Back Row %</div>
       <div class="stat-val big green">${totalAtt ? pct(bicAtt/totalAtt*100) : '—'}</div>
-      <div class="stat-lbl">${fmt(bicAtt)} sets</div></div>
+      <div class="stat-lbl">${fmt(bicAtt)} sets · ${effOf(BIC_COMBOS)}</div></div>
   `;
 
   // Overall distribution doughnut — dim non-selected combos
-  const BIC_COMBOS = ['XP','PP','X8'];
   const distCodes = [...PIN_COMBOS,...MIDDLE_COMBOS].filter(cc=>allCombos[cc]?.attempts>0);
 
   // Which zone is selected (for doughnut + bar highlighting)
@@ -6810,7 +6856,7 @@ function renderSetter() {
   const groupLabels  = ['Pin Calls', 'Quick Calls', 'BIC/Back Row'];
   const groupKeys    = ['pins',      'middles',      'bic'];
   const groupBaseClr = [MAROON,      '#666666',      '#888888'];
-  const groupAtts    = [pinAtt - bicAtt, midAtt, bicAtt].map(v=>Math.max(0,v));
+  const groupAtts    = [pinAtt, midAtt, bicAtt];
 
   // When a zone is selected: show a stacked bar highlighting the zone's share within its group
   let barDatasets;
@@ -6887,12 +6933,9 @@ function renderSetter() {
   const setTrBuckets = resolveTrendBuckets(seasons, activeSids, periodVal);
   const setMoCombos = setTrBuckets.sidSets.map(sids => {
     if (!sids?.size) return {};
+    const scoped = new Set([...sids].filter(sid => activeSids.has(sid)));
     const mc = {};
-    for (const [, ps] of Object.entries(DATA.player_session)) {
-      if (!sids.has(ps.session_id)) continue;
-      for (const [cc, cv] of Object.entries(ps.skills?.A?.combos || {}))
-        mc[cc] = (mc[cc]||0) + (cv.attempts||0);
-    }
+    for (const [cc, cv] of Object.entries(setterTabAgg(scoped, setterKey, situation).combos)) mc[cc] = cv.attempts;
     return mc;
   });
   makeChart('chart-set-trend', 'line', {
@@ -6932,20 +6975,7 @@ function renderSetter() {
   renderSetterCourt(allCombos, totalAtt);
 
   // Setter calls (K1, K2, K7 — filtered by setter when selected)
-  const setterCallStats = activeSids
-    ? (() => {
-        const calls = {};
-        for (const [key, ps] of Object.entries(DATA.player_session)) {
-          if (!activeSids.has(ps.session_id)) continue;
-          for (const [cc, cv] of Object.entries(ps.skills?.E?.combos || {})) {
-            if (!SETTER_CALL_COMBOS.includes(cc)) continue;
-            if (!calls[cc]) calls[cc] = {attempts:0};
-            calls[cc].attempts += cv.attempts||0;
-          }
-        }
-        return calls;
-      })()
-    : getSetterCallStats(seasons);
+  const setterCallStats = setAgg.calls;
   const callCodes = SETTER_CALL_COMBOS.filter(cc => (setterCallStats[cc]?.attempts||0) > 0);
   const totalCalls = callCodes.reduce((s,cc) => s+(setterCallStats[cc]?.attempts||0), 0);
 
@@ -6981,7 +7011,7 @@ function renderSetter() {
   }
 
   // ── Per-K-call attack breakdown (K1 / K2 / K7 separate tables) ───────────
-  const callAtks = activeSids ? getCallAttacksBySessions(activeSids) : getCallAttacks(seasons);
+  const callAtks = setAgg.callAtk;
   const callTableOrder = ['K7','K1','K2']; // match display order of K-calls bar chart
   const callTableHTML = callTableOrder.map(kcode => {
     const combos = callAtks[kcode];
