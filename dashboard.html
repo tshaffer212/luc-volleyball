@@ -3448,8 +3448,13 @@ function getSessionSetterMap() {
       attByPnum[ps.player_num] = eAtt;
       if (eAtt > bestAtt) bestAtt = eAtt;
     }
+    // Listed setters (position = Setter) always count if they set at least one ball;
+    // anyone else (liberos, pins who set a lot) must clear the volume threshold.
+    const season = DATA.sessions.find(s => s.id === sid)?.season;
     const threshold = Math.max(3, bestAtt * 0.5);
-    const setters = Object.entries(attByPnum).filter(([,a]) => a >= threshold).map(([p]) => String(p));
+    const setters = Object.entries(attByPnum)
+      .filter(([p,a]) => a >= threshold || (a >= 1 && getPlayerGroup(p, season) === 'SETTERS'))
+      .map(([p]) => String(p));
     if (setters.length) map[sid] = setters;
   }
   return map;
@@ -6607,7 +6612,9 @@ function getSetterSessionMap(seasons) {
     }
     const threshold = Math.max(3, bestAtt * 0.5);
     for (const [pnum, eAtt] of Object.entries(attByPnum)) {
-      if (eAtt < threshold) continue;
+      // Listed setters always appear once they've set a ball; others need the volume threshold
+      const listedSetter = getPlayerGroup(pnum, season) === 'SETTERS';
+      if (eAtt < threshold && !(listedSetter && eAtt >= 1)) continue;
       const k = `${pnum}|${season}`;
       if (!result[k]) result[k] = new Set();
       result[k].add(sid);
