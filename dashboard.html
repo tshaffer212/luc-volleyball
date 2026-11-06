@@ -5,12 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LUC Volleyball Analytics</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script>
-  // Safari (incl. iOS / iPad, where every browser is WebKit) → disable sticky table columns
-  (function(){ var ua=navigator.userAgent;
-    if (/Safari/.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|EdgiOS|Edg\//.test(ua) || /iPad|iPhone|iPod/.test(ua))
-      document.documentElement.classList.add('is-safari'); })();
-</script>
 <style>
   :root {
     --maroon: #8D0034;
@@ -244,33 +238,19 @@
   }
   .xlsx-tbl tbody tr:nth-child(even) td { background: rgba(255,255,255,0.018); }
   .xlsx-tbl tbody tr:hover td { background: rgba(254,188,24,0.06); }
-  /* Sticky first two columns in Reports tab tables */
-  table.rpt-sticky th:nth-child(1){position:sticky;left:0;z-index:3;background:#1a1a1a;}
-  table.rpt-sticky th:nth-child(2){position:sticky;left:48px;z-index:3;background:#1a1a1a;}
-  table.rpt-sticky td:nth-child(1){position:sticky;left:0;z-index:2;background:#0f0f0f;}
-  table.rpt-sticky td:nth-child(2){position:sticky;left:48px;z-index:2;background:#0f0f0f;}
-  table.rpt-sticky tbody tr:nth-child(even) td:nth-child(1),
-  table.rpt-sticky tbody tr:nth-child(even) td:nth-child(2){background:#131313;}
-  table.rpt-sticky tr[style*="var(--maroon)"] td:nth-child(1),
-  table.rpt-sticky tr[style*="var(--maroon)"] td:nth-child(2){background:var(--maroon);}
-  table.rpt-sticky tr[style*="rgba(141,0,52,.07)"] td:nth-child(1),
-  table.rpt-sticky tr[style*="rgba(141,0,52,.07)"] td:nth-child(2){background:#1a1516;}
-  table.rpt-sticky tbody tr:hover td:nth-child(1),
-  table.rpt-sticky tbody tr:hover td:nth-child(2){background:#181509;}
-  /* Subtotal/total rows collapse the #+Player columns into one <td colspan="2">
-     label — without this, the CSS above would wrongly grab the very next (real
-     stat) cell as if it were the sticky Player column, since it's nth-child(2)
-     in that row's own DOM. That cell already reads fine with normal position. */
-  table.rpt-sticky tr:has(> td[colspan]:first-child) td:nth-child(2){position:static;left:auto;}
-  /* Safari can't paint sticky table cells inside a box that scrolls both ways
-     (.table-scroll: max-height + overflow auto) — the # / Name cells render blank.
-     These .data-table tables are narrow enough not to need pinned columns, so turn
-     pinning off for them and keep jersey + name on one readable line. */
-  table.data-table.rpt-sticky th, table.data-table.rpt-sticky td { position: static !important; left: auto !important; }
-  /* Safari (macOS + iOS) also mis-paints pinned columns in the wide Reports tables —
-     disable pinning in every table there; other browsers keep it. Class set in <head>. */
-  html.is-safari table.rpt-sticky th, html.is-safari table.rpt-sticky td { position: static !important; left: auto !important; }
-  html.is-safari table.rpt-sticky td:nth-child(1), html.is-safari table.rpt-sticky td:nth-child(2) { white-space: nowrap; }
+  /* Pinned # / Player columns (every table with class rpt-sticky).
+     Pinning is done in JS (pinTableColumns) by sliding the cells with
+     transform: translateX(scrollLeft) as the table scrolls sideways — CSS
+     position:sticky on table cells paints blank in Safari, this works everywhere.
+     JS tags the pinned cells with .pin-col; CSS gives them an opaque background. */
+  table.rpt-sticky .pin-col { position: relative; z-index: 3; white-space: nowrap; background:#0f0f0f; }
+  table.rpt-sticky thead .pin-col, table.rpt-sticky th.pin-col { z-index: 4; background:#1a1a1a; }
+  table.rpt-sticky tbody tr:nth-child(even) td.pin-col { background:#131313; }
+  table.rpt-sticky tr[style*="var(--maroon)"] td.pin-col { background:var(--maroon); }
+  table.rpt-sticky tr[style*="rgba(141,0,52,.07)"] td.pin-col { background:#1a1516; }
+  table.rpt-sticky tr[style*="surface3"] td.pin-col { background:var(--surface3); }
+  table.rpt-sticky tbody tr:hover td.pin-col { background:#181509; }
+  table.rpt-sticky .pin-col.pin-edge { box-shadow: 6px 0 8px -6px rgba(0,0,0,.8); }
   table.data-table.rpt-sticky td:nth-child(1), table.data-table.rpt-sticky td:nth-child(2),
   table.data-table.rpt-sticky th:nth-child(1), table.data-table.rpt-sticky th:nth-child(2) { white-space: nowrap; }
 
@@ -7224,6 +7204,56 @@ document.addEventListener('click', function(e) {
 
 // ─── START ────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', init);
+
+// ── Pinned # / Player columns ────────────────────────────────────────────────
+// For every table.rpt-sticky: the cells that cover the first two columns
+// (# and Player, or a colspan=2 group/total label) slide right by the scroll
+// container's scrollLeft, so names stay visible while scrolling sideways.
+function _pinScroller(table) {
+  for (let el = table.parentElement; el && el !== document.body; el = el.parentElement) {
+    const ox = getComputedStyle(el).overflowX;
+    if (ox === 'auto' || ox === 'scroll') return el;
+  }
+  return null;
+}
+function _pinTable(table, x) {
+  for (const row of table.rows) {
+    let col = 0;
+    for (const cell of row.cells) {
+      const span = cell.colSpan || 1;
+      if (col >= 2) break;
+      if (col + span <= 2) {                       // cell lies within the # / Player columns
+        if (!cell.classList.contains('pin-col')) cell.classList.add('pin-col');
+        cell.classList.toggle('pin-edge', col + span === 2 && x > 0);
+        cell.style.transform = x ? `translateX(${x}px)` : '';
+      }
+      col += span;
+    }
+  }
+}
+function pinTableColumns(root) {
+  (root || document).querySelectorAll('table.rpt-sticky').forEach(tbl => {
+    const sc = _pinScroller(tbl);
+    _pinTable(tbl, sc ? sc.scrollLeft : 0);
+  });
+}
+// Scroll events don't bubble — listen in the capture phase for any scroller.
+document.addEventListener('scroll', e => {
+  const sc = e.target;
+  if (sc && sc.querySelectorAll) sc.querySelectorAll('table.rpt-sticky').forEach(tbl => {
+    if (_pinScroller(tbl) === sc) _pinTable(tbl, sc.scrollLeft);
+  });
+}, true);
+// Tables are re-rendered with innerHTML on every filter change — re-tag new cells.
+(function(){
+  let queued = false;
+  const mo = new MutationObserver(() => {
+    if (queued) return; queued = true;
+    requestAnimationFrame(() => { queued = false; pinTableColumns(); });
+  });
+  const start = () => mo.observe(document.body, { childList: true, subtree: true });
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
 </script>
 </body>
 </html>
