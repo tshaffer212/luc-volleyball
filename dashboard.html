@@ -1540,6 +1540,7 @@ function setRcvPassScale(scale) {
   refreshRcvHeaders();
   // Re-render whichever tab is visible
   if (document.getElementById('tab-reports')?.classList.contains('active')) renderReports();
+  else if (document.getElementById('tab-setter')?.classList.contains('active')) renderSetter();
   else renderServRcv();
 }
 
@@ -1933,6 +1934,18 @@ const BUCKET_LABELS = {
   med:'2-Point Pass (!)', oos:'1-Point Pass (-)', fbso:'FBSO', transition:'Transition'
 };
 const BUCKET_ORDER = ['all','perf','good','med','oos','fbso','transition'];
+// Pass-quality filter labels follow the selected pass scale (Pass Scale toggle).
+//   4-pt: # = 4, + = 3, ! = 2, - = 1
+//   3-pt: # = 3, + and ! = 2 (one combined button), - = 1
+function bucketOrder() {
+  return rcvPassScale === '3' ? BUCKET_ORDER.filter(b => b !== 'med') : BUCKET_ORDER;
+}
+function bucketLabel(b) {
+  const L = rcvPassScale === '3'
+    ? { perf:'3-Point Pass (#)', good:'2-Point Pass (+ / !)', oos:'1-Point Pass (-)' }
+    : { perf:'4-Point Pass (#)', good:'3-Point Pass (+)', med:'2-Point Pass (!)', oos:'1-Point Pass (-)' };
+  return L[b] || BUCKET_LABELS[b];
+}
 let setterBucketFilter = new Set(['all']);
 let setterSelected     = 'all'; // 'all' | specific setter player num string
 let _cachedSetterAtk   = null;
@@ -2056,11 +2069,13 @@ function toggleSetterBucket(bkt) {
     setterBucketFilter = new Set(['all']);
   } else {
     setterBucketFilter.delete('all');
+    // On the 3-pt scale "+" and "!" are both 2-point passes → one button selects both
+    const keys = (rcvPassScale === '3' && bkt === 'good') ? ['good','med'] : [bkt];
     if (setterBucketFilter.has(bkt)) {
-      setterBucketFilter.delete(bkt);
+      keys.forEach(k => setterBucketFilter.delete(k));
       if (!setterBucketFilter.size) setterBucketFilter = new Set(['all']);
     } else {
-      setterBucketFilter.add(bkt);
+      keys.forEach(k => setterBucketFilter.add(k));
     }
   }
   document.querySelectorAll('.setter-bucket-btn').forEach(btn => {
@@ -2332,9 +2347,9 @@ function buildSetterBreakdownPanel(setterAtk) {
   // ── Reception bucket filter ───────────────────────────────────────────────
   let filterHtml = `<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
     <span style="font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:.8px;margin-right:4px">FILTER:</span>`;
-  for (const bkt of BUCKET_ORDER) {
+  for (const bkt of bucketOrder()) {
     const active = setterBucketFilter.has(bkt) ? ' active' : '';
-    filterHtml += `<button class="setter-bucket-btn${active}" data-bkt="${bkt}" onclick="toggleSetterBucket('${bkt}')">${BUCKET_LABELS[bkt]}</button>`;
+    filterHtml += `<button class="setter-bucket-btn${active}" data-bkt="${bkt}" onclick="toggleSetterBucket('${bkt}')">${bucketLabel(bkt)}</button>`;
   }
   filterHtml += '</div>';
 
@@ -6799,8 +6814,7 @@ function setterTabAgg(sids, setterKey, sit) {
     if (!sids.has(s.id) || !s.setter_tab) continue;
     for (const [sp, bySit] of Object.entries(s.setter_tab)) {
       if (fPnum !== null && (sp !== fPnum || getPlayerName(sp, s.season) !== fName)) continue;
-      const b = bySit[sit];
-      if (!b) continue;
+      for (const b of (Array.isArray(sit) ? sit : [sit]).map(x => bySit[x]).filter(Boolean)) {
       for (const [cc, v] of Object.entries(b.atk || {})) {
         const c = combos[cc] || (combos[cc] = {attempts:0, kills:0, errors:0, blocked:0});
         c.attempts += v.a; c.kills += v.k; c.errors += v.e; c.blocked += v.b;
@@ -6814,6 +6828,7 @@ function setterTabAgg(sids, setterKey, sit) {
           const c = callAtk[kc][cc] || (callAtk[kc][cc] = {att:0, kills:0, errors:0, blocks:0});
           c.att += v.a; c.kills += v.k; c.errors += v.e; c.blocks += v.b;
         }
+      }
       }
     }
   }
@@ -6871,7 +6886,18 @@ function renderSetter() {
   let activeSids = new Set(sessionPool().filter(s => seasons.includes(s.season)).map(s => s.id));
   if (periodSids) activeSids = new Set([...activeSids].filter(sid => periodSids.has(sid)));
   const setterKey = (setterPnumFilter && settersByPlayer[setterPnumFilter]) ? setterPnumFilter : null;
-  const situation = document.getElementById('set-situation')?.value || 'all';
+  const sitSel = document.getElementById('set-situation');
+  if (sitSel && sitSel.options) {
+    for (const o of sitSel.options) {
+      if (['perf','good','med','oos'].includes(o.value)) {
+        o.textContent = bucketLabel(o.value);
+        o.hidden = (o.value === 'med' && rcvPassScale === '3');
+      }
+    }
+    if (rcvPassScale === '3' && sitSel.value === 'med') sitSel.value = 'good';
+  }
+  const situationKey = sitSel?.value || 'all';
+  const situation = (rcvPassScale === '3' && situationKey === 'good') ? ['good','med'] : situationKey;
 
   // ── Empty-state guard ────────────────────────────────────────────────────────
   if (showEmptyState(activeSids, 'set-kpi-row')) return;
