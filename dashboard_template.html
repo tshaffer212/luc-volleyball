@@ -557,6 +557,13 @@
       <button onclick="setRcvPassScale('4')" id="rpt-scale-4" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">4-pt</button>
       <button onclick="setRcvPassScale('3')" id="rpt-scale-3" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--surface2);color:var(--text)">3-pt</button>
     </div></div>
+    <div class="filter-sep" id="rpt-set-sep" style="display:none"></div>
+    <div id="rpt-set-filter" style="display:none"><label>Set</label><br>
+      <select id="rpt-set" onchange="setRptSetFilter(this.value)" style="margin-top:4px">
+        <option value="all">All Sets</option>
+      </select>
+      <span id="rpt-set-note" style="font-size:11px;color:var(--text-muted);margin-left:6px"></span>
+    </div>
     <div class="filter-sep" id="rpt-side-sep" style="display:none"></div>
     <div id="rpt-side-filter" style="display:none"><label>Team</label><br><div style="display:flex;gap:4px;margin-top:4px">
       <button onclick="setRptTeamSide('luc')" id="rpt-side-luc" style="padding:5px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:var(--maroon);color:#fff">Loyola</button>
@@ -2060,7 +2067,7 @@ function toggleSetterBucket(bkt) {
     btn.classList.toggle('active', setterBucketFilter.has(btn.dataset.bkt));
   });
   const el = document.getElementById('setter-breakdown-table');
-  if (el && _cachedSetterAtk) el.innerHTML = withRptSide(() => buildSetterBreakdownTable(_cachedSetterAtk));
+  if (el && _cachedSetterAtk) el.innerHTML = withRptFilters(() => buildSetterBreakdownTable(_cachedSetterAtk));
 }
 
 function toggleSetterSelect(snm) {
@@ -2069,7 +2076,7 @@ function toggleSetterSelect(snm) {
     btn.classList.toggle('active', btn.dataset.snm === snm);
   });
   const el = document.getElementById('setter-breakdown-table');
-  if (el && _cachedSetterAtk) el.innerHTML = withRptSide(() => buildSetterBreakdownTable(_cachedSetterAtk));
+  if (el && _cachedSetterAtk) el.innerHTML = withRptFilters(() => buildSetterBreakdownTable(_cachedSetterAtk));
 }
 
 // Merge data for a specific attacker across selected setter(s) and buckets → {cc:{k,e,b,a}}
@@ -4177,6 +4184,80 @@ function buildBlockDefSheet(groups) {
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
+// ── Set filter (Reports, match mode): 'all' | '1'..'5' ───────────────────────
+// Per-set match data lives in dashboard_sets.json (same structures as the full
+// match, recomputed from that set's actions). It's fetched the first time a set
+// is picked, then swapped in exactly like the Opponent toggle swaps its data.
+let rptSetFilter = 'all';
+let SETS_DATA = null, SETS_LOADING = null;
+
+function loadSetsData() {
+  if (SETS_DATA) return Promise.resolve(SETS_DATA);
+  if (!SETS_LOADING) {
+    SETS_LOADING = fetch('dashboard_sets.json', {cache:'no-cache'})
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(j => (SETS_DATA = j))
+      .catch(err => { SETS_LOADING = null; throw err; });
+  }
+  return SETS_LOADING;
+}
+
+function setRptSetFilter(v) {
+  rptSetFilter = v;
+  const note = document.getElementById('rpt-set-note');
+  if (v === 'all' || SETS_DATA) { if (note) note.textContent = ''; renderRptDetail(); return; }
+  if (note) note.textContent = 'Loading set data…';
+  loadSetsData()
+    .then(() => { if (note) note.textContent = ''; renderRptDetail(); })
+    .catch(() => {
+      if (note) note.textContent = 'Set data unavailable (open the dashboard from the website)';
+      rptSetFilter = 'all'; const sel = document.getElementById('rpt-set'); if (sel) sel.value = 'all';
+    });
+}
+
+// Rebuild the Set dropdown from the sets present in the selected matches
+function refreshRptSetOptions(isMatch) {
+  ['rpt-set-filter','rpt-set-sep'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = isMatch ? '' : 'none';
+  });
+  const sel = document.getElementById('rpt-set');
+  if (!sel) return;
+  const sets = new Set();
+  for (const s of DATA.sessions) if (rptSelected.has(s.id) && s.type === 'match') (s.sets||[]).forEach(n => sets.add(n));
+  const list = [...sets].sort((a,b) => a-b);
+  if (!isMatch || (rptSetFilter !== 'all' && !list.includes(+rptSetFilter))) rptSetFilter = 'all';
+  sel.innerHTML = '<option value="all">All Sets</option>' + list.map(n => `<option value="${n}">Set ${n}</option>`).join('');
+  sel.value = rptSetFilter;
+}
+
+const _SET_FIELDS = ['match_rot_stats','fbso_rcv','fbso_kills','opp_stats',
+                     'match_rot_stats_opp','opp_fbso_rcv','opp_fbso_kills','luc_stats'];
+function withRptSet(fn) {
+  if (rptSetFilter === 'all' || !SETS_DATA) return fn();
+  const n = String(rptSetFilter);
+  const saved = { ps: DATA.player_session, ops: DATA.opp_player_session, sess: [] };
+  const ps = {}, ops = {};
+  try {
+    for (const s of DATA.sessions) {
+      if (s.type !== 'match') continue;
+      const e = SETS_DATA[s.id]?.[n] || null;      // null → this match had no such set
+      saved.sess.push([s, _SET_FIELDS.map(f => s[f])]);
+      for (const f of _SET_FIELDS) s[f] = e ? (e[f] ?? null) : (f.includes('fbso') ? 0 : null);
+      if (!e || !rptSelected.has(s.id)) continue;
+      for (const [p, v] of Object.entries(e.player_session || {}))     ps[`${p}|${s.id}`]  = {...v, player_num:p, session_id:s.id};
+      for (const [p, v] of Object.entries(e.opp_player_session || {})) ops[`${p}|${s.id}`] = {...v, player_num:p, session_id:s.id};
+    }
+    DATA.player_session = ps;
+    DATA.opp_player_session = ops;
+    return fn();
+  } finally {
+    DATA.player_session = saved.ps; DATA.opp_player_session = saved.ops;
+    for (const [s, vals] of saved.sess) _SET_FIELDS.forEach((f, i) => { s[f] = vals[i]; });
+  }
+}
+// Both filters together: set first (swaps in that set's data), then team side
+function withRptFilters(fn) { return withRptSet(() => withRptSide(fn)); }
+
 // ── Team side (Reports, match mode): 'luc' | 'opp' ───────────────────────────
 // Opponent view reuses every match-report builder unchanged by temporarily
 // swapping the data they read (player stats, roster, per-session match stats)
@@ -4250,7 +4331,8 @@ function renderRptDetail() {
       : (withOpp.length < sel.length ? `${withOpp.length} of ${sel.length} matches have opponent coding` : '')
         + (opps.size > 1 ? `${withOpp.length < sel.length ? ' · ' : ''}${opps.size} opponents combined — jersey numbers merge` : '');
   }
-  return withRptSide(renderRptDetailInner);
+  refreshRptSetOptions(isMatch);
+  return withRptFilters(renderRptDetailInner);
 }
 
 function renderRptDetailInner() {

@@ -46,6 +46,9 @@ parse_dvw.py → volleyball_data.json → aggregate.py → dashboard_data.json
                                           dashboard.html (final file)
 ```
 
+`aggregate.py` also writes `dashboard_sets.json` (per-set match data for the Reports tab's Set filter).
+The page fetches it on demand, so it must be committed and pushed alongside `dashboard.html`.
+
 After any change to `aggregate.py` or `parse_dvw.py`, rebuild with:
 ```bash
 python3 aggregate.py volleyball_data.json dashboard_data.json

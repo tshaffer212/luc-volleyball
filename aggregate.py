@@ -1114,20 +1114,19 @@ def main(raw_path, out_path):
                           'position_code': pos, 'is_libero': is_lib}
         return roster
 
-    opp_match = {}           # sid -> {'rot_stats','fbso','roster','luc_stats'}
-    opp_player_session = {}  # "pnum|sid" -> same shape as player_session entries
-    for s in sessions_raw:
-        if s.get('type') != 'match':
-            continue
+    def opp_bundle(s, acts, roster=None):
+        """Opponent-side report data for a match (or one set of it): rotation stats,
+        FBSO, per-player stats, LUC comparison totals. None if the file doesn't code
+        the other team. Pass the full-match roster when computing a single set."""
         ls = loyola_side_for_session(s)
-        if ls not in ('home', 'away'):
-            continue
-        sid      = f"{s['season']}|{s['file']}"
+        if s.get('type') != 'match' or ls not in ('home', 'away'):
+            return None
         opp_side = 'away' if ls == 'home' else 'home'
-        acts     = s.get('actions', [])
         opp_acts = [a for a in acts if a.get('team_side') == opp_side]
-        if len(opp_acts) < 20:
-            continue
+        if roster is None and len(opp_acts) < 20:
+            return None
+        if not opp_acts:
+            return None
         set_lu = s.get('away_set_lineups' if opp_side == 'away' else 'home_set_lineups') or {}
         # DataVolley convention: rotation = court zone of the setter.
         #   opponent at home → home rotation field (rot_h)
@@ -1143,12 +1142,13 @@ def main(raw_path, out_path):
             b['rotation'] = rot if rot else _opp_rotation(a, opp_side, set_lu)
             acts_o.append(b)
         dig_o, fbso_o = compute_rally_sequences(acts_o, opp_side)
-        roster = _opp_roster(s, opp_side, opp_acts)
-        opp_match[sid] = {
+        if roster is None:
+            roster = _opp_roster(s, opp_side, opp_acts)
+        entry = {
             'rot_stats': compute_match_rotation_stats(acts_o, opp_side),
             'fbso':      fbso_o,
             'roster':    roster,
-            'luc_stats': compute_opp_stats(s, opp_side),   # LUC totals, for comparison KPIs
+            'luc_stats': compute_opp_stats({'actions': acts}, opp_side),   # LUC totals, for comparison KPIs
         }
         store = defaultdict(lambda: {'actions': 0, 'skills': {}, 'rcv_zones': {}})
         for a in opp_acts:
@@ -1163,11 +1163,21 @@ def main(raw_path, out_path):
             if pn in store:
                 store[pn]['dig_kill_rallies']  = dstats['dig_kill_rallies']
                 store[pn]['dig_total_rallies'] = dstats['dig_rallies']
-        for pn, ps_ in store.items():
+        for ps_ in store.values():
             derive(ps_['skills'])
             derive_zones(ps_['rcv_zones'], is_match=True)
-            opp_player_session[f"{pn}|{sid}"] = {'player_num': pn, 'session_id': sid, **ps_}
+        return entry, dict(store)
 
+    opp_match = {}           # sid -> {'rot_stats','fbso','roster','luc_stats'}
+    opp_player_session = {}  # "pnum|sid" -> same shape as player_session entries
+    for s in sessions_raw:
+        sid = f"{s['season']}|{s['file']}"
+        res = opp_bundle(s, s.get('actions', []))
+        if not res:
+            continue
+        opp_match[sid], store = res
+        for pn, ps_ in store.items():
+            opp_player_session[f"{pn}|{sid}"] = {'player_num': pn, 'session_id': sid, **ps_}
 
     sessions_index = []
     for s in sessions_raw:
@@ -1197,7 +1207,6 @@ def main(raw_path, out_path):
                          if s.get('type') == 'match' and
                             any(a.get('team_side') != ls for a in s.get('actions', []))
                          else None,
-            'zone_charts': compute_zone_charts(s, ls),
             # Opponent view (Reports tab) — None when the file doesn't code the other side
             'match_rot_stats_opp': opp_match.get(sid, {}).get('rot_stats'),
             'opp_fbso_rcv':        opp_match[sid]['fbso']['rcv_rallies'] if sid in opp_match else None,
@@ -1616,6 +1625,89 @@ def main(raw_path, out_path):
             for season, kcodes in call_attacks_by_season.items()
         },
     }
+
+
+    # ── Per-set match data (Reports tab "Set" filter) ─────────────────────────
+    # Same structures the match reports read, recomputed from each set's actions
+    # alone. Written to a separate dashboard_sets.json that the page only loads
+    # when a set is picked, so the main dashboard stays the same size.
+    print("Computing per-set match data ...", file=sys.stderr)
+
+    def luc_player_store(s, acts, ls, keep_unnamed):
+        store = defaultdict(lambda: {'actions': 0, 'skills': {}, 'rcv_zones': {}})
+        for a in acts:
+            pnum = a.get('player_num', '')
+            if not pnum:
+                continue
+            pname = a.get('player_name', '')
+            if (not pname or pname.startswith('#')) and pnum not in keep_unnamed:
+                continue
+            if ls != 'both' and a.get('team_side') != ls:
+                continue
+            if pnum not in loyola_player_nums:
+                continue
+            ps_ = store[pnum]
+            ps_['actions'] += 1
+            add_action(ps_['skills'], a, ps_['rcv_zones'])
+            add_rcv_extras((ps_,), a, True)
+        dig, _ = compute_rally_sequences(acts, ls)
+        for pnum, dstats in dig.items():
+            pname = s.get('players', {}).get(pnum, {}).get('name', '')
+            if (not pname or pname.startswith('#')) and pnum not in keep_unnamed:
+                continue
+            if ls != 'both' and pnum not in loyola_player_nums:
+                continue
+            ps_ = store[pnum]
+            ps_['dig_kill_rallies']  = ps_.get('dig_kill_rallies', 0)  + dstats['dig_kill_rallies']
+            ps_['dig_total_rallies'] = ps_.get('dig_total_rallies', 0) + dstats['dig_rallies']
+        for ps_ in store.values():
+            derive(ps_['skills'])
+            derive_zones(ps_['rcv_zones'], is_match=True)
+        return dict(store)
+
+    idx_by_sid = {e['id']: e for e in sessions_index}
+    sets_out = {}
+    for s in sessions_raw:
+        if s.get('type') != 'match':
+            continue
+        sid  = f"{s['season']}|{s['file']}"
+        ls   = loyola_side_for_session(s)
+        acts = s.get('actions', [])
+        set_nums = sorted({a.get('set_number') for a in acts if isinstance(a.get('set_number'), int)})
+        if not set_nums:
+            continue
+        idx_by_sid[sid]['sets'] = set_nums
+        two_sided = any(a.get('team_side') != ls for a in acts)
+        full_roster = opp_match.get(sid, {}).get('roster')
+        per = {}
+        for n in set_nums:
+            acts_n = [a for a in acts if a.get('set_number') == n]
+            _, fbso_n = compute_rally_sequences(acts_n, ls)
+            e = {
+                'fbso_rcv':        fbso_n['rcv_rallies'],
+                'fbso_kills':      fbso_n['fbso_kills'],
+                'match_rot_stats': compute_match_rotation_stats(acts_n, ls),
+                'opp_stats':       compute_opp_stats({'actions': acts_n}, ls) if two_sided else None,
+                'player_session':  luc_player_store(s, acts_n, ls, s.get('_keep_unnamed', set())),
+            }
+            if full_roster:
+                res = opp_bundle(s, acts_n, roster=full_roster)
+                if res:
+                    om, ostore = res
+                    e.update({
+                        'match_rot_stats_opp': om['rot_stats'],
+                        'opp_fbso_rcv':        om['fbso']['rcv_rallies'],
+                        'opp_fbso_kills':      om['fbso']['fbso_kills'],
+                        'luc_stats':           om['luc_stats'],
+                        'opp_player_session':  ostore,
+                    })
+            per[str(n)] = e
+        sets_out[sid] = per
+
+    sets_path = os.path.join(os.path.dirname(os.path.abspath(out_path)), 'dashboard_sets.json')
+    with open(sets_path, 'w') as f:
+        json.dump(sets_out, f, separators=(',', ':'))
+    print(f"  wrote {sets_path} ({os.path.getsize(sets_path)/1024/1024:.1f} MB, {len(sets_out)} matches)", file=sys.stderr)
 
     print(f"Writing {out_path} ...", file=sys.stderr)
     with open(out_path, 'w') as f:
