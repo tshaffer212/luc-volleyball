@@ -3660,11 +3660,11 @@ function buildSetterAttackSectionHTML(setterSessionMap) {
   // Filter button HTML — id="rpt-setter-btns" so renderRptSetterChart can refresh active states
   const filterBtns = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px">
     <div id="rpt-setter-btns" style="display:flex;gap:8px;flex-wrap:wrap">
-      <button onclick="rptSetterFilter=null;renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${rptSetterFilter===null?'var(--maroon)':'var(--surface2)'};color:${rptSetterFilter===null?'#fff':'var(--text)'}">All Setters</button>
+      <button onclick="rptSetterFilter=null;withRptFilters(renderRptSetterChart)" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${rptSetterFilter===null?'var(--maroon)':'var(--surface2)'};color:${rptSetterFilter===null?'#fff':'var(--text)'}">All Setters</button>
       ${setterPnums.map(pnum => {
         const active = rptSetterFilter === pnum;
         const cnt = setterSessions[pnum].size;
-        return `<button onclick="rptSetterFilter='${pnum}';renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${active?'var(--maroon)':'var(--surface2)'};color:${active?'#fff':'var(--text)'}">#${pnum} ${setterNames[pnum]} <span style="opacity:.6">(${cnt})</span></button>`;
+        return `<button onclick="rptSetterFilter='${pnum}';withRptFilters(renderRptSetterChart)" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${active?'var(--maroon)':'var(--surface2)'};color:${active?'#fff':'var(--text)'}">#${pnum} ${setterNames[pnum]} <span style="opacity:.6">(${cnt})</span></button>`;
       }).join('')}
     </div>
     <button onclick="exportSetterPDF()" title="Export current setter view as PDF" style="padding:6px 14px;border-radius:4px;border:1px solid var(--gold);cursor:pointer;font-size:12px;background:transparent;color:var(--gold);font-weight:600;white-space:nowrap;flex-shrink:0">⬇ Export PDF</button>
@@ -3704,7 +3704,7 @@ function renderRptSetterChart() {
   // Determine season for name lookup
   const anySession = DATA.sessions.find(s => rptSelected.has(s.id));
   const season = anySession?.season;
-  function getSetterLabel(pnum) { return pnum === '__rest__' ? 'Other Setters' : (getPlayerName(pnum, season) || `#${pnum}`); }
+  function getSetterLabel(pnum) { return `#${pnum} ${getPlayerName(pnum, season) || ''}`.trim(); }
 
   // Refresh button active states without rebuilding the chart DOM
   const btnContainer = document.getElementById('rpt-setter-btns');
@@ -3713,34 +3713,22 @@ function renderRptSetterChart() {
     for (const pnum of setterPnums) setterNames[pnum] = getPlayerName(pnum, season) || `#${pnum}`;
     const nullActive = rptSetterFilter === null;
     btnContainer.innerHTML =
-      `<button onclick="rptSetterFilter=null;renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${nullActive?'var(--maroon)':'var(--surface2)'};color:${nullActive?'#fff':'var(--text)'}">All Setters</button>` +
+      `<button onclick="rptSetterFilter=null;withRptFilters(renderRptSetterChart)" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${nullActive?'var(--maroon)':'var(--surface2)'};color:${nullActive?'#fff':'var(--text)'}">All Setters</button>` +
       setterPnums.map(pnum => {
         const active = rptSetterFilter === pnum;
         const cnt = setterSessions[pnum].size;
-        return `<button onclick="rptSetterFilter='${pnum}';renderRptSetterChart()" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${active?'var(--maroon)':'var(--surface2)'};color:${active?'#fff':'var(--text)'}">#${pnum} ${setterNames[pnum]} <span style="opacity:.6">(${cnt})</span></button>`;
+        return `<button onclick="rptSetterFilter='${pnum}';withRptFilters(renderRptSetterChart)" style="padding:5px 14px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:12px;background:${active?'var(--maroon)':'var(--surface2)'};color:${active?'#fff':'var(--text)'}">#${pnum} ${setterNames[pnum]} <span style="opacity:.6">(${cnt})</span></button>`;
       }).join('');
   }
 
   // Aggregate combos per setter — rally-accurate (each attack attributed to whichever
   // setter's Set actually preceded it), so this stays correct even when two setters
-  // share the same session. If a filter is active, show that setter vs. everyone else
-  // combined ("Other Setters"); otherwise show the top 2 setters by volume.
+  // share the same session. Every setter gets his own bars and color; picking a
+  // setter highlights his bars (others fade) and filters the tables below.
   const setterCombos = {};
-  let displaySetters;
-  if (rptSetterFilter) {
-    setterCombos[rptSetterFilter] = aggregateSetterComboTotals(rptSetterFilter, [...rptSelected]);
-    const restCombos = aggregateSetterComboTotalsExcluding(rptSetterFilter, [...rptSelected]);
-    const hasRest = Object.values(restCombos).some(c => c.a > 0);
-    displaySetters = [rptSetterFilter];
-    if (hasRest) {
-      setterCombos['__rest__'] = restCombos;
-      displaySetters.push('__rest__');
-    }
-  } else {
-    displaySetters = setterPnums.slice(0, 2);
-    for (const pnum of displaySetters) {
-      setterCombos[pnum] = aggregateSetterComboTotals(pnum, [...(setterSessions[pnum]||[])]);
-    }
+  const displaySetters = setterPnums;
+  for (const pnum of displaySetters) {
+    setterCombos[pnum] = aggregateSetterComboTotals(pnum, [...rptSelected]);
   }
 
   // Collect all combo codes that appear
@@ -3757,7 +3745,11 @@ function renderRptSetterChart() {
   });
 
   const labels = sortedCodes.map(cc => COMBO_NAMES[cc] || cc);
-  const SETTER_COLORS = [MAROON, GOLD, '#555555', '#888888'];
+  // Distinct, dark-background-friendly colors — one per setter
+  const SETTER_COLORS = [MAROON, GOLD, '#3b8fd9', '#3fae6a', '#a46bd6', '#e07b39', '#9aa0a6'];
+  const fade = pnum => rptSetterFilter && rptSetterFilter !== pnum;   // dim non-selected setters
+  const fill = (pnum, i) => SETTER_COLORS[i % SETTER_COLORS.length] + (fade(pnum) ? '40' : 'dd');
+  const line = (pnum, i) => SETTER_COLORS[i % SETTER_COLORS.length] + (fade(pnum) ? '55' : '');
 
   // Efficiency chart
   const effCanvas = document.getElementById('rpt-setter-eff-chart');
@@ -3769,8 +3761,8 @@ function renderRptSetterChart() {
         if (!c || !c.a) return null;
         return +((c.k - c.e - (c.bk||0)) / c.a * 100).toFixed(1);
       }),
-      backgroundColor: SETTER_COLORS[i] + 'cc',
-      borderColor: SETTER_COLORS[i],
+      backgroundColor: fill(pnum, i),
+      borderColor: line(pnum, i),
       borderWidth: 1,
       borderRadius: 3,
     }));
@@ -3792,8 +3784,8 @@ function renderRptSetterChart() {
     const attDatasets = displaySetters.map((pnum, i) => ({
       label: getSetterLabel(pnum),
       data: sortedCodes.map(cc => setterCombos[pnum]?.[cc]?.a || 0),
-      backgroundColor: SETTER_COLORS[i] + 'cc',
-      borderColor: SETTER_COLORS[i],
+      backgroundColor: fill(pnum, i),
+      borderColor: line(pnum, i),
       borderWidth: 1,
       borderRadius: 3,
     }));
