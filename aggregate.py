@@ -844,6 +844,67 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
     }
 
 
+# ── Right-side typo auto-correction (match files) ─────────────────────────────
+# In a 5-1 the opposite is front row while the setter is back row (R1–R3) and
+# back row while the setter is front row (R4–R6). So an X6 (in-system right,
+# front row) can't happen in R4–R6 and an X8 (D-ball, back-row right) can't
+# happen in R1–R3. When only a few attacks break that rule they're coding typos
+# and get swapped (X6↔X8). When a large share breaks it, the team's rotation
+# itself is off (e.g. old opponent files with placeholder lineups), so nothing
+# is changed — "fixing" those would corrupt good codes.
+RIGHT_SIDE_TYPO_MAX_SHARE = 0.20   # ≤20% of that team's X6+X8 in the match …
+RIGHT_SIDE_TYPO_MAX_COUNT = 3      # … and at most 3 swaps — more than that isn't a typo
+BACK_ROW_SETTER_ZONES  = {1, 6, 5}   # R1, R2, R3
+FRONT_ROW_SETTER_ZONES = {4, 3, 2}   # R4, R5, R6
+
+def fix_right_side_typos(session):
+    """Swap impossible X6/X8 codes in place. Returns list of (side, from, to, n)."""
+    if session.get('type') != 'match':
+        return []
+    ls = loyola_side_for_session(session)
+    if ls not in ('home', 'away'):
+        return []
+    opp = 'away' if ls == 'home' else 'home'
+    zone_of = {
+        ls:  lambda a: a.get('rotation'),                       # LUC setter zone
+        opp: (lambda a: a.get('rot_h')) if opp == 'home'
+             else (lambda a: a.get('az_zone') or a.get('rot_v')),  # opponent setter zone
+    }
+    acts = session.get('actions', [])
+    report = []
+    for side, zf in zone_of.items():
+        cands, wrong = 0, []
+        for a in acts:
+            if a.get('team_side') != side or a.get('skill_code') != 'A':
+                continue
+            cc = a.get('combo_code')
+            if cc not in ('X6', 'X8'):
+                continue
+            z = zf(a)
+            if not isinstance(z, int):
+                continue
+            cands += 1
+            if (cc == 'X6' and z in FRONT_ROW_SETTER_ZONES) or (cc == 'X8' and z in BACK_ROW_SETTER_ZONES):
+                wrong.append(a)
+        if not wrong:
+            continue
+        if len(wrong) > RIGHT_SIDE_TYPO_MAX_SHARE * cands or len(wrong) > RIGHT_SIDE_TYPO_MAX_COUNT:
+            report.append((side, 'skipped', f'{len(wrong)}/{cands} look wrong — rotation likely off', 0))
+            continue
+        names = {a.get('combo_code'): a.get('combo_name') for a in acts if a.get('combo_code') in ('X6', 'X8') and a.get('combo_name')}
+        swaps = {}
+        for a in wrong:
+            src = a['combo_code']; dst = 'X8' if src == 'X6' else 'X6'
+            a['combo_fixed_from'] = src
+            a['combo_code'] = dst
+            if names.get(dst):
+                a['combo_name'] = names[dst]
+            swaps[(src, dst)] = swaps.get((src, dst), 0) + 1
+        for (src, dst), n in swaps.items():
+            report.append((side, src, dst, n))
+    return report
+
+
 def main(raw_path, out_path):
     print(f"Loading {raw_path} ...", file=sys.stderr)
     with open(raw_path) as f:
@@ -851,6 +912,18 @@ def main(raw_path, out_path):
 
     sessions_raw = raw.get('sessions', [])
     scouts_raw   = raw.get('scout_sessions', [])
+
+    # Auto-correct impossible X6/X8 codes before anything is aggregated
+    combo_fixes = {}
+    for s in sessions_raw:
+        rep = fix_right_side_typos(s)
+        if rep:
+            sid = f"{s['season']}|{s['file']}"
+            combo_fixes[sid] = [{'side': 'LUC' if side == loyola_side_for_session(s) else 'OPP',
+                                 'from': f, 'to': to, 'n': n} for side, f, to, n in rep]
+            for side, f, to, n in rep:
+                who = 'LUC' if side == loyola_side_for_session(s) else 'OPP'
+                print(f"  Combo fix {s['file']} [{who}]: " + (f"{f}→{to} ×{n}" if f != 'skipped' else f"skipped ({to})"), file=sys.stderr)
 
     # ── Per-season player rosters ─────────────────────────────────────────────
     # Build season-specific rosters from practice files.
@@ -1247,6 +1320,7 @@ def main(raw_path, out_path):
             'opp_fbso_kills':      opp_match[sid]['fbso']['fbso_kills']  if sid in opp_match else None,
             'opp_fbso_by_player':  opp_match[sid]['fbso']['by_player']   if sid in opp_match else None,
             'opp_roster':          opp_match.get(sid, {}).get('roster'),
+            'combo_fixes':         combo_fixes.get(sid),   # X6/X8 typo corrections applied (or skipped)
             'luc_stats':           opp_match.get(sid, {}).get('luc_stats'),
         })
 
