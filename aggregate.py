@@ -600,6 +600,10 @@ CLOSE_K_CODES = {'K1', 'K2', 'KC'}   # front quick / back quick → close-route 
 GAP_K_CODES   = {'K7', 'KM', 'KP', 'KE', 'KD'}   # gap / shoot sets
 
 
+# DVW setter zone → rotation number used throughout the Reports tab
+SETTER_ZONE_TO_ROT = {1: 1, 6: 2, 5: 3, 4: 4, 3: 5, 2: 6}
+
+
 def compute_match_rotation_stats(actions, loyola_side='both'):
     """
     Build rotation-based match report tables from LUC-only match actions.
@@ -652,7 +656,10 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
         for a in rally:
             r = a.get('rotation')
             if r is not None:
-                rot = str(r)
+                # The DVW 'rotation' value is the SETTER'S COURT ZONE (*z1/*z6/… markers,
+                # field 9/10). Reports number rotations 1-6 in serve order instead:
+                #   Z1→R1  Z6→R2  Z5→R3 (setter back row)   Z4→R4  Z3→R5  Z2→R6 (front row)
+                rot = str(SETTER_ZONE_TO_ROT.get(int(r), r)) if str(r).isdigit() else str(r)
                 break
 
         # Reception quality this rally — LUC receptions only
