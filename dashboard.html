@@ -3859,16 +3859,43 @@ function _rptSessionLine() {
     }).join('  ·  ');
 }
 
+// Render a chart to a PNG on a hidden, fixed-size canvas using the chart's own
+// type/data/options. Charts on report tabs that were never shown are blank in the
+// dashboard (Chart.js waits until they're visible to draw), so copying the
+// on-screen canvas gave empty black boxes — redrawing like this always works.
+function _rptChartImage(srcCanvas) {
+  const ch = (window.Chart && Chart.getChart) ? Chart.getChart(srcCanvas) : null;
+  if (!ch) { try { return srcCanvas.width ? srcCanvas.toDataURL('image/png') : ''; } catch (e) { return ''; } }
+  const W = 900, H = 300;
+  const holder = document.createElement('div');
+  holder.style.cssText = `position:absolute;left:-99999px;top:0;width:${W}px;height:${H}px`;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H; c.style.width = W + 'px'; c.style.height = H + 'px';
+  holder.appendChild(c); document.body.appendChild(holder);
+  let url = '';
+  try {
+    const tmp = new Chart(c, {
+      type: ch.config.type,
+      data: JSON.parse(JSON.stringify(ch.config.data)),
+      options: Object.assign({}, ch.config.options, { responsive:false, maintainAspectRatio:false, animation:false, devicePixelRatio:2 }),
+    });
+    url = c.toDataURL('image/png');
+    tmp.destroy();
+  } catch (e) { url = ''; }
+  holder.remove();
+  return url;
+}
+
 // Clone a rendered panel for print: charts → images, controls & pinning removed
 function _rptSnapshotPanel(panel) {
   const clone = panel.cloneNode(true);
   const srcC = panel.querySelectorAll('canvas'), dstC = clone.querySelectorAll('canvas');
   dstC.forEach((c, i) => {
-    let url = '';
-    try { url = srcC[i].width ? srcC[i].toDataURL('image/png') : ''; } catch (e) {}
+    const url = _rptChartImage(srcC[i]);
     const img = document.createElement('img');
     img.className = 'pdf-chart';
     if (url) img.src = url;
+    if (c.parentElement && c.parentElement.style.height) c.parentElement.style.height = 'auto';   // chart box grows to fit the image
     c.replaceWith(url ? img : document.createElement('span'));
   });
   clone.querySelectorAll('button, select, input, .chart-wrap:empty').forEach(el => el.remove());
@@ -3893,15 +3920,6 @@ function exportRptPDF(which) {
     for (const tab of tabs) {
       const panel = document.getElementById('rpt-panel-' + tab);
       if (!panel) continue;
-      const canvases = panel.querySelectorAll('canvas');
-      if (canvases.length) {
-        // Only report tabs with charts need to be laid out; resize + redraw now
-        showRptTab(tab);
-        canvases.forEach(c => {
-          const ch = (window.Chart && Chart.getChart) ? Chart.getChart(c) : null;
-          if (ch) { ch.resize(); ch.update('none'); }
-        });
-      }
       sections.push({ title: RPT_TAB_NAMES[tab], html: _rptSnapshotPanel(panel) });
     }
   } finally {
@@ -3973,8 +3991,9 @@ function exportRptPDF(which) {
   .fit-P{display:none}
   @media print and (orientation: portrait){ .fit-L{display:none} .fit-P{display:flex} }
   /* Maroon total / header rows: force white text (gold/green/red vanish on maroon) */
-  tr[style*="maroon"] td, tr[style*="maroon"] td *, tr[style*="maroon"] th,
-  tr[style*="#6b0020"] td, tr[style*="#8D0034"] td { color:#fff!important; }
+  tr[style*="maroon"] td, tr[style*="maroon"] th,
+  tr[style*="#6b0020"] td, tr[style*="#8D0034"] td { background:#6b0020!important; color:#fff!important; }
+  tr[style*="maroon"] td *, tr[style*="#6b0020"] td *, tr[style*="#8D0034"] td * { color:#fff!important; }
   h3{font-size:11.5px;color:#6b0020;margin:8px 0 5px}
   .pdf-chart{max-width:100%;max-height:280px;display:block;margin:4px auto 8px;background:#1a1a1a;border-radius:6px;padding:6px}
   .grid-2,.grid-4{display:grid;grid-template-columns:1fr 1fr;gap:10px}
