@@ -3936,10 +3936,14 @@ async function exportRptPDF(which) {
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{background:#fff}
   body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a}
-  /* Landscape Letter, .3in margins → 10.4in × 7.9in printable ≈ 998 × 758 px @96dpi */
+  /* Letter paper. Pages are sized a little under the printable area so they fit
+     even with Safari's own margins + header/footer. Safari ignores @page size,
+     so a separate fit is computed for landscape AND portrait and the print
+     orientation picked in the dialog chooses which one applies. */
   @page{size:letter landscape;margin:.3in}
-  .page{width:990px;height:750px;overflow:hidden;display:flex;flex-direction:column;
+  .page{width:960px;height:720px;overflow:hidden;display:flex;flex-direction:column;
         page-break-after:always;break-after:page;margin:0 auto}
+  @media print and (orientation: portrait){ .page{width:720px;height:960px} }
   .page:last-child{page-break-after:auto;break-after:auto}
   .pdf-hdr{background:#6b0020;color:#fff;padding:7px 12px;display:flex;justify-content:space-between;align-items:center;flex:none}
   .pdf-hdr-title{font-size:14px;font-weight:700;letter-spacing:.5px}
@@ -3953,7 +3957,14 @@ async function exportRptPDF(which) {
   .pdf-kpis .stat-val{font-size:13px;font-weight:700;color:#6b0020}
   .pdf-kpis .stat-lbl{font-size:7.5px;color:#777}
   .page-body{flex:1;min-height:0;overflow:hidden;padding:8px 12px 0}
-  .fit{transform-origin:top left;width:max-content;min-width:100%}
+  .fit{transform-origin:top left;
+        column-count:var(--nL,1);column-gap:14px;width:var(--wL,max-content);transform:scale(var(--sL,1))}
+  @media print and (orientation: portrait){
+    .fit{column-count:var(--nP,1);width:var(--wP,max-content);transform:scale(var(--sP,1))}
+  }
+  /* Maroon total / header rows: force white text (gold/green/red vanish on maroon) */
+  tr[style*="maroon"] td, tr[style*="maroon"] td *, tr[style*="maroon"] th,
+  tr[style*="#6b0020"] td, tr[style*="#8D0034"] td { color:#fff!important; }
   .fit .xlsx-wrap,.fit table,.fit .card,.fit .grid-2,.fit .pdf-chart{break-inside:avoid}
   .fit h3{break-after:avoid}
   h3{font-size:11.5px;color:#6b0020;margin:8px 0 5px}
@@ -3973,22 +3984,32 @@ async function exportRptPDF(which) {
 ${pages}
 <script>
   window.onload = function() {
-    // Fit each report on its page (width AND height). Tall, narrow reports may
-    // flow into 2–3 side-by-side columns — whichever layout keeps the text largest.
-    document.querySelectorAll('.page-body').forEach(function(body){
-      var fit = body.querySelector('.fit');
-      var availW = body.clientWidth - 24, availH = body.clientHeight - 6;
-      var w1 = fit.scrollWidth, gap = 14, best = {s:0, n:1};
+    // Fit each report on its page, for BOTH orientations (width AND height).
+    // Tall, narrow reports may flow into 2–3 side-by-side columns — whichever
+    // layout keeps the text largest. Results go into CSS variables that the
+    // print orientation (landscape / portrait) picks between.
+    var GAP = 14;
+    function bestFit(page, body, fit, pw, ph, w1) {
+      page.style.width = pw + 'px'; page.style.height = ph + 'px';
+      var availW = body.clientWidth - 24, availH = body.clientHeight - 6, best = {s:0, n:1};
       for (var n = 1; n <= 3; n++) {
-        fit.style.columnCount = n > 1 ? String(n) : '';
-        fit.style.columnGap = gap + 'px';
-        fit.style.width = (n * w1 + (n - 1) * gap) + 'px';
+        fit.style.setProperty('--nL', n);
+        fit.style.setProperty('--wL', (n * w1 + (n - 1) * GAP) + 'px');
+        fit.style.setProperty('--sL', 1);
         var s = Math.min(1, availW / fit.scrollWidth, availH / fit.scrollHeight);
         if (s > best.s + 0.02) best = {s:s, n:n};
       }
-      fit.style.columnCount = best.n > 1 ? String(best.n) : '';
-      fit.style.width = (best.n * w1 + (best.n - 1) * gap) + 'px';
-      if (best.s < 1) fit.style.transform = 'scale(' + best.s.toFixed(4) + ')';
+      return best;
+    }
+    document.querySelectorAll('.page').forEach(function(page){
+      var body = page.querySelector('.page-body'), fit = page.querySelector('.fit');
+      fit.style.setProperty('--wL', 'max-content'); fit.style.setProperty('--nL', 1);
+      var w1 = fit.scrollWidth;
+      var P = bestFit(page, body, fit, 720, 960, w1);   // portrait
+      var L = bestFit(page, body, fit, 960, 720, w1);   // landscape
+      page.style.width = ''; page.style.height = '';
+      fit.style.setProperty('--nL', L.n); fit.style.setProperty('--wL', (L.n*w1 + (L.n-1)*GAP) + 'px'); fit.style.setProperty('--sL', L.s.toFixed(4));
+      fit.style.setProperty('--nP', P.n); fit.style.setProperty('--wP', (P.n*w1 + (P.n-1)*GAP) + 'px'); fit.style.setProperty('--sP', P.s.toFixed(4));
     });
     setTimeout(function(){ window.print(); }, 400);
     window.onafterprint = function(){ window.close(); };
