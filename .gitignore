@@ -12,3 +12,4 @@ __pycache__/
 
 # Misc
 *.log
+.git_stale_locks/
