@@ -3670,7 +3670,7 @@ function buildSetterAttackSectionHTML(setterSessionMap) {
     <button onclick="exportSetterPDF()" title="Export current setter view as PDF" style="padding:6px 14px;border-radius:4px;border:1px solid var(--gold);cursor:pointer;font-size:12px;background:transparent;color:var(--gold);font-weight:600;white-space:nowrap;flex-shrink:0">⬇ Export PDF</button>
   </div>`;
 
-  return `<div class="card" style="padding:16px;margin-top:0">
+  return `<div class="card pdf-omit" style="padding:16px;margin-top:0">
     <div style="font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Attack by Setter</div>
     ${filterBtns}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start" id="rpt-setter-grid">
@@ -3889,9 +3889,11 @@ function _rptChartImage(srcCanvas) {
 // Clone a rendered panel for print: charts → images, controls & pinning removed
 function _rptSnapshotPanel(panel) {
   const clone = panel.cloneNode(true);
-  const srcC = panel.querySelectorAll('canvas'), dstC = clone.querySelectorAll('canvas');
-  dstC.forEach((c, i) => {
-    const url = _rptChartImage(srcC[i]);
+  // Sections marked .pdf-omit (e.g. the Attack by Setter charts) stay on screen only
+  clone.querySelectorAll('.pdf-omit').forEach(el => el.remove());
+  clone.querySelectorAll('canvas').forEach(c => {
+    const src = c.id ? panel.querySelector('#' + CSS.escape(c.id)) : null;
+    const url = src ? _rptChartImage(src) : '';
     const img = document.createElement('img');
     img.className = 'pdf-chart';
     if (url) img.src = url;
