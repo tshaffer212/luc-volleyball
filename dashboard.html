@@ -360,6 +360,10 @@
   .rpt-sub-tab { padding: 8px 18px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; border-radius: 6px; font-size: 13px; font-weight: 500; transition: all 0.15s; }
   .rpt-sub-tab:hover { color: var(--text); border-color: var(--gold); }
   .rpt-sub-tab.active { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+  .rpt-export-btn { padding:7px 14px; border-radius:6px; border:1px solid var(--gold); background:transparent; color:var(--gold);
+                    font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .rpt-export-btn:hover { background:rgba(254,188,24,.1); }
+  .rpt-export-btn:disabled { opacity:.5; cursor:wait; }
   /* Setter breakdown filter / selector buttons */
   .setter-bucket-btn, .setter-sel-btn { padding: 5px 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; font-size: 11px; font-weight: 600; letter-spacing: .3px; transition: all 0.15s; }
   .setter-bucket-btn { border-radius: 20px; }
@@ -646,6 +650,10 @@
       <button id="rpt-subtab-routes"         class="rpt-sub-tab" style="display:none" onclick="showRptTab('routes')">Routes (Close/Gap)</button>
       <button id="rpt-subtab-setter"         class="rpt-sub-tab" style="display:none" onclick="showRptTab('setter')">Setter Breakdown</button>
       <button id="rpt-subtab-match-overview" class="rpt-sub-tab" style="display:none" onclick="showRptTab('match-overview')">Overview</button>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="rpt-export-btn" onclick="exportRptPDF([rptActiveSubTab])" title="Export the report you're looking at">⬇ Export this report</button>
+        <button class="rpt-export-btn" onclick="exportRptPDF('all')" title="Every report tab in one PDF">⬇ Export all reports</button>
+      </div>
     </div>
     <div id="rpt-panel-servrcv"        class="card" style="padding:12px;overflow-x:auto"></div>
     <div id="rpt-panel-attack"         class="card" style="padding:12px;overflow-x:auto;display:none"></div>
@@ -3810,127 +3818,172 @@ function renderRptSetterChart() {
 }
 
 // ── Setter PDF export ─────────────────────────────────────────────────────────
-function exportSetterPDF() {
-  const anySession = DATA.sessions.find(s => rptSelected.has(s.id));
-  const season = anySession?.season;
+// ── PDF export (any / all Reports sub-tabs) ──────────────────────────────────
+// Opens a print-ready, light-themed page built from the reports exactly as they
+// are rendered (so every active filter applies), with charts as images, and
+// sends it to the browser's print dialog → "Save as PDF".
+const RPT_TAB_NAMES = {
+  'servrcv':'Serve & Receive', 'attack':'Attack by Set Type', 'overview':'Block & Defense',
+  'rot':'Attack by Rotation', 'routes':'Routes (Close / Gap)', 'setter':'Setter Breakdown',
+  'match-overview':'Match Overview',
+};
+function exportSetterPDF() { exportRptPDF(['attack']); }   // in-panel button on Attack by Set Type
 
-  // Setter label
-  let setterLabel = 'All Setters';
-  if (rptSetterFilter) {
-    const name = getPlayerName(rptSetterFilter, season) || `#${rptSetterFilter}`;
-    setterLabel = `#${rptSetterFilter} — ${name}`;
+function _rptVisibleTabs() {
+  return Object.keys(RPT_TAB_NAMES).filter(k => {
+    const b = document.getElementById('rpt-subtab-' + k);
+    return b && b.style.display !== 'none';
+  });
+}
+const _nextFrame = (ms=0) => new Promise(r => setTimeout(() => requestAnimationFrame(r), ms));
+
+function _rptFilterLines(tabs) {
+  const typeLbl = {match:'Matches', practice:'Practices', both:'Matches + Practices'}[sessionTypeFilter] || '';
+  const f = [];
+  f.push(['Season', document.getElementById('rpt-season')?.selectedOptions?.[0]?.textContent || '']);
+  f.push(['Type', typeLbl]);
+  if (sessionTypeFilter === 'match') {
+    f.push(['Team', rptTeamSide === 'opp' ? 'Opponent' : 'Loyola']);
+    f.push(['Set', rptSetFilter === 'all' ? 'All sets' : `Set ${rptSetFilter}`]);
+  }
+  f.push(['Players', rptPlayerFilter ? rptPlayerBtnLabel() : 'All players']);
+  f.push(['Pass scale', rcvPassScale + '-point']);
+  if (tabs.includes('setter')) {
+    const sl = setterSelected === 'all' ? 'All setters' : `#${setterSelected} ${getPlayerName(setterSelected, DATA.sessions.find(s=>rptSelected.has(s.id))?.season) || ''}`.trim();
+    const bl = [...setterBucketFilter].filter(b => !(rcvPassScale==='3' && b==='med')).map(b => bucketLabel(b)).join(', ');
+    f.push(['Setter Breakdown', `${sl} · ${bl}`]);
+  }
+  if (tabs.includes('attack') && rptSetterFilter) {
+    f.push(['Attack by Set Type', `Setter #${rptSetterFilter} ${getPlayerName(rptSetterFilter, DATA.sessions.find(s=>rptSelected.has(s.id))?.season)||''}`.trim()]);
+  }
+  return f.filter(([, v]) => v);
+}
+
+function _rptSessionLine() {
+  return DATA.sessions.filter(s => rptSelected.has(s.id))
+    .sort((a,b) => (a.date||'').localeCompare(b.date||''))
+    .map(s => {
+      const d = s.date ? new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Unknown';
+      return d + (s.type === 'match' ? ' vs ' + (s.opponent||'Unknown').replace(/\s*\(Men['’]?s\)/gi,'').trim() : ' (Practice)');
+    }).join('  ·  ');
+}
+
+// Clone a rendered panel for print: charts → images, controls & pinning removed
+function _rptSnapshotPanel(panel) {
+  const clone = panel.cloneNode(true);
+  const srcC = panel.querySelectorAll('canvas'), dstC = clone.querySelectorAll('canvas');
+  dstC.forEach((c, i) => {
+    let url = '';
+    try { url = srcC[i].width ? srcC[i].toDataURL('image/png') : ''; } catch (e) {}
+    const img = document.createElement('img');
+    img.className = 'pdf-chart';
+    if (url) img.src = url;
+    c.replaceWith(url ? img : document.createElement('span'));
+  });
+  clone.querySelectorAll('button, select, input, .chart-wrap:empty').forEach(el => el.remove());
+  clone.querySelectorAll('.pin-col').forEach(el => { el.style.transform = ''; el.classList.remove('pin-col','pin-edge'); });
+  clone.querySelectorAll('.rpt-sticky').forEach(el => el.classList.remove('rpt-sticky'));
+  clone.querySelectorAll('[style*="display:none"], [style*="display: none"]').forEach(el => el.remove());
+  return clone.innerHTML;
+}
+
+async function exportRptPDF(which) {
+  if (!rptSelected.size) { alert('Select one or more sessions first.'); return; }
+  const tabs = which === 'all' ? _rptVisibleTabs() : which.filter(k => RPT_TAB_NAMES[k]);
+  if (!tabs.length) return;
+  // Open the window first (inside the click) so pop-up blockers allow it
+  const win = window.open('', '_blank', 'width=1200,height=800');
+  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
+  win.document.write('<p style="font-family:Arial;padding:20px">Preparing PDF…</p>');
+  const btns = document.querySelectorAll('.rpt-export-btn'); btns.forEach(b => b.disabled = true);
+
+  const original = rptActiveSubTab;
+  const sections = [];
+  try {
+    for (const tab of tabs) {
+      // Show each tab so its charts lay out at full size before capturing them
+      showRptTab(tab);
+      await _nextFrame(tab === original ? 0 : 250);
+      const panel = document.getElementById('rpt-panel-' + tab);
+      if (panel) sections.push({ title: RPT_TAB_NAMES[tab], html: _rptSnapshotPanel(panel) });
+    }
+  } finally {
+    showRptTab(original);
+    btns.forEach(b => b.disabled = false);
   }
 
-  // Session list for the header
-  const selectedSessions = DATA.sessions
-    .filter(s => rptSelected.has(s.id))
-    .sort((a,b) => (a.date||'').localeCompare(b.date||''));
-  const sessionLine = selectedSessions.map(s => {
-    const d = s.date
-      ? new Date(s.date+' 12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
-      : 'Unknown';
-    const opp = s.type === 'match'
-      ? ' vs '+(s.opponent||'Unknown').replace(/\s*\(Men['']?s\)/gi,'').trim()
-      : ' (Practice)';
-    return d + opp;
-  }).join('  ·  ');
-
-  // Grab the already-rendered table HTML
-  const tablesEl = document.getElementById('rpt-attack-tables');
-  const tableHTML = tablesEl ? tablesEl.innerHTML : '<p style="padding:20px;color:#888">No data for selected sessions.</p>';
-
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const filters = _rptFilterLines(tabs).map(([k,v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('');
+  const sessionLine = _rptSessionLine();
   const dateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const docTitle = tabs.length === 1 ? sections[0]?.title : 'All Reports';
+  const kpi = document.getElementById('rpt-kpi-row');
+  const kpiHTML = kpi && kpi.style.display !== 'none' ? kpi.innerHTML : '';
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>LUC Volleyball — ${setterLabel}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>LUC Volleyball — ${esc(docTitle)}</title>
 <style>
-  /* Redefine theme vars for light/print */
-  :root {
-    --maroon:#6b0020; --gold:#8a6500; --green:#1a6e1a; --red:#b50000;
-    --surface:#fff; --surface2:#f7f7f7; --surface3:#e8e8e8;
-    --border:#ccc; --text:#1a1a1a; --text-muted:#555; --text-dim:#aaa;
-  }
+  :root { --maroon:#6b0020; --gold:#8a6500; --green:#1a6e1a; --red:#b50000;
+          --surface:#fff; --surface2:#f7f7f7; --surface3:#ececec; --border:#ccc;
+          --text:#1a1a1a; --text-muted:#555; --text-dim:#999; }
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
-
-  /* Header */
   .pdf-hdr{background:#6b0020;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center}
   .pdf-hdr-title{font-size:17px;font-weight:700;letter-spacing:.5px}
-  .pdf-hdr-sub{font-size:11px;opacity:.8;margin-top:3px}
-  .pdf-setter{font-size:14px;font-weight:700;color:#FEBC18;text-align:right}
-  .pdf-date{font-size:10px;opacity:.75;text-align:right;margin-top:2px}
-  .pdf-sessions{padding:5px 18px;background:#f0f0f0;border-bottom:1px solid #ccc;font-size:9px;color:#555}
-  .content{padding:14px 18px}
-
-  /* Table resets for light theme */
-  .xlsx-wrap{overflow-x:auto;border-radius:6px;border:1px solid #ccc;margin-bottom:18px}
-  .xlsx-tbl{border-collapse:collapse;min-width:100%;font-size:10px;white-space:nowrap}
-  .xlsx-tbl th,.xlsx-tbl td{padding:4px 8px;border:1px solid #ddd}
-  .xlsx-tbl th{text-align:left;font-weight:600}
+  .pdf-hdr-sub{font-size:12px;color:#FEBC18;font-weight:700;margin-top:3px}
+  .pdf-date{font-size:10px;opacity:.8;text-align:right}
+  .pdf-filters{padding:6px 18px;background:#f4f4f4;border-bottom:1px solid #ddd;font-size:9.5px;color:#333;display:flex;flex-wrap:wrap;gap:4px 16px}
+  .pdf-sessions{padding:4px 18px 6px;background:#f4f4f4;border-bottom:1px solid #ccc;font-size:9px;color:#666}
+  .pdf-kpis{display:flex;gap:10px;padding:10px 18px 0;flex-wrap:wrap}
+  .pdf-kpis .card-sm{flex:1;min-width:120px;border:1px solid #ddd;border-radius:6px;padding:6px 10px}
+  .pdf-kpis .card-title{font-size:8.5px;text-transform:uppercase;letter-spacing:.6px;color:#666}
+  .pdf-kpis .stat-val{font-size:16px;font-weight:700;color:#6b0020}
+  .pdf-kpis .stat-lbl{font-size:8.5px;color:#777}
+  .section{padding:12px 18px}
+  .section + .section{page-break-before:always;break-before:page}
+  .section-title{font-size:13px;font-weight:700;color:#6b0020;border-bottom:2px solid #6b0020;padding-bottom:4px;margin-bottom:10px}
+  h3{font-size:11.5px;color:#6b0020;margin:10px 0 6px}
+  .pdf-chart{max-width:100%;max-height:300px;display:block;margin:4px auto 10px;background:#1a1a1a;border-radius:6px;padding:6px}
+  .grid-2,.grid-4{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .xlsx-wrap{overflow:visible!important;border:1px solid #ccc;border-radius:6px;margin-bottom:14px;box-shadow:none!important}
+  .xlsx-tbl,.data-table{border-collapse:collapse;min-width:100%;font-size:10px;white-space:nowrap}
+  .xlsx-tbl th,.xlsx-tbl td,.data-table th,.data-table td{padding:4px 8px;border:1px solid #ddd;position:static!important}
+  .xlsx-tbl th,.data-table th{text-align:left;font-weight:600;background:#f0f0f0!important;color:#333!important}
   .xlsx-tbl tbody tr:nth-child(even) td{background:#fafafa}
-  .xlsx-dim{color:#bbb}
-  .num{text-align:right}
-
-  /* rpt-sticky is a scrollable-table helper — not needed in print */
-  .rpt-sticky thead{position:static!important}
-  .rpt-sticky thead th,.rpt-sticky thead td{position:static!important}
-
+  .xlsx-dim{color:#bbb} .num{text-align:right} .gold{color:#8a6500} .green{color:#1a6e1a} .red{color:#b50000}
+  .table-scroll{max-height:none!important;overflow:visible!important;box-shadow:none!important;border:none!important}
+  .card{border:none!important;box-shadow:none!important;padding:0!important;background:none!important}
+  td,th{color:inherit}
   @media print{
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @page{size:landscape;margin:.35in .4in}
-    /* Tighter print sizing so wide tables fit */
-    .xlsx-tbl{font-size:7.5px!important}
-    .xlsx-tbl th,.xlsx-tbl td{padding:2px 4px!important}
-    .pdf-hdr{padding:8px 14px}
-    .content{padding:8px 14px}
+    .pdf-hdr{padding:8px 14px} .section{padding:8px 14px}
+    tr{page-break-inside:avoid}
   }
-</style>
-</head>
-<body>
+</style></head><body>
 <div class="pdf-hdr">
-  <div>
-    <div class="pdf-hdr-title">LUC VOLLEYBALL</div>
-    <div class="pdf-hdr-sub">Setter Attack Report</div>
-  </div>
-  <div>
-    <div class="pdf-setter">${setterLabel}</div>
-    <div class="pdf-date">Generated ${dateStr}</div>
-  </div>
+  <div><div class="pdf-hdr-title">LUC VOLLEYBALL</div><div class="pdf-hdr-sub">${esc(docTitle)}</div></div>
+  <div class="pdf-date">Generated ${dateStr}</div>
 </div>
-${sessionLine ? `<div class="pdf-sessions">Sessions: ${sessionLine}</div>` : ''}
-<div class="content">${tableHTML}</div>
+<div class="pdf-filters">${filters}</div>
+${sessionLine ? `<div class="pdf-sessions"><b>Sessions:</b> ${esc(sessionLine)}</div>` : ''}
+${kpiHTML ? `<div class="pdf-kpis">${kpiHTML}</div>` : ''}
+${sections.map(s => `<div class="section"><div class="section-title">${esc(s.title)}</div><div class="section-body">${s.html}</div></div>`).join('')}
 <script>
-  // Remove sticky-header behaviour (not needed in print)
-  document.querySelectorAll('.rpt-sticky').forEach(t => t.classList.remove('rpt-sticky'));
-  // Remove overflow wrappers so tables expand to full width
-  document.querySelectorAll('.xlsx-wrap').forEach(w => { w.style.overflow = 'visible'; w.style.border = 'none'; });
-
   window.onload = function() {
-    // Measure the widest table AFTER the browser has laid it out
-    let maxTableW = 0;
-    document.querySelectorAll('.xlsx-tbl').forEach(t => {
-      if (t.scrollWidth > maxTableW) maxTableW = t.scrollWidth;
+    // Shrink each report on its own so wide tables fit a landscape page
+    var pageW = 960;
+    document.querySelectorAll('.section-body').forEach(function(sec){
+      var w = 0;
+      sec.querySelectorAll('table').forEach(function(t){ if (t.scrollWidth > w) w = t.scrollWidth; });
+      if (w > pageW) sec.style.zoom = (pageW / w).toFixed(4);
     });
-    // Landscape Letter printable width at 96 dpi, ~0.75in margins = ~960px
-    const pageW = 960;
-    if (maxTableW > pageW) {
-      // CSS zoom scales the full layout (affects page flow, unlike transform:scale)
-      document.body.style.zoom = (pageW / maxTableW).toFixed(4);
-    }
-    window.print();
-    window.onafterprint = function() { window.close(); };
+    setTimeout(function(){ window.print(); }, 300);
+    window.onafterprint = function(){ window.close(); };
   };
 <\/script>
-</body>
-</html>`;
-
-  const win = window.open('', '_blank', 'width=1200,height=800');
-  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
-  win.document.write(html);
-  win.document.close();
+</body></html>`;
+  win.document.open(); win.document.write(html); win.document.close();
 }
 
 // ── Attack by Set Type ────────────────────────────────────────────────────────
