@@ -3827,7 +3827,6 @@ function _rptVisibleTabs() {
     return b && b.style.display !== 'none';
   });
 }
-const _nextFrame = (ms=0) => new Promise(r => setTimeout(() => requestAnimationFrame(r), ms));
 
 function _rptFilterLines(tabs) {
   const typeLbl = {match:'Matches', practice:'Practices', both:'Matches + Practices'}[sessionTypeFilter] || '';
@@ -3879,30 +3878,39 @@ function _rptSnapshotPanel(panel) {
   return clone.innerHTML;
 }
 
-async function exportRptPDF(which) {
+function exportRptPDF(which) {
   if (!rptSelected.size) { alert('Select one or more sessions first.'); return; }
   const tabs = which === 'all' ? _rptVisibleTabs() : which.filter(k => RPT_TAB_NAMES[k]);
   if (!tabs.length) return;
-  // Open the window first (inside the click) so pop-up blockers allow it
-  const win = window.open('', '_blank', 'width=1200,height=800');
-  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
-  win.document.write('<p style="font-family:Arial;padding:20px">Preparing PDF…</p>');
-  const btns = document.querySelectorAll('.rpt-export-btn'); btns.forEach(b => b.disabled = true);
 
+  // Capture every report synchronously, before the export window opens. Nothing
+  // here waits for a screen redraw — once the export window takes focus the
+  // dashboard tab is in the background and redraws there are paused/throttled,
+  // which is what made "Export all" crawl.
   const original = rptActiveSubTab;
   const sections = [];
   try {
     for (const tab of tabs) {
-      // Show each tab so its charts lay out at full size before capturing them
-      showRptTab(tab);
-      await _nextFrame(tab === original ? 0 : 250);
       const panel = document.getElementById('rpt-panel-' + tab);
-      if (panel) sections.push({ title: RPT_TAB_NAMES[tab], html: _rptSnapshotPanel(panel) });
+      if (!panel) continue;
+      const canvases = panel.querySelectorAll('canvas');
+      if (canvases.length) {
+        // Only report tabs with charts need to be laid out; resize + redraw now
+        showRptTab(tab);
+        canvases.forEach(c => {
+          const ch = (window.Chart && Chart.getChart) ? Chart.getChart(c) : null;
+          if (ch) { ch.resize(); ch.update('none'); }
+        });
+      }
+      sections.push({ title: RPT_TAB_NAMES[tab], html: _rptSnapshotPanel(panel) });
     }
   } finally {
-    showRptTab(original);
-    btns.forEach(b => b.disabled = false);
+    if (rptActiveSubTab !== original) showRptTab(original);
   }
+
+  // Open the window inside the click so pop-up blockers allow it
+  const win = window.open('', '_blank', 'width=1200,height=800');
+  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
 
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const filters = _rptFilterLines(tabs).map(([k,v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('');
@@ -3985,10 +3993,9 @@ ${pages}
 <script>
   window.onload = function() {
     // Fit each report on ONE page, for both orientations. The report is broken
-    // into whole blocks (each table / chart / heading stays intact), packed into
-    // 1–3 side-by-side flex columns, then scaled down to fit. Whichever column
-    // count keeps the text largest wins. Flex columns + transform are reliable in
-    // Safari (CSS multi-column was splitting tables and pushing them off-page).
+    // into whole blocks (each table / chart / heading stays intact) that are
+    // measured ONCE; the best column count (1–3) and scale are then worked out
+    // from those sizes, and the final layout is built just once per orientation.
     var GAP = 14, SIZES = { L: [960, 720], P: [720, 960] };
     function blocksOf(root) {
       var out = [];
@@ -3999,46 +4006,56 @@ ${pages}
       })(root);
       return out;
     }
-    function build(blocks, heights, n) {
-      var box = document.createElement('div'); box.className = 'fit';
-      var cols = [];
-      for (var i = 0; i < n; i++) { var c = document.createElement('div'); c.className = 'fit-col'; box.appendChild(c); cols.push(c); }
-      var total = heights.reduce(function(a, b){ return a + b; }, 0), target = total / n, col = 0, acc = 0;
-      blocks.forEach(function(b, i) {
-        if (acc > 0 && acc + heights[i] > target * 1.05 && col < n - 1) { col++; acc = 0; }
-        cols[col].appendChild(b.cloneNode(true)); acc += heights[i];
+    function plan(sizes, n) {                       // greedy, order-preserving column fill
+      var total = 0; sizes.forEach(function(z){ total += z.h; });
+      var target = total / n, cols = [[]], acc = 0;
+      sizes.forEach(function(z, i) {
+        if (acc > 0 && acc + z.h > target * 1.05 && cols.length < n) { cols.push([]); acc = 0; }
+        cols[cols.length - 1].push(i); acc += z.h;
       });
-      return box;
+      var W = 0, H = 0;
+      cols.forEach(function(c) {
+        var w = 0, h = 0; c.forEach(function(i){ w = Math.max(w, sizes[i].w); h += sizes[i].h; });
+        W += w; H = Math.max(H, h);
+      });
+      return { cols: cols, W: W + GAP * (cols.length - 1), H: H };
     }
     document.querySelectorAll('.page').forEach(function(page) {
       var body = page.querySelector('.page-body'), src = body.querySelector('.fit-src');
       var blocks = blocksOf(src);
-      var heights = blocks.map(function(b) {
-        var cs = getComputedStyle(b);
-        return b.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0) + 8;
+      // One measuring pass: all blocks side-by-side-free in a shrink-to-fit column
+      var meas = document.createElement('div');
+      meas.style.cssText = 'position:absolute;left:-99999px;top:0;display:flex;flex-direction:column;align-items:flex-start';
+      blocks.forEach(function(b){ meas.appendChild(b.cloneNode(true)); });
+      document.body.appendChild(meas);
+      var sizes = Array.prototype.map.call(meas.children, function(el) {
+        var cs = getComputedStyle(el);
+        return { w: el.offsetWidth + (parseFloat(cs.marginLeft)||0) + (parseFloat(cs.marginRight)||0),
+                 h: el.offsetHeight + (parseFloat(cs.marginTop)||0) + (parseFloat(cs.marginBottom)||0) + 8 };
       });
+      document.body.removeChild(meas);
+      src.style.display = 'none';
       ['L', 'P'].forEach(function(o) {
         page.style.width = SIZES[o][0] + 'px'; page.style.height = SIZES[o][1] + 'px';
-        src.style.display = 'none';
         var availW = body.clientWidth - 30, availH = body.clientHeight - 14, best = null;   // small safety margin
         for (var n = 1; n <= Math.min(3, blocks.length); n++) {
-          var box = build(blocks, heights, n);
-          box.style.display = 'flex';
-          body.appendChild(box);
-          var s = Math.min(1, availW / box.scrollWidth, availH / box.scrollHeight) * 0.98;
-          body.removeChild(box);
-          if (!best || s > best.s + 0.02) best = { s: s, box: box };
+          var pl = plan(sizes, n);
+          var s = Math.min(1, availW / pl.W, availH / pl.H) * 0.98;
+          if (!best || s > best.s + 0.02) best = { s: s, pl: pl };
         }
-        best.box.classList.add('fit-' + o);
-        best.box.style.display = '';
-        if (best.s < 1) best.box.style.transform = 'scale(' + best.s.toFixed(4) + ')';
-        body.appendChild(best.box);
-        src.style.display = '';
+        var box = document.createElement('div'); box.className = 'fit fit-' + o;
+        best.pl.cols.forEach(function(c) {
+          var col = document.createElement('div'); col.className = 'fit-col';
+          c.forEach(function(i){ col.appendChild(blocks[i].cloneNode(true)); });
+          box.appendChild(col);
+        });
+        if (best.s < 1) box.style.transform = 'scale(' + best.s.toFixed(4) + ')';
+        body.appendChild(box);
       });
       src.remove();
       page.style.width = ''; page.style.height = '';
     });
-    setTimeout(function(){ window.print(); }, 400);
+    setTimeout(function(){ window.print(); }, 150);
     window.onafterprint = function(){ window.close(); };
   };
 <\/script>
