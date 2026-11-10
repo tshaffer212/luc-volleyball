@@ -383,7 +383,11 @@ def compute_rally_sequences(actions, loyola_side):
             rallies.append(current)
 
     player_dig = {}   # pnum → {dig_rallies, dig_kill_rallies}
-    fbso = {'rcv_rallies': 0, 'fbso_kills': 0}
+    fbso = {'rcv_rallies': 0, 'fbso_kills': 0, 'by_player': {}}   # by_player: receiver → [rcv, kills]
+    def _fb(pnum, kill):
+        rec = fbso['by_player'].setdefault(pnum or '?', [0, 0])
+        rec[0] += 1
+        if kill: rec[1] += 1
 
     # Match files that code BOTH teams (current Volleymetrics/Volleystation exports):
     # group by rally_seq and only count `loyola_side`'s receptions/digs/attacks.
@@ -399,11 +403,14 @@ def compute_rally_sequences(actions, loyola_side):
             rally = by_rally[rs]
             mine  = [a for a in rally if a.get('team_side') == loyola_side]
             # FBSO: rally where this side received; first attack by this side a kill?
-            if any(a.get('skill_code') == 'R' for a in mine):
+            rcv_a = next((a for a in mine if a.get('skill_code') == 'R'), None)
+            if rcv_a is not None:
                 fbso['rcv_rallies'] += 1
                 first_atk = next((a for a in mine if a.get('skill_code') == 'A'), None)
-                if first_atk and first_atk.get('evaluation') == '#':
+                kill = bool(first_atk and first_atk.get('evaluation') == '#')
+                if kill:
                     fbso['fbso_kills'] += 1
+                _fb(rcv_a.get('player_num'), kill)
             # Dig → kill: this side's dig, followed later in the rally by this side's kill
             for i, a in enumerate(mine):
                 if a.get('skill_code') != 'D':
@@ -448,6 +455,7 @@ def compute_rally_sequences(actions, loyola_side):
             # ── FBSO (match) ─────────────────────────────────────────────────
             elif skill == 'R':
                 fbso['rcv_rallies'] += 1
+                kill = False
                 # Find first Attack before next R or S
                 for j in range(i+1, n):
                     ns = actions[j].get('skill_code')
@@ -456,7 +464,9 @@ def compute_rally_sequences(actions, loyola_side):
                     if ns == 'A':
                         if actions[j].get('evaluation') == '#':
                             fbso['fbso_kills'] += 1
+                            kill = True
                         break  # only the FIRST attack counts
+                _fb(a.get('player_num'), kill)
 
     else:
         # ── Practice mode: serve-split rallies ───────────────────────────────────
@@ -501,8 +511,11 @@ def compute_rally_sequences(actions, loyola_side):
                  if a.get('team_side') == rcv_side and a.get('skill_code') == 'A'),
                 None
             )
-            if first_atk and first_atk.get('evaluation') == '#':
+            kill = bool(first_atk and first_atk.get('evaluation') == '#')
+            if kill:
                 fbso['fbso_kills'] += 1
+            rcv_a = next((a for a in rally if a.get('team_side') == rcv_side and a.get('skill_code') == 'R'), None)
+            _fb(rcv_a.get('player_num') if rcv_a else None, kill)
 
     return player_dig, fbso
 
@@ -613,17 +626,22 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
         else:           bucket['b'] += 1
         if ev == '/':   bucket['bk'] += 1   # blocked specifically (opponent scored block kill)
 
-    rot_atk       = defaultdict(lambda: defaultdict(ea))
-    rot_atk_close = defaultdict(lambda: defaultdict(ea))
-    rot_atk_gap   = defaultdict(lambda: defaultdict(ea))
+    # Every rotation table is kept PER PLAYER ([pnum][rot][...]) so the Reports
+    # player filter can sum just the selected players; team = sum of all players.
+    #   attacks → attacker, serves/PSP → server, receptions/SO → receiver,
+    #   block kills → blocker.  '?' = action with no jersey coded.
+    def _pr(f): return defaultdict(lambda: defaultdict(f))
+    rot_atk       = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
+    rot_atk_close = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
+    rot_atk_gap   = defaultdict(lambda: defaultdict(lambda: defaultdict(ea)))
 
     # per-rotation serve/receive/sideout accumulators
     def es(): return {'att':0,'ace':0,'err':0,'pos':0,'neg':0}
     def er(): return {'att':0,'pts':0,'perf':0,'good':0,'med':0,'oos':0,'err':0,'over':0}
     def eso(): return {'so_opp':0,'so_won':0,'srv_opp':0,'srv_won':0,'blk':0}
-    rot_srv = defaultdict(es)
-    rot_rcv = defaultdict(er)
-    rot_so  = defaultdict(eso)
+    rot_srv = _pr(es)
+    rot_rcv = _pr(er)
+    rot_so  = _pr(eso)
 
     # {setter_num: {atk_num: {bucket: {combo_code: {k,e,b,a}}}}}
     # buckets: 'all' | 'fbso' | 'perf'(#) | 'good'(+) | 'med'(!) | 'oos'(-) | 'transition'
@@ -665,17 +683,19 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
                         if a.get('skill_code') == 'R'
                         and (loyola_side == 'both' or a.get('team_side') == loyola_side)), None)
 
-        # LUC block kills this rally
-        luc_blks = sum(1 for a in rally
-                       if a.get('skill_code') == 'B'
-                       and (loyola_side == 'both' or a.get('team_side') == loyola_side)
-                       and a.get('evaluation') == '#')
+        # LUC block kills this rally (by blocker)
+        luc_blk_players = [a.get('player_num') or '?' for a in rally
+                           if a.get('skill_code') == 'B'
+                           and (loyola_side == 'both' or a.get('team_side') == loyola_side)
+                           and a.get('evaluation') == '#']
+        srv_p = (luc_srv.get('player_num') or '?') if luc_srv else None
+        rcv_p = (luc_rcv.get('player_num') or '?') if luc_rcv else None
 
         if rot:
             # Serve stats
             if luc_srv:
                 sev = luc_srv.get('evaluation', '')
-                rs_ = rot_srv[rot]
+                rs_ = rot_srv[srv_p][rot]
                 rs_['att'] += 1
                 if sev == '#':   rs_['ace'] += 1
                 elif sev == '=': rs_['err'] += 1
@@ -683,13 +703,13 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
                 elif sev == '-': rs_['neg'] += 1
                 # Point scoring % (LUC serving → did LUC win?)
                 if luc_won is not None:
-                    rot_so[rot]['srv_opp'] += 1
-                    if luc_won: rot_so[rot]['srv_won'] += 1
+                    rot_so[srv_p][rot]['srv_opp'] += 1
+                    if luc_won: rot_so[srv_p][rot]['srv_won'] += 1
 
             # Receive stats + sideout %
             if luc_rcv:
                 rev = luc_rcv.get('evaluation', '')
-                rr_ = rot_rcv[rot]
+                rr_ = rot_rcv[rcv_p][rot]
                 rr_['att'] += 1
                 if   rev == '#': rr_['perf'] += 1; rr_['pts'] += 3
                 elif rev == '+': rr_['good'] += 1; rr_['pts'] += 2
@@ -698,11 +718,12 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
                 elif rev == '=': rr_['err']  += 1
                 elif rev == '/': rr_['over'] += 1
                 if luc_won is not None:
-                    rot_so[rot]['so_opp'] += 1
-                    if luc_won: rot_so[rot]['so_won'] += 1
+                    rot_so[rcv_p][rot]['so_opp'] += 1
+                    if luc_won: rot_so[rcv_p][rot]['so_won'] += 1
 
             # Blocks
-            rot_so[rot]['blk'] += luc_blks
+            for bp in luc_blk_players:
+                rot_so[bp][rot]['blk'] += 1
 
         # Reception-quality buckets for this rally (shared by setter + MISC attribution)
         quality_buckets = ['all']
@@ -748,17 +769,17 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
 
             # ── Attack by Rotation ──────────────────────────────────────────────
             if rot:
-                add_atk(rot_atk[rot][cc], ev)
+                add_atk(rot_atk[atk_num or '?'][rot][cc], ev)
                 if cc != 'OVR':
-                    add_atk(rot_atk[rot]['OVR'], ev)
+                    add_atk(rot_atk[atk_num or '?'][rot]['OVR'], ev)
                 if is_close:
-                    add_atk(rot_atk_close[rot][cc], ev)
+                    add_atk(rot_atk_close[atk_num or '?'][rot][cc], ev)
                     if cc != 'OVR':
-                        add_atk(rot_atk_close[rot]['OVR'], ev)
+                        add_atk(rot_atk_close[atk_num or '?'][rot]['OVR'], ev)
                 elif is_gap:
-                    add_atk(rot_atk_gap[rot][cc], ev)
+                    add_atk(rot_atk_gap[atk_num or '?'][rot][cc], ev)
                     if cc != 'OVR':
-                        add_atk(rot_atk_gap[rot]['OVR'], ev)
+                        add_atk(rot_atk_gap[atk_num or '?'][rot]['OVR'], ev)
 
             if not setter_num or not atk_num:
                 continue
@@ -801,13 +822,18 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
         }
 
     return {
-        'rotation_atk':       ser_rot(rot_atk),
-        'rotation_atk_close': ser_rot(rot_atk_close),
-        'rotation_atk_gap':   ser_rot(rot_atk_gap),
+        'by_player': {
+            p: {k: v for k, v in {
+                'rotation_atk':       ser_rot(rot_atk.get(p, {})),
+                'rotation_atk_close': ser_rot(rot_atk_close.get(p, {})),
+                'rotation_atk_gap':   ser_rot(rot_atk_gap.get(p, {})),
+                'rotation_srv':       {r: dict(v) for r, v in rot_srv.get(p, {}).items()},
+                'rotation_rcv':       {r: dict(v) for r, v in rot_rcv.get(p, {}).items()},
+                'rotation_so':        {r: dict(v) for r, v in rot_so.get(p, {}).items()},
+            }.items() if v}
+            for p in set(rot_atk) | set(rot_atk_close) | set(rot_atk_gap) | set(rot_srv) | set(rot_rcv) | set(rot_so)
+        },
         'setter_atk':         ser_setter_v2(setter_atk),
-        'rotation_srv':       {r: dict(v) for r, v in rot_srv.items()},
-        'rotation_rcv':       {r: dict(v) for r, v in rot_rcv.items()},
-        'rotation_so':        {r: dict(v) for r, v in rot_so.items()},
     }
 
 
@@ -1198,6 +1224,7 @@ def main(raw_path, out_path):
             'loyola_side':    ls,
             'fbso_rcv':       fbso['rcv_rallies'],
             'fbso_kills':     fbso['fbso_kills'],
+            'fbso_by_player': fbso['by_player'],      # receiver → [rcv rallies, FBSO kills]
             'call_attacks':   session_rally[sid]['call_atk'],
             'setter_attacks': session_rally[sid]['setter_atk'],  # setter_pnum -> attacker_pnum -> combo -> {attempts,kills,errors,blocks}
             'match_rot_stats': session_rally[sid]['rot_stats'],  # None for practice
@@ -1211,6 +1238,7 @@ def main(raw_path, out_path):
             'match_rot_stats_opp': opp_match.get(sid, {}).get('rot_stats'),
             'opp_fbso_rcv':        opp_match[sid]['fbso']['rcv_rallies'] if sid in opp_match else None,
             'opp_fbso_kills':      opp_match[sid]['fbso']['fbso_kills']  if sid in opp_match else None,
+            'opp_fbso_by_player':  opp_match[sid]['fbso']['by_player']   if sid in opp_match else None,
             'opp_roster':          opp_match.get(sid, {}).get('roster'),
             'luc_stats':           opp_match.get(sid, {}).get('luc_stats'),
         })
@@ -1686,6 +1714,7 @@ def main(raw_path, out_path):
             e = {
                 'fbso_rcv':        fbso_n['rcv_rallies'],
                 'fbso_kills':      fbso_n['fbso_kills'],
+                'fbso_by_player':  fbso_n['by_player'],
                 'match_rot_stats': compute_match_rotation_stats(acts_n, ls),
                 'opp_stats':       compute_opp_stats({'actions': acts_n}, ls) if two_sided else None,
                 'player_session':  luc_player_store(s, acts_n, ls, s.get('_keep_unnamed', set())),
@@ -1698,6 +1727,7 @@ def main(raw_path, out_path):
                         'match_rot_stats_opp': om['rot_stats'],
                         'opp_fbso_rcv':        om['fbso']['rcv_rallies'],
                         'opp_fbso_kills':      om['fbso']['fbso_kills'],
+                        'opp_fbso_by_player':  om['fbso']['by_player'],
                         'luc_stats':           om['luc_stats'],
                         'opp_player_session':  ostore,
                     })

@@ -254,6 +254,24 @@
   table.data-table.rpt-sticky td:nth-child(1), table.data-table.rpt-sticky td:nth-child(2),
   table.data-table.rpt-sticky th:nth-child(1), table.data-table.rpt-sticky th:nth-child(2) { white-space: nowrap; }
 
+  /* Reports player picker */
+  .pp-btn { margin-top:4px; padding:5px 11px; border-radius:4px; border:1px solid var(--border); background:var(--surface2);
+            color:var(--text); font-size:12px; cursor:pointer; min-width:150px; text-align:left; }
+  .pp-btn.pp-active { background:var(--maroon); color:#fff; border-color:var(--maroon); }
+  .pp-panel { position:absolute; top:100%; left:0; margin-top:6px; z-index:60; width:280px; max-height:440px; overflow-y:auto;
+              background:#1b1b1b; border:1px solid #3a3a3a; border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.6); padding:8px 6px; }
+  .pp-top { display:flex; gap:6px; padding:2px 6px 8px; border-bottom:1px solid #2c2c2c; margin-bottom:4px; }
+  .pp-top button, .pp-only { background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:4px;
+              font-size:11px; padding:3px 10px; cursor:pointer; }
+  .pp-top button:hover, .pp-only:hover { border-color:var(--gold); color:var(--gold); }
+  .pp-group { display:flex; align-items:center; justify-content:space-between; padding:8px 6px 3px; }
+  .pp-ghead { font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--gold); cursor:pointer; display:flex; align-items:center; gap:6px; }
+  .pp-only { font-size:10px; padding:1px 7px; }
+  .pp-row { display:flex; align-items:center; gap:7px; padding:4px 6px 4px 14px; font-size:12px; color:var(--text); cursor:pointer; border-radius:4px; }
+  .pp-row:hover { background:rgba(254,188,24,.07); }
+  .pp-num { color:var(--gold); font-weight:700; min-width:28px; }
+  .pp-empty { font-size:12px; color:var(--text-muted); padding:10px; }
+
   /* Detail panel */
   .detail-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
   .detail-num { font-size: 52px; font-weight: 900; color: var(--gold); line-height: 1; }
@@ -539,6 +557,11 @@
       <select id="rpt-season" onchange="syncSeason(this.value)">
         <option value="all">All Seasons</option>
       </select>
+    </div>
+    <div class="filter-sep"></div>
+    <div id="rpt-player-filter" style="position:relative"><label>Players</label><br>
+      <button id="rpt-player-btn" class="pp-btn" onclick="toggleRptPlayerPanel(event)">All players <span style="opacity:.6">▾</span></button>
+      <div id="rpt-player-panel" class="pp-panel" style="display:none" onclick="event.stopPropagation()"></div>
     </div>
     <div class="filter-sep"></div>
     <div id="rpt-type-filter"><label>Session Type</label><br><div style="display:flex;gap:4px;margin-top:4px">
@@ -1987,20 +2010,27 @@ function aggregateMatchRotStats(sessionIds) {
   for (const sid of sessionIds) {
     const mrs = DATA.sessions.find(s=>s.id===sid)?.match_rot_stats;
     if (!mrs) continue;
-    mergeRotDict(c.rotation_atk,       mrs.rotation_atk       ||{});
-    mergeRotDict(c.rotation_atk_close, mrs.rotation_atk_close ||{});
-    mergeRotDict(c.rotation_atk_gap,   mrs.rotation_atk_gap   ||{});
-    mergeSetterAtkDict(c.setter_atk, mrs.setter_atk ||{});
-    // Merge flat rotation stats (srv / rcv / so)
-    for (const key of ['rotation_srv','rotation_rcv','rotation_so']) {
-      const src = mrs[key] || {};
-      for (const [rot, vals] of Object.entries(src)) {
-        if (!c[key][rot]) c[key][rot] = {};
-        for (const [k,v] of Object.entries(vals)) {
-          c[key][rot][k] = (c[key][rot][k]||0) + v;
+    // Rotation tables are stored per player (attacker / server / receiver / blocker);
+    // team view = all players, player filter = only the selected ones.
+    const pf = rptPlayerFilter;
+    for (const [p, d] of Object.entries(mrs.by_player || {})) {
+      if (pf && !pf.has(p)) continue;
+      mergeRotDict(c.rotation_atk,       d.rotation_atk       ||{});
+      mergeRotDict(c.rotation_atk_close, d.rotation_atk_close ||{});
+      mergeRotDict(c.rotation_atk_gap,   d.rotation_atk_gap   ||{});
+      for (const key of ['rotation_srv','rotation_rcv','rotation_so']) {
+        for (const [rot, vals] of Object.entries(d[key] || {})) {
+          if (!c[key][rot]) c[key][rot] = {};
+          for (const [k,v] of Object.entries(vals)) c[key][rot][k] = (c[key][rot][k]||0) + v;
         }
       }
     }
+    let sa = mrs.setter_atk || {};
+    if (pf) {   // keep only selected attackers (drop the pre-summed 'OVR' attacker)
+      sa = Object.fromEntries(Object.entries(sa).map(([snm, atks]) =>
+        [snm, Object.fromEntries(Object.entries(atks).filter(([anm]) => anm !== 'OVR' && pf.has(anm)))]));
+    }
+    mergeSetterAtkDict(c.setter_atk, sa);
   }
   return c;
 }
@@ -4245,8 +4275,8 @@ function refreshRptSetOptions(isMatch) {
   sel.value = rptSetFilter;
 }
 
-const _SET_FIELDS = ['match_rot_stats','fbso_rcv','fbso_kills','opp_stats',
-                     'match_rot_stats_opp','opp_fbso_rcv','opp_fbso_kills','luc_stats'];
+const _SET_FIELDS = ['match_rot_stats','fbso_rcv','fbso_kills','fbso_by_player','opp_stats',
+                     'match_rot_stats_opp','opp_fbso_rcv','opp_fbso_kills','opp_fbso_by_player','luc_stats'];
 function withRptSet(fn) {
   if (rptSetFilter === 'all' || !SETS_DATA) return fn();
   const n = String(rptSetFilter);
@@ -4270,8 +4300,108 @@ function withRptSet(fn) {
     for (const [s, vals] of saved.sess) _SET_FIELDS.forEach((f, i) => { s[f] = vals[i]; });
   }
 }
-// Both filters together: set first (swaps in that set's data), then team side
-function withRptFilters(fn) { return withRptSet(() => withRptSide(fn)); }
+// ── Player filter (Reports, every sheet): null = all players, else Set<pnum> ──
+// Applied last, on top of the set + team swaps: player stats are limited to the
+// selected players, FBSO counts only rallies one of them passed, and rotation /
+// setter tables (aggregateMatchRotStats) count only their attacks, serves,
+// receptions and block kills.
+let rptPlayerFilter = null;
+let rptPlayerList   = [];
+let _rptFilterSig   = '';
+
+function withRptPlayers(fn) {
+  const pf = rptPlayerFilter;
+  if (!pf) return fn();
+  const saved = { ps: DATA.player_session, sess: [] };
+  try {
+    DATA.player_session = Object.fromEntries(
+      Object.entries(DATA.player_session).filter(([, v]) => pf.has(String(v.player_num))));
+    for (const s of DATA.sessions) {
+      if (!rptSelected.has(s.id)) continue;
+      saved.sess.push([s, s.fbso_rcv, s.fbso_kills, s.setter_attacks]);
+      let r = 0, k = 0;
+      for (const [p, v] of Object.entries(s.fbso_by_player || {})) if (pf.has(p)) { r += v[0]; k += v[1]; }
+      s.fbso_rcv = r; s.fbso_kills = k;
+      if (s.setter_attacks) s.setter_attacks = Object.fromEntries(Object.entries(s.setter_attacks).map(([snm, atks]) =>
+        [snm, Object.fromEntries(Object.entries(atks).filter(([anm]) => pf.has(anm)))]));
+    }
+    return fn();
+  } finally {
+    DATA.player_session = saved.ps;
+    for (const [s, r, k, sa] of saved.sess) { s.fbso_rcv = r; s.fbso_kills = k; s.setter_attacks = sa; }
+  }
+}
+
+// All three filters: set (swap that set's data) → team side → players
+function withRptFilters(fn) { return withRptSet(() => withRptSide(() => withRptPlayers(fn))); }
+
+const RPT_PICK_GROUPS = ['OUTSIDES','OPPOSITES','MIDDLES','SETTERS','LIBEROS'];
+function collectRptPlayers() {
+  const m = {};
+  for (const ps of Object.values(DATA.player_session)) {
+    if (!rptSelected.has(ps.session_id)) continue;
+    const p = String(ps.player_num);
+    if (!m[p]) {
+      const season = DATA.sessions.find(s => s.id === ps.session_id)?.season;
+      const nm = getPlayerName(p, season);
+      m[p] = { pnum: p, name: (nm === `#${p}` ? '' : nm), group: getPlayerGroup(p, season), acts: 0 };   // unnamed → number only
+    }
+    m[p].acts += ps.actions || 0;
+  }
+  return Object.values(m).filter(p => p.acts > 0)
+    .sort((a, b) => RPT_PICK_GROUPS.indexOf(a.group) - RPT_PICK_GROUPS.indexOf(b.group) || (+a.pnum) - (+b.pnum));
+}
+
+function rptPlayerBtnLabel() {
+  const pf = rptPlayerFilter;
+  if (!pf) return 'All players';
+  if (!pf.size) return 'No players selected';
+  if (pf.size === 1) { const p = rptPlayerList.find(x => x.pnum === [...pf][0]); return p ? `#${p.pnum} ${p.name}`.trim() : '1 player'; }
+  return `${pf.size} of ${rptPlayerList.length} players`;
+}
+
+function renderRptPlayerPicker() {
+  const btn = document.getElementById('rpt-player-btn');
+  const panel = document.getElementById('rpt-player-panel');
+  if (btn) { btn.innerHTML = `${rptPlayerBtnLabel()} <span style="opacity:.6">▾</span>`; btn.classList.toggle('pp-active', !!rptPlayerFilter); }
+  if (!panel) return;
+  if (!rptPlayerList.length) { panel.innerHTML = '<div class="pp-empty">Select sessions below to choose players.</div>'; return; }
+  const sel = p => !rptPlayerFilter || rptPlayerFilter.has(p);
+  let h = `<div class="pp-top"><button onclick="rptPickAll()">All</button><button onclick="rptPickNone()">None</button></div>`;
+  for (const g of RPT_PICK_GROUPS) {
+    const ps = rptPlayerList.filter(p => p.group === g);
+    if (!ps.length) continue;
+    const allOn = ps.every(p => sel(p.pnum));
+    h += `<div class="pp-group"><label class="pp-ghead"><input type="checkbox" ${allOn?'checked':''} onchange="rptPickGroup('${g}', this.checked)"> ${g}</label>
+      <button class="pp-only" onclick="rptPickOnly('${g}')">only</button></div>`;
+    for (const p of ps)
+      h += `<label class="pp-row"><input type="checkbox" ${sel(p.pnum)?'checked':''} onchange="rptPickOne('${p.pnum}', this.checked)">
+        <span class="pp-num">#${p.pnum}</span> ${p.name}</label>`;
+  }
+  panel.innerHTML = h;
+}
+
+function toggleRptPlayerPanel(ev) {
+  ev?.stopPropagation();
+  const panel = document.getElementById('rpt-player-panel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('rpt-player-filter'), panel = document.getElementById('rpt-player-panel');
+  if (panel && panel.style.display !== 'none' && wrap && !wrap.contains(e.target)) panel.style.display = 'none';
+});
+
+function _rptApplyPick(set) {
+  // Every player ticked → back to "All" (null) so new players are never hidden by accident
+  rptPlayerFilter = (set && set.size === rptPlayerList.length) ? null : set;
+  renderRptDetail();
+}
+function _rptCurrentSet() { return new Set(rptPlayerFilter || rptPlayerList.map(p => p.pnum)); }
+function rptPickAll()  { _rptApplyPick(null); }
+function rptPickNone() { _rptApplyPick(new Set()); }
+function rptPickOne(p, on) { const s = _rptCurrentSet(); on ? s.add(p) : s.delete(p); _rptApplyPick(s); }
+function rptPickGroup(g, on) { const s = _rptCurrentSet(); rptPlayerList.filter(x => x.group === g).forEach(x => on ? s.add(x.pnum) : s.delete(x.pnum)); _rptApplyPick(s); }
+function rptPickOnly(g) { _rptApplyPick(new Set(rptPlayerList.filter(x => x.group === g).map(x => x.pnum))); }
 
 // ── Team side (Reports, match mode): 'luc' | 'opp' ───────────────────────────
 // Opponent view reuses every match-report builder unchanged by temporarily
@@ -4315,17 +4445,18 @@ function withRptSide(fn) {
     DATA.players           = merged;
     for (const s of DATA.sessions) {
       if (s.type !== 'match') continue;
-      saved.sess.push([s, s.match_rot_stats, s.fbso_rcv, s.fbso_kills, s.opp_stats]);
+      saved.sess.push([s, s.match_rot_stats, s.fbso_rcv, s.fbso_kills, s.opp_stats, s.fbso_by_player]);
       s.match_rot_stats = s.match_rot_stats_opp || null;
       s.fbso_rcv        = s.opp_fbso_rcv || 0;
       s.fbso_kills      = s.opp_fbso_kills || 0;
+      s.fbso_by_player  = s.opp_fbso_by_player || null;
       s.opp_stats       = s.luc_stats || null;   // comparison KPIs now compare against LUC
     }
     return fn();
   } finally {
     DATA.player_session = saved.ps; DATA.players_by_season = saved.pbs; DATA.players = saved.pl;
-    for (const [s, mrs, fr, fk, os] of saved.sess) {
-      s.match_rot_stats = mrs; s.fbso_rcv = fr; s.fbso_kills = fk; s.opp_stats = os;
+    for (const [s, mrs, fr, fk, os, fbp] of saved.sess) {
+      s.match_rot_stats = mrs; s.fbso_rcv = fr; s.fbso_kills = fk; s.opp_stats = os; s.fbso_by_player = fbp;
     }
   }
 }
@@ -4347,6 +4478,12 @@ function renderRptDetail() {
         + (opps.size > 1 ? `${withOpp.length < sel.length ? ' · ' : ''}${opps.size} opponents combined — jersey numbers merge` : '');
   }
   refreshRptSetOptions(isMatch);
+  // Player filter resets whenever the season, session type, team or selected sessions change
+  const sig = [document.getElementById('rpt-season')?.value, sessionTypeFilter, rptTeamSide,
+               [...rptSelected].sort().join(',')].join('|');
+  if (sig !== _rptFilterSig) { _rptFilterSig = sig; rptPlayerFilter = null; }
+  rptPlayerList = withRptSide(collectRptPlayers);
+  renderRptPlayerPicker();
   return withRptFilters(renderRptDetailInner);
 }
 
