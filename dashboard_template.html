@@ -261,6 +261,37 @@
   .adj-help { background:#191919; border:1px solid #333; border-radius:8px; padding:12px 14px; margin-bottom:12px; font-size:12px; line-height:1.55; color:var(--text); }
   .adj-help p { margin:0 0 7px; } .adj-help p:last-child { margin-bottom:0; }
 
+  /* Player tab profile */
+  .pl-card { margin-bottom:14px; }
+  .pl-muted { color:var(--text-muted); font-weight:400; text-transform:none; letter-spacing:0; }
+  .pl-h { font-size:12px; letter-spacing:.8px; text-transform:uppercase; color:var(--gold); margin:0 0 10px; font-weight:700; }
+  .pl-filters { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .pl-filters select { padding:4px 6px; font-size:12px; }
+  .pl-chip { padding:4px 11px; border-radius:14px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:12px; cursor:pointer; }
+  .pl-chip.on { background:var(--maroon); border-color:var(--maroon); color:#fff; }
+  .pl-sep { width:1px; height:18px; background:var(--border); margin:0 4px; }
+  .pl-nav { display:flex; gap:6px; position:sticky; top:0; z-index:5; background:var(--bg, #0f0f0f); padding:8px 0; margin-bottom:6px; flex-wrap:wrap; }
+  .pl-nav button { padding:6px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; cursor:pointer; }
+  .pl-nav button:hover { border-color:var(--gold); color:var(--gold); }
+  .pl-kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+  .pl-kpi { background:var(--surface2); border-radius:10px; padding:10px 12px; min-width:0; }
+  .pl-kpi-l { font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-muted); }
+  .pl-kpi-v { font-size:21px; font-weight:800; margin-top:2px; }
+  .pl-kpi-c { font-size:11px; color:var(--text-muted); margin-top:3px; }
+  .pl-g2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; } .pl-g3 { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .pl-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+  .pl-tbl th { font-size:10px; text-transform:uppercase; color:var(--text-muted); text-align:left; padding:5px 6px; border-bottom:1px solid var(--border); font-weight:600; }
+  .pl-tbl th.num, .pl-tbl td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .pl-tbl td { padding:5px 6px; border-bottom:1px solid #222; }
+  .pl-pa-row { display:grid; grid-template-columns:60px 1fr 46px; gap:8px; align-items:center; margin:5px 0; font-size:12px; }
+  .pl-pa-track { position:relative; height:12px; background:#222; border-radius:3px; } .pl-pa-mid { position:absolute; left:50%; top:0; bottom:0; width:1px; background:#555; }
+  .pl-ins { border-left:3px solid var(--gold); padding:6px 10px; background:#1c1a12; border-radius:4px; margin:6px 0; font-size:12px; }
+  .pl-ins.bad { border-color:var(--red); background:#1f1515; } .pl-ins.good { border-color:var(--green); background:#131d14; }
+  .pl-rots { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; } .pl-rot { background:var(--surface2); border-radius:8px; padding:8px; text-align:center; }
+  .pl-bar { display:flex; height:12px; border-radius:3px; overflow:hidden; background:#222; }
+  .pl-court { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:6px; } .pl-zone { background:var(--surface2); border-radius:6px; padding:8px; text-align:center; min-height:46px; }
+  @media (max-width: 1100px) { .pl-kpis { grid-template-columns:repeat(3,1fr); } .pl-g2, .pl-g3 { grid-template-columns:1fr; } }
+
   /* Reports player picker */
   .pp-btn { margin-top:4px; padding:5px 11px; border-radius:4px; border:1px solid var(--border); background:var(--surface2);
             color:var(--text); font-size:12px; cursor:pointer; min-width:150px; text-align:left; }
@@ -1583,6 +1614,7 @@ function setRcvPassScale(scale) {
   // Re-render whichever tab is visible
   if (document.getElementById('tab-reports')?.classList.contains('active')) renderReports();
   else if (document.getElementById('tab-setter')?.classList.contains('active')) renderSetter();
+  else if (document.getElementById('tab-player')?.classList.contains('active')) plRerender();
   else renderServRcv();
 }
 
@@ -3951,6 +3983,14 @@ function exportRptPDF(which) {
   const kpi = document.getElementById('rpt-kpi-row');
   const kpiHTML = kpi && kpi.style.display !== 'none' ? kpi.innerHTML : '';
 
+  _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr });
+}
+
+// Build the print-ready page (one landscape/portrait-fitting page per section) and
+// write it into an already-open window. Shared by Reports and the Player tab.
+function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const docTitle = sections.length === 1 ? sections[0]?.title : (sections.docTitle || 'All Reports');
   // One landscape page per report: a compact header (report + filters) on every
   // page, sessions + KPI tiles on the first page, then the report itself scaled
   // down (width AND height) so it always fits on that single page.
@@ -5933,113 +5973,515 @@ function selectPlayer(num, season) {
   renderPlayerDetail(num, season);
 }
 
+// ═══════════════════════════ PLAYER TAB (full profile) ════════════════════════
+// One scrolling profile per player that pulls every report together: overview
+// tiles vs his position, Points Added by skill, auto insights, attacking (set
+// type / situation / setter / rotation / pass & hit / vs expected), setting
+// (setters only), passing, serving, block & defense and session trends.
+// Filters: Matches / Practices / Both, a single session, Set (matches), pass
+// scale, Points Added mode, and compare-to (position or team average).
+let plType = null, plSession = 'all', plSet = 'all', plCompare = 'pos', plPaMode = 'adj';
+let plCtx = { num: null, season: 'all' };
+
+function plRerender() { if (plCtx.num) renderPlayerDetail(plCtx.num, plCtx.season); }
+function plSetType(t)   { plType = t; plSession = 'all'; plSet = 'all'; plRerender(); }
+function plSetSession(v){ plSession = v; plRerender(); }
+function plSetSetN(v)   {
+  plSet = v;
+  if (v !== 'all' && !SETS_DATA) {
+    const el = document.getElementById('pl-set-note'); if (el) el.textContent = 'Loading set data…';
+    loadSetsData().then(plRerender).catch(() => { plSet = 'all'; plRerender(); });
+    return;
+  }
+  plRerender();
+}
+function plSetCompare(v){ plCompare = v; plRerender(); }
+function plSetPaMode(v) { plPaMode = v; plRerender(); }
+function plScrollTo(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+const PL_POS = { OUTSIDES:'Outside Hitter', OPPOSITES:'Opposite', MIDDLES:'Middle Blocker', SETTERS:'Setter', LIBEROS:'Libero' };
+const PL_POSS = { OUTSIDES:'OH', OPPOSITES:'OPP', MIDDLES:'MB', SETTERS:'S', LIBEROS:'L' };
+const PL_GROUP_PLURAL = { OUTSIDES:'outsides', OPPOSITES:'opposites', MIDDLES:'middles', SETTERS:'setters', LIBEROS:'liberos' };
+
+// ── Aggregation for one player over a set of sessions (optionally one set) ────
+function _plEmpty() {
+  const ev = () => ({ ev:{}, att:0 });
+  return { A:{ ev:{}, att:0, combos:{} }, S:ev(), SQ:ev(), SM:ev(), R:ev(), RM:ev(), RQ:ev(), B:ev(), D:ev(), E:ev(),
+           zones:{}, digK:0, digT:0, fb:[0,0], so:[0,0,0,0], rot:{}, ph:{ n:0,k:0,e:0,b:0,w:0 }, np:{ n:0,k:0,e:0,b:0,w:0 }, pg:{},
+           setters:{}, sets:new Set(), sessions:new Set(), trend:[] };
+}
+function _plAddEv(t, src) { for (const [e, n] of Object.entries(src || {})) t[e] = (t[e] || 0) + n; }
+
+function plAggregate(pnum, sids, setN) {
+  const o = _plEmpty();
+  for (const sid of sids) {
+    const s = DATA.sessions.find(x => x.id === sid); if (!s) continue;
+    let ps, fbp, mrs;
+    if (setN === 'all') { ps = DATA.player_session[`${pnum}|${sid}`]; fbp = s.fbso_by_player; mrs = s.match_rot_stats; }
+    else { const e = SETS_DATA?.[sid]?.[setN]; if (!e) continue; ps = e.player_session?.[pnum]; fbp = e.fbso_by_player; mrs = e.match_rot_stats; }
+    if (ps && ps.actions) {
+      o.sessions.add(sid);
+      const sk = ps.skills || {};
+      for (const k of ['S','SQ','SM','R','RM','RQ','B','D','E']) if (sk[k]) { _plAddEv(o[k].ev, sk[k].evals); o[k].att += sk[k].attempts || 0; }
+      if (sk.A) {
+        _plAddEv(o.A.ev, sk.A.evals); o.A.att += sk.A.attempts || 0;
+        for (const [cc, cv] of Object.entries(sk.A.combos || {})) {
+          const c = o.A.combos[cc] || (o.A.combos[cc] = { ev:{}, att:0 }); _plAddEv(c.ev, cv.evals); c.att += cv.attempts || 0; }
+      }
+      for (const [z, zd] of Object.entries(ps.rcv_zones || {})) { const zz = o.zones[z] || (o.zones[z] = { ev:{}, att:0 }); _plAddEv(zz.ev, zd.evals); zz.att += zd.attempts || 0; }
+      o.digK += ps.dig_kill_rallies || 0; o.digT += ps.dig_total_rallies || 0;
+      const A = sk.A, R = sk.R, S = sk.S;
+      o.trend.push({ sid, date: s.date, label: s.type === 'match' ? 'vs ' + (s.opponent || '?') : 'Practice', type: s.type,
+        eff: A?.attempts ? ((A.evals['#']||0) - (A.evals['=']||0) - (A.evals['/']||0)) / A.attempts : null, aAtt: A?.attempts || 0,
+        pass: R?.attempts ? passAvgFromEvals(R.evals, R.attempts) : null, rAtt: R?.attempts || 0,
+        ace: S?.attempts ? (S.evals['#']||0) / S.attempts : null, sAtt: S?.attempts || 0 });
+    }
+    const fb = fbp?.[pnum]; if (fb) { o.fb[0] += fb[0]; o.fb[1] += fb[1]; }
+    const bp = mrs?.by_player?.[pnum];
+    if (bp) {
+      for (const [r, v] of Object.entries(bp.rotation_atk || {})) {
+        const x = v.OVR || {}; const rr = o.rot[r] || (o.rot[r] = { k:0,e:0,b:0,a:0 });
+        rr.k += x.k||0; rr.e += x.e||0; rr.b += x.bk||0; rr.a += x.a||0; }
+      for (const v of Object.values(bp.rotation_so || {})) { o.so[0] += v.so_opp||0; o.so[1] += v.so_won||0; o.so[2] += v.srv_opp||0; o.so[3] += v.srv_won||0; }
+    }
+    for (const [sn, pl] of Object.entries(s.pass_hit || {})) {
+      if (setN !== 'all' && sn !== String(setN)) continue;
+      const v = pl[pnum]; if (!v) continue;
+      for (const g of ['ph','np']) for (const [ev, rec] of Object.entries(v[g] || {})) {
+        const r = o[g]; r.n += rec[0]; r.w += rec[1]; if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0]; }
+      _plAddEv(o.pg, v.pg);
+    }
+    for (const [sn, pl] of Object.entries(s.pts_added || {})) {
+      if (setN !== 'all' && sn !== String(setN)) continue;
+      if (pl[pnum] && Object.keys(pl[pnum]).some(k => k[0] !== 'X')) o.sets.add(sid + '|' + sn);
+    }
+    if (setN === 'all') for (const [snm, atks] of Object.entries(s.setter_attacks || {})) {
+      for (const cv of Object.values(atks[pnum] || {})) {
+        const r = o.setters[snm] || (o.setters[snm] = { k:0,e:0,b:0,a:0 }); r.k += cv.kills||0; r.e += cv.errors||0; r.b += cv.blocks||0; r.a += cv.attempts||0; }
+    }
+  }
+  o.trend.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  return o;
+}
+
+// Group (position) and team totals for comparisons
+function plGroupTotals(sids, setN) {
+  const G = {};
+  const add = (g, sk) => { const x = G[g] || (G[g] = { A:{ev:{},att:0}, S:{ev:{},att:0}, R:{ev:{},att:0}, B:{ev:{},att:0}, D:{ev:{},att:0} });
+    for (const k of ['A','S','R','B','D']) if (sk[k]) { _plAddEv(x[k].ev, sk[k].evals); x[k].att += sk[k].attempts || 0; } };
+  const sidSet = new Set(sids);
+  const bySession = {};
+  if (setN === 'all') {
+    for (const v of Object.values(DATA.player_session)) if (sidSet.has(v.session_id)) (bySession[v.session_id] = bySession[v.session_id] || []).push([v.player_num, v]);
+  } else {
+    for (const sid of sids) bySession[sid] = Object.entries(SETS_DATA?.[sid]?.[setN]?.player_session || {});
+  }
+  for (const [sid, entries] of Object.entries(bySession)) {
+    const s = DATA.sessions.find(x => x.id === sid); if (!s) continue;
+    for (const [pn, v] of entries) { add(getPlayerGroup(pn, s.season), v.skills || {}); add('TEAM', v.skills || {}); }
+  }
+  return G;
+}
+
+// Points Added for a list of players (uses the Reports value tables)
+function plPointsAdded(players, sids, setN, seasons) {
+  const tables = {};
+  for (const type of ['match','practice']) {
+    const pool = DATA.sessions.filter(s => s.type === type && seasons.includes(s.season) && s.pts_added);
+    if (pool.length) tables[type] = _paTables(pool);
+  }
+  const savedMode = paMode; paMode = plPaMode;
+  const out = {};
+  try {
+    for (const sid of sids) {
+      const s = DATA.sessions.find(x => x.id === sid); const T = tables[s?.type]; if (!T) continue;
+      for (const [sn, pl] of Object.entries(s.pts_added || {})) {
+        if (setN !== 'all' && sn !== String(setN)) continue;
+        for (const p of players) {
+          const keys = pl[p]; if (!keys) continue;
+          const o = out[p] || (out[p] = { v: Object.fromEntries(PA_COLS.map(c => [c, 0])), touches: 0, sets: new Set() });
+          for (const [k, rec] of Object.entries(keys)) { _paValue(T, k, rec[0], o.v); if (k[0] !== 'X') o.touches += rec[0]; }
+          o.sets.add(sid + '|' + sn);
+        }
+      }
+    }
+  } finally { paMode = savedMode; }
+  for (const o of Object.values(out)) { o.total = PA_COLS.reduce((a, c) => a + o.v[c], 0); o.per = o.total / Math.max(1, o.sets.size); }
+  return out;
+}
+
+// Hitter efficiency vs expected (same method as the Reports card)
+function plHitterEval(sids, setN) {
+  const norm = ph => (rcvPassScale === '3' && ph === '!') ? '+' : ph;
+  const z = () => ({ k:0,e:0,b:0,a:0 });
+  const hit = {};
+  for (const sid of sids) {
+    const s = DATA.sessions.find(x => x.id === sid); if (!s) continue;
+    for (const [sn, pl] of Object.entries(s.pts_added || {})) {
+      if (setN !== 'all' && sn !== String(setN)) continue;
+      for (const [pn, keys] of Object.entries(pl)) for (const [k, rec] of Object.entries(keys)) {
+        if (k[0] !== 'A') continue;
+        const [, ev, sit0] = k.split('|'); const [ph0, grp] = sit0.split('/'); const sit = norm(ph0) + '/' + grp;
+        const o = hit[pn] || (hit[pn] = { season: s.season, cells: {} }); const r = o.cells[sit] || (o.cells[sit] = z());
+        r.a += rec[0]; if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0];
+      }
+    }
+  }
+  const eff = r => r.a ? (r.k - r.e - r.b) / r.a : null;
+  const team = {}, phaseTeam = {}; const tot = z();
+  for (const o of Object.values(hit)) for (const [sit, r] of Object.entries(o.cells)) {
+    const ph = sit.split('/')[0];
+    for (const t2 of [team[sit] || (team[sit] = z()), phaseTeam[ph] || (phaseTeam[ph] = z()), tot]) { t2.k += r.k; t2.e += r.e; t2.b += r.b; t2.a += r.a; } }
+  const teamEff = {};
+  for (const [sit, r] of Object.entries(team)) { const prior = eff(phaseTeam[sit.split('/')[0]]) ?? eff(tot) ?? 0; teamEff[sit] = ((r.k - r.e - r.b) + 5 * prior) / (r.a + 5); }
+  const posMix = {};
+  for (const [p, o] of Object.entries(hit)) { const g = getPlayerGroup(p, o.season); const pm = posMix[g] || (posMix[g] = { n:0, cells:{} });
+    for (const [sit, c] of Object.entries(o.cells)) { pm.cells[sit] = (pm.cells[sit]||0) + c.a; pm.n += c.a; } }
+  const res = {};
+  for (const [p, o] of Object.entries(hit)) {
+    const t3 = Object.values(o.cells).reduce((a, r) => ({ k:a.k+r.k, e:a.e+r.e, b:a.b+r.b, a:a.a+r.a }), z()); if (!t3.a) continue;
+    const pm = posMix[getPlayerGroup(p, o.season)];
+    const raw = eff(t3), exp = Object.entries(o.cells).reduce((s2, [sit, c]) => s2 + c.a * teamEff[sit], 0) / t3.a;
+    let adj = 0; for (const [sit, n] of Object.entries(pm.cells)) { const c = o.cells[sit] || z(); adj += (n / pm.n) * (((c.k - c.e - c.b) + 20 * teamEff[sit]) / (c.a + 20)); }
+    const phase = {}; for (const [sit, c] of Object.entries(o.cells)) { const ph = sit.split('/')[0]; const q = phase[ph] || (phase[ph] = z()); q.k += c.k; q.e += c.e; q.b += c.b; q.a += c.a; }
+    res[p] = { n: t3.a, raw, exp, eoe: raw - exp, adj, phase };
+  }
+  const phaseEff = Object.fromEntries(Object.entries(phaseTeam).map(([ph, r]) => [ph, eff(r)]));
+  return { players: res, phaseEff };
+}
+
+// Setter metrics (same method as the Reports setter card)
+function plSetterEval(pnum, sids, setN) {
+  const merge3 = rcvPassScale === '3';
+  const BK = merge3 ? ['perf','good','oos','fboth','transition'] : ['perf','good','med','oos','fboth','transition'];
+  const z = () => ({ k:0,e:0,b:0,a:0 }); const add = (r, v) => { r.k += v.k; r.e += v.e; r.b += v.b; r.a += v.a; };
+  const sumAtk = sit => { const r = z(); for (const v of Object.values(sit?.atk || {})) add(r, v); return r; };
+  const eff = r => r.a ? (r.k - r.e - r.b) / r.a : null;
+  const setters = {};
+  for (const sid of sids) {
+    const s = DATA.sessions.find(x => x.id === sid); if (!s) continue;
+    const tab = setN === 'all' ? s.setter_tab : SETS_DATA?.[sid]?.[setN]?.setter_tab;
+    for (const [sp, sits] of Object.entries(tab || {})) {
+      const o = setters[sp] || (setters[sp] = Object.fromEntries(BK.map(k => [k, z()])));
+      const perf = sumAtk(sits.perf), good = sumAtk(sits.good), med = sumAtk(sits.med), oos = sumAtk(sits.oos), fb = sumAtk(sits.fbso);
+      add(o.perf, perf); add(o.oos, oos); add(o.transition, sumAtk(sits.transition));
+      if (merge3) { add(o.good, good); add(o.good, med); } else { add(o.good, good); add(o.med, med); }
+      add(o.fboth, { k: fb.k-perf.k-good.k-med.k-oos.k, e: fb.e-perf.e-good.e-med.e-oos.e, b: fb.b-perf.b-good.b-med.b-oos.b, a: fb.a-perf.a-good.a-med.a-oos.a });
+    }
+  }
+  const me = setters[pnum]; if (!me) return null;
+  const team = Object.fromEntries(BK.map(k => [k, z()])); for (const o of Object.values(setters)) for (const k of BK) add(team[k], o[k]);
+  const TN = BK.reduce((n, k) => n + team[k].a, 0); const N = BK.reduce((n, k) => n + me[k].a, 0); if (!N || !TN) return null;
+  const BKU = BK.filter(k => team[k].a);
+  const teff = Object.fromEntries(BKU.map(k => [k, eff(team[k])]));
+  const tot = z(); BKU.forEach(k => add(tot, me[k]));
+  const raw = eff(tot), exp = BKU.reduce((s2, k) => s2 + me[k].a * teff[k], 0) / N;
+  const adj = BKU.reduce((s2, k) => s2 + (team[k].a / TN) * (((me[k].k - me[k].e - me[k].b) + 30 * teff[k]) / (me[k].a + 30)), 0);
+  return { n: N, raw, exp, eoe: raw - exp, adj, mix: Object.fromEntries(BKU.filter(k => me[k].a).map(k => [k, { n: me[k].a, eff: eff(me[k]), team: teff[k] }])) };
+}
+
+// ── Small rendering helpers ───────────────────────────────────────────────────
+const _plE  = v => v === null || v === undefined || isNaN(v) ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+const _plP  = (a, n) => n ? (a / n * 100).toFixed(1) + '%' : '—';
+const _plD  = v => v === null || v === undefined || isNaN(v) ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1);
+const _plEffOf = x => x && x.att ? (((x.ev['#']||0) - (x.ev['=']||0) - (x.ev['/']||0)) / x.att) : null;
+const _plClr = (v, good, bad) => v === null || v === undefined ? 'var(--text-muted)' : v >= good ? 'var(--green)' : v < bad ? 'var(--red)' : 'var(--text)';
+function _plTile(label, value, sub, color) {
+  return `<div class="pl-kpi"><div class="pl-kpi-l">${label}</div><div class="pl-kpi-v" style="color:${color||'var(--text)'}">${value}</div><div class="pl-kpi-c">${sub||''}</div></div>`;
+}
+function _plCmp(v, ref, higherBetter = true, fmt = x => (x * 100).toFixed(1) + '%') {
+  if (v === null || ref === null || ref === undefined) return '';
+  const better = higherBetter ? v >= ref : v <= ref;
+  return `<span style="color:${better ? 'var(--green)' : 'var(--red)'}">${better ? '▲' : '▼'}</span> ${plCompare === 'pos' ? 'pos' : 'team'} avg ${fmt(ref)}`;
+}
+function _plSpark(points, fmt, color) {
+  const vals = points.map(p => p.v);
+  const real = vals.filter(v => v !== null);
+  if (real.length < 2) return '<div class="pl-muted" style="font-size:11px;padding:10px 0">Not enough sessions</div>';
+  const W = 300, H = 60; const lo = Math.min(...real); let hi = Math.max(...real); if (hi === lo) hi = lo + 1;
+  const xs = vals.map((_, i) => 6 + i * (W - 12) / Math.max(1, vals.length - 1));
+  let d = '', start = true, dots = '';
+  vals.forEach((v, i) => {
+    if (v === null) { start = true; return; }
+    const y = H - 6 - (v - lo) / (hi - lo) * (H - 12);
+    d += (start ? 'M' : 'L') + xs[i].toFixed(1) + ',' + y.toFixed(1) + ' '; start = false;
+    const p = points[i];
+    dots += `<circle cx="${xs[i].toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}"><title>${p.date} · ${p.label} · ${fmt(v)}</title></circle>`;
+  });
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.8"/>${dots}</svg>`;
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
 function renderPlayerDetail(num, detailSeason) {
   detailSeason = detailSeason || 'all';
+  if (plCtx.num !== num || plCtx.season !== detailSeason) { plType = null; plSession = 'all'; plSet = 'all'; }
+  plCtx = { num, season: detailSeason };
+  const container = document.getElementById('player-detail');
   const seasons = detailSeason === 'all' ? orderedSeasons() : [detailSeason];
   const p = getPlayerInfo(num, detailSeason === 'all' ? null : detailSeason);
-  if (!p) return;
-  const agg = getPlayerAggSeason(num, seasons);
-  const container = document.getElementById('player-detail');
+  if (!p || !container) return;
+  const lookSeason = detailSeason === 'all' ? seasons[seasons.length - 1] : detailSeason;
+  const group = getPlayerGroup(num, lookSeason);
 
-  // Find all seasons this player-number has data in
-  const careerSeasons = orderedSeasons().filter(s => {
-    const k = `${num}|${s}`;
-    // Only count seasons where this number maps to the same person
-    const seasonName = DATA.players_by_season?.[s]?.[num]?.name;
-    return DATA.player_season[k]?.actions > 0 && seasonName === p.name;
-  });
+  // Sessions this player appears in, per type
+  const mine = DATA.sessions.filter(s => seasons.includes(s.season) && s.type !== 'scout' && DATA.player_session[`${num}|${s.id}`]?.actions)
+                .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const nM = mine.filter(s => s.type === 'match').length, nP = mine.filter(s => s.type === 'practice').length;
+  if (!plType) plType = nM ? 'match' : 'both';
+  if (plType !== 'match') plSet = 'all';
+  const typeOk = s => plType === 'both' || s.type === plType;
+  const pool = DATA.sessions.filter(s => seasons.includes(s.season) && s.type !== 'scout' && typeOk(s));   // everyone, for baselines
+  let sids = pool.map(s => s.id);
+  if (plSession !== 'all') sids = sids.filter(id => id === plSession);
+  const setN = plSet;
 
-  const A = agg.skills?.A;
-  const S = agg.skills?.S;
-  const R = agg.skills?.R;
-  const B = agg.skills?.B;
-  const D = agg.skills?.D;
-  const E = agg.skills?.E;
+  const A = plAggregate(num, sids, setN);
+  const G = plGroupTotals(sids, setN);
+  const ref = G[plCompare === 'pos' ? group : 'TEAM'] || null;
+  const refEff = ref ? _plEffOf(ref.A) : null, refKill = ref?.A.att ? (ref.A.ev['#']||0) / ref.A.att : null;
+  const refPass = ref?.R.att ? passAvgFromEvals(ref.R.ev, ref.R.att) : null;
+  const refAce = ref?.S.att ? (ref.S.ev['#']||0) / ref.S.att : null, refSErr = ref?.S.att ? (ref.S.ev['=']||0) / ref.S.att : null;
 
-  container.innerHTML = `
-    <div class="card">
-      <div class="detail-header">
+  // Teammates at the same position (for ranks)
+  const roster = DATA.players_by_season?.[lookSeason] || DATA.players;
+  const mates = Object.keys(roster).filter(pn => getPlayerGroup(pn, lookSeason) === group);
+  const PA = plPointsAdded([...new Set([...mates, num])], sids, setN, seasons);
+  const myPA = PA[num];
+  const paRank = (() => { const arr = Object.entries(PA).filter(([, o]) => o.touches >= 10).sort((a, b) => b[1].total - a[1].total).map(([pn]) => pn);
+    const i = arr.indexOf(num); return i >= 0 ? `#${i + 1} of ${arr.length} ${PL_GROUP_PLURAL[group] || ''}` : ''; })();
+  const HE = plHitterEval(sids, setN);
+  const myHE = HE.players[num];
+  const heRank = (() => { const arr = Object.entries(HE.players).filter(([pn, o]) => o.n >= 10 && getPlayerGroup(pn, lookSeason) === group).sort((a, b) => b[1].adj - a[1].adj).map(([pn]) => pn);
+    const i = arr.indexOf(num); return i >= 0 ? `${PL_POSS[group] || ''} rank ${i + 1}/${arr.length}` : ''; })();
+  // Setting section: setters always; liberos only when they set a real share of balls
+  const SE = (group === 'SETTERS' || (group === 'LIBEROS' && A.E.att >= 30)) ? plSetterEval(num, sids, setN) : null;
+
+  const effA = _plEffOf(A.A), killA = A.A.att ? (A.A.ev['#']||0) / A.A.att : null;
+  const passAvg = A.R.att ? passAvgFromEvals(A.R.ev, A.R.att) : null;
+  const ace = A.S.att ? (A.S.ev['#']||0) / A.S.att : null, sErr = A.S.att ? (A.S.ev['=']||0) / A.S.att : null;
+  const fbPct = A.fb[0] ? A.fb[1] / A.fb[0] : null;
+  const phE = A.ph.n ? (A.ph.k - A.ph.e - A.ph.b) / A.ph.n : null, npE = A.np.n ? (A.np.k - A.np.e - A.np.b) / A.np.n : null;
+  const quick = ['X1','X2','X7'].reduce((a, cc) => { const c = A.A.combos[cc]; if (c) { a.att += c.att; _plAddEv(a.ev, c.ev); } return a; }, { ev:{}, att:0 });
+  const blkPerSet = A.sets.size ? ((A.B.ev['#']||0) + 0.5 * ((A.B.ev['+']||0) + (A.B.ev['!']||0) + (A.B.ev['-']||0))) / A.sets.size : null;
+
+  // ── Header + filters ──
+  const chip = (on, lbl, fn) => `<button class="pl-chip${on ? ' on' : ''}" onclick="${fn}">${lbl}</button>`;
+  const sessOpts = mine.filter(typeOk).map(s => `<option value="${s.id}" ${plSession === s.id ? 'selected' : ''}>${s.date || ''} ${s.type === 'match' ? 'vs ' + (s.opponent || '?') : '(Practice)'}</option>`).join('');
+  const setsAvail = [...new Set(mine.filter(s => s.type === 'match' && (plSession === 'all' || s.id === plSession)).flatMap(s => s.sets || []))].sort((a, b) => a - b);
+  const header = `
+    <div class="card pl-card">
+      <div class="detail-header" style="margin-bottom:10px">
         <div class="detail-num">#${num}</div>
         <div class="detail-info">
           <h2>${p.name} ${p.is_libero ? '<span class="libero-badge">Libero</span>' : ''}</h2>
-          <p>${POS_NAMES[p.position_code]||'Unknown'} &nbsp;·&nbsp; ${agg.sessions} sessions &nbsp;·&nbsp; ${fmt(agg.actions)} actions</p>
-          <p style="margin-top:4px;font-size:11px;color:var(--text-dim)">Seasons as #${num}: ${careerSeasons.length ? careerSeasons.join(', ') : '—'}</p>
+          <p>${PL_POS[group] || POS_NAMES[p.position_code] || ''} · ${detailSeason === 'all' ? 'All seasons' : detailSeason} · ${nM} matches · ${nP} practices${A.sets.size ? ` · ${A.sets.size} sets in view` : ''}</p>
         </div>
+        ${myPA ? `<div style="margin-left:auto;text-align:right">
+          <div class="pl-muted" style="font-size:11px">Points Added (${plPaMode === 'adj' ? 'situation-adj.' : 'basic'})</div>
+          <div style="font-size:26px;font-weight:800;color:${myPA.total >= 0 ? 'var(--green)' : 'var(--red)'}">${myPA.total >= 0 ? '+' : ''}${myPA.total.toFixed(1)}</div>
+          <div class="pl-muted" style="font-size:11px">${myPA.per >= 0 ? '+' : ''}${myPA.per.toFixed(2)} per set${paRank ? ` · <b style="color:var(--gold)">${paRank}</b>` : ''}</div></div>` : ''}
       </div>
-
-      ${A ? `
-      <div class="section-title" style="margin-top:0">Attack</div>
-      <div class="stat-grid">
-        <div class="stat-box highlight"><div class="stat-val">${pct(A.kill_pct)}</div><div class="stat-lbl">Kill %</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(A.error_pct)}</div><div class="stat-lbl">Error %</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(A.efficiency)}</div><div class="stat-lbl">Efficiency</div></div>
-        <div class="stat-box"><div class="stat-val">${fmt(A.attempts)}</div><div class="stat-lbl">Attempts</div></div>
+      <div class="pl-filters">
+        ${chip(plType === 'match', 'Matches', "plSetType('match')")}${chip(plType === 'practice', 'Practices', "plSetType('practice')")}${chip(plType === 'both', 'Both', "plSetType('both')")}
+        <select onchange="plSetSession(this.value)"><option value="all">All sessions (${mine.filter(typeOk).length})</option>${sessOpts}</select>
+        ${plType === 'match' && setsAvail.length ? `<select onchange="plSetSetN(this.value)"><option value="all">All sets</option>${setsAvail.map(n => `<option value="${n}" ${String(plSet) === String(n) ? 'selected' : ''}>Set ${n}</option>`).join('')}</select><span id="pl-set-note" class="pl-muted" style="font-size:11px"></span>` : ''}
+        <span class="pl-sep"></span>
+        <span class="pl-muted" style="font-size:11px">Pass scale</span>${chip(rcvPassScale === '4', '4-pt', "setRcvPassScale('4')")}${chip(rcvPassScale === '3', '3-pt', "setRcvPassScale('3')")}
+        <span class="pl-sep"></span>
+        <span class="pl-muted" style="font-size:11px">Points Added</span>${chip(plPaMode === 'basic', 'Basic', "plSetPaMode('basic')")}${chip(plPaMode === 'adj', 'Adjusted', "plSetPaMode('adj')")}
+        <span class="pl-sep"></span>
+        <span class="pl-muted" style="font-size:11px">Compare to</span>
+        <select onchange="plSetCompare(this.value)"><option value="pos" ${plCompare === 'pos' ? 'selected' : ''}>${PL_POSS[group] || 'Position'} average</option><option value="team" ${plCompare === 'team' ? 'selected' : ''}>Team average</option></select>
+        <button class="rpt-export-btn" style="margin-left:auto" onclick="exportPlayerPDF()">⬇ Export player report</button>
       </div>
-      ${buildEvalPills(A.evals, A.attempts)}` : ''}
+    </div>`;
 
-      ${S ? `
-      <div class="section-title">Serve</div>
-      <div class="stat-grid">
-        <div class="stat-box highlight"><div class="stat-val" style="color:var(--blue)">${pct(S.kill_pct)}</div><div class="stat-lbl">Ace %</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(S.error_pct)}</div><div class="stat-lbl">Error %</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(S.pos_pct)}</div><div class="stat-lbl">Pos %</div></div>
-        <div class="stat-box"><div class="stat-val">${fmt(S.attempts)}</div><div class="stat-lbl">Serves</div></div>
-      </div>
-      ${buildEvalPills(S.evals, S.attempts)}` : ''}
-
-      ${R ? `
-      <div class="section-title">Reception</div>
-      <div class="stat-grid">
-        <div class="stat-box highlight"><div class="stat-val" style="color:var(--gold)">${pct(R.kill_pct)}</div><div class="stat-lbl">Perfect %</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(R.pos_pct)}</div><div class="stat-lbl">Positive %</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(R.error_pct)}</div><div class="stat-lbl">Error %</div></div>
-        <div class="stat-box"><div class="stat-val">${fmt(R.attempts)}</div><div class="stat-lbl">Receptions</div></div>
-      </div>` : ''}
-
-      ${B ? `
-      <div class="section-title">Block</div>
-      <div class="stat-grid">
-        <div class="stat-box highlight"><div class="stat-val green">${B.evals?.['#']||0}</div><div class="stat-lbl">Block Kills</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(B.error_pct)}</div><div class="stat-lbl">Error %</div></div>
-        <div class="stat-box"><div class="stat-val">${fmt(B.attempts)}</div><div class="stat-lbl">Attempts</div></div>
-      </div>` : ''}
-
-      ${D ? `
-      <div class="section-title">Dig</div>
-      <div class="stat-grid">
-        <div class="stat-box highlight"><div class="stat-val" style="color:var(--blue)">${pct(D.kill_pct)}</div><div class="stat-lbl">Dig Perfect</div></div>
-        <div class="stat-box"><div class="stat-val">${pct(D.pos_pct)}</div><div class="stat-lbl">Positive %</div></div>
-        <div class="stat-box"><div class="stat-val">${fmt(D.attempts)}</div><div class="stat-lbl">Digs</div></div>
-      </div>` : ''}
-
-      ${careerSeasons.length > 1 ? `
-      <div class="section-title">Career Progression</div>
-      <div class="chart-wrap" style="margin-top:8px"><canvas id="chart-player-career"></canvas></div>` : ''}
-    </div>
-  `;
-
-  // Career chart
-  if (careerSeasons.length > 1) {
-    const skillsToShow = ['A','S','R'].filter(sk => careerSeasons.some(s => DATA.player_season[`${num}|${s}`]?.skills?.[sk]?.attempts > 0));
-    makeChart('chart-player-career', 'line', {
-      labels: careerSeasons,
-      datasets: skillsToShow.map(sk => ({
-        label: SKILL_NAMES[sk] + ' Kill%',
-        data: careerSeasons.map(s => DATA.player_season[`${num}|${s}`]?.skills?.[sk]?.kill_pct || null),
-        borderColor: SKILL_COLORS[sk],
-        backgroundColor: SKILL_COLORS[sk] + '33',
-        tension: 0.3,
-        fill: true,
-        pointRadius: 5,
-        spanGaps: false,
-      }))
-    }, {
-      scales: {
-        y: { min: 0, max: 100, ticks: { callback: v => v+'%' } }
-      }
-    });
+  if (!A.sessions.size && !A.sets.size) {
+    container.innerHTML = header + `<div class="card pl-card"><div class="empty">No data for this player with the current filters.</div></div>`;
+    return;
   }
+
+  // ── Which sections apply ──
+  const has = { att: A.A.att >= 5, set: !!SE && SE.n >= 10, pass: A.R.att >= 5, srv: A.S.att >= 5, def: (A.B.att + A.D.att) >= 5 };
+  const nav = [['pl-sec-overview','Overview', true], ['pl-sec-attack','Attacking', has.att], ['pl-sec-setting','Setting', has.set], ['pl-sec-passing','Passing', has.pass],
+               ['pl-sec-serving','Serving', has.srv], ['pl-sec-defense','Block & Defense', has.def], ['pl-sec-trends','Trends', true]]
+    .filter(x => x[2]).map(([id, l]) => `<button onclick="plScrollTo('${id}')">${l}</button>`).join('');
+
+  // ── Overview tiles (by position) ──
+  const T = {
+    eff:   A.A.att ? _plTile('Attack Eff', _plE(effA), _plCmp(effA, refEff)) : null,
+    eoe:   myHE && myHE.n >= 10 ? _plTile('Eff over expected', _plD(myHE.eoe), `expected ${_plE(myHE.exp)}${heRank ? ' · ' + heRank : ''}`, myHE.eoe >= 0 ? 'var(--green)' : 'var(--red)') : null,
+    kill:  A.A.att ? _plTile('Kill %', _plP(A.A.ev['#']||0, A.A.att), _plCmp(killA, refKill)) : null,
+    quick: quick.att >= 5 ? _plTile('Quick Eff', _plE(_plEffOf(quick)), `${quick.att} quick attempts`) : null,
+    pass:  A.R.att ? _plTile(`Pass Avg (${rcvPassScale}-pt)`, passAvg.toFixed(2), _plCmp(passAvg, refPass, true, x => x.toFixed(2))) : null,
+    perf:  A.R.att ? _plTile('Perfect pass %', _plP(A.R.ev['#']||0, A.R.att), `${A.R.att} passes`) : null,
+    fbso:  A.fb[0] >= 5 ? _plTile('FBSO on his passes', (fbPct * 100).toFixed(1) + '%', `${A.fb[0]} rcv rallies${A.so[0] ? ` · SO ${(A.so[1] / A.so[0] * 100).toFixed(0)}%` : ''}`) : null,
+    serve: A.S.att ? _plTile('Ace / Error', `${(ace * 100).toFixed(1)}<span class="pl-muted"> / </span>${(sErr * 100).toFixed(1)}%`, refAce !== null ? `${plCompare === 'pos' ? 'pos' : 'team'} avg ${(refAce * 100).toFixed(1)} / ${(refSErr * 100).toFixed(1)}%` : '') : null,
+    block: A.B.att ? _plTile('Block pts / set', blkPerSet !== null ? blkPerSet.toFixed(2) : '—', `${A.B.ev['#']||0} stuffs · ${(A.B.ev['+']||0) + (A.B.ev['!']||0) + (A.B.ev['-']||0)} touches · ${A.B.ev['=']||0} err`) : null,
+    dig:   A.D.att ? _plTile('Dig good %', _plP((A.D.ev['#']||0) + (A.D.ev['+']||0), A.D.att), `${A.D.att} digs`) : null,
+    digk:  A.digT ? _plTile('Dig → kill %', (A.digK / A.digT * 100).toFixed(0) + '%', `${A.digT} dig rallies`) : null,
+    pa:    myPA ? _plTile('Points Added / set', (myPA.per >= 0 ? '+' : '') + myPA.per.toFixed(2), paRank, myPA.per >= 0 ? 'var(--green)' : 'var(--red)') : null,
+    sadj:  SE ? _plTile('Setter Adjusted Eff', _plE(SE.adj), `raw ${_plE(SE.raw)} · ${SE.n} sets`, 'var(--gold)') : null,
+    seoe:  SE ? _plTile('Setter EOE', _plD(SE.eoe), `expected ${_plE(SE.exp)}`, SE.eoe >= 0 ? 'var(--green)' : 'var(--red)') : null,
+    ph:    A.ph.n >= 3 && npE !== null ? _plTile('Pass & Hit Δ Eff', _plD(phE - npE), `${_plE(phE)} after own pass vs ${_plE(npE)} (${A.ph.n}/${A.np.n} att)`, (phE - npE) >= 0 ? 'var(--green)' : 'var(--red)') : null,
+  };
+  const ORDER = { OUTSIDES:['eff','eoe','pass','fbso','serve','ph'], OPPOSITES:['eff','eoe','kill','serve','block','pa'],
+                  MIDDLES:['eff','eoe','quick','block','serve','pa'], LIBEROS:['pass','perf','fbso','dig','digk','pa'],
+                  SETTERS:['sadj','seoe','serve','block','dig','pa'] }[group] || ['eff','pass','serve','block','dig','pa'];
+  const tiles = [...ORDER, 'pa', 'eff', 'pass', 'serve', 'dig', 'block'].filter((k, i, a) => a.indexOf(k) === i).map(k => T[k]).filter(Boolean).slice(0, 6).join('');
+
+  // ── Points Added bars ──
+  const paBars = myPA ? (() => { const mx = Math.max(1, ...PA_COLS.map(c => Math.abs(myPA.v[c])));
+    return PA_COLS.map(c => { const v = myPA.v[c]; return `<div class="pl-pa-row"><span>${c}</span><div class="pl-pa-track"><div class="pl-pa-mid"></div>
+      <div style="position:absolute;top:0;bottom:0;${v >= 0 ? 'left:50%' : 'right:50%'};width:${Math.abs(v) / mx * 50}%;background:${v >= 0 ? 'var(--green)' : 'var(--red)'};border-radius:2px"></div></div>
+      <b style="text-align:right;color:${Math.abs(v) < 0.05 ? 'var(--text-muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${v.toFixed(1)}</b></div>`; }).join(''); })() : '<div class="pl-muted">No Points Added data.</div>';
+
+  // ── Auto insights ──
+  const ins = [];
+  const combosArr = Object.entries(A.A.combos).filter(([, c]) => c.att >= 8).map(([cc, c]) => ({ cc, n: c.att, eff: _plEffOf(c) })).sort((a, b) => b.eff - a.eff);
+  const avgLbl = plCompare === 'pos' ? (PL_POSS[group] || 'position') : 'team';
+  if (A.R.att >= 20 && refPass !== null)
+    ins.push({ cls: passAvg >= refPass ? 'good' : 'bad', t: `Passing <b>${passAvg.toFixed(2)}</b> avg on ${A.R.att} passes — ${passAvg >= refPass ? 'above' : 'below'} the ${avgLbl} average (${refPass.toFixed(2)}); ${_plP(A.R.ev['#']||0, A.R.att)} perfect.` });
+  if (A.ph.n >= 8 && npE !== null && Math.abs(phE - npE) >= 0.15)
+    ins.push({ cls: phE < npE ? 'bad' : 'good', t: `Attacks <b>${_plE(phE)}</b> right after his own pass (${A.ph.n} att) vs <b>${_plE(npE)}</b> when someone else passes (${A.np.n}).` });
+  if (myHE && myHE.n >= 40 && Math.abs(myHE.eoe) >= 0.04)
+    ins.push({ cls: myHE.eoe >= 0 ? 'good' : 'bad', t: `Hitting <b>${_plD(myHE.eoe)}</b> points ${myHE.eoe >= 0 ? 'above' : 'below'} what his mix of balls predicts (${_plE(myHE.raw)} vs ${_plE(myHE.exp)} expected).` });
+  if (combosArr.length >= 2 && combosArr[0].eff - combosArr[combosArr.length - 1].eff >= 0.2) {
+    const w = combosArr[combosArr.length - 1], b = combosArr[0];
+    ins.push({ cls: 'bad', t: `Weakest set: <b>${COMBO_NAMES[w.cc] || w.cc}</b> at ${_plE(w.eff)} (${w.n} att) vs ${_plE(b.eff)} on ${COMBO_NAMES[b.cc] || b.cc}.` });
+  }
+  if (A.S.att >= 30 && refAce !== null)
+    ins.push({ cls: (ace - sErr) >= (refAce - refSErr) ? 'good' : '', t: `Serving <b>${(ace * 100).toFixed(1)}%</b> aces / <b>${(sErr * 100).toFixed(1)}%</b> errors (${avgLbl} avg ${(refAce * 100).toFixed(1)} / ${(refSErr * 100).toFixed(1)}%).` });
+  if (SE && SE.n >= 50) ins.push({ cls: SE.eoe >= 0 ? 'good' : 'bad', t: `His hitters score <b>${_plD(SE.eoe)}</b> points ${SE.eoe >= 0 ? 'above' : 'below'} what his passes predict (${_plE(SE.raw)} vs ${_plE(SE.exp)}).` });
+  const insights = ins.slice(0, 4).map(i => `<div class="pl-ins ${i.cls}">${i.t}</div>`).join('') || '<div class="pl-muted" style="font-size:12px">Not enough data yet for insights.</div>';
+
+  const overview = `<div class="card pl-card" id="pl-sec-overview"><h3 class="pl-h">At a glance <span class="pl-muted">vs ${avgLbl} average</span></h3>
+    <div class="pl-kpis">${tiles}</div>
+    <div class="pl-g2" style="margin-top:14px"><div><h3 class="pl-h">Where his points come from <span class="pl-muted">${plPaMode === 'adj' ? 'situation-adjusted' : 'basic'}</span></h3>${paBars}</div>
+    <div><h3 class="pl-h">Insights</h3>${insights}</div></div></div>`;
+
+  // ── Attacking ──
+  const effTd = (k, e, b, a) => `<td class="num" style="color:var(--green)">${k}</td><td class="num" style="color:var(--red)">${e}</td><td class="num">${b || '—'}</td><td class="num">${a}</td><td class="num" style="font-weight:700;color:${_plClr(a ? (k-e-b)/a : null, 0.35, 0.15)}">${_plE(a ? (k-e-b)/a : null)}</td>`;
+  let attack = '';
+  if (has.att) {
+    const ev = A.A.ev;
+    const comboRows = Object.entries(A.A.combos).sort((a, b) => b[1].att - a[1].att).filter(([, c]) => c.att >= 2)
+      .map(([cc, c]) => `<tr><td>${COMBO_NAMES[cc] || cc} <span class="pl-muted">${cc}</span></td>${effTd(c.ev['#']||0, c.ev['=']||0, c.ev['/']||0, c.att)}</tr>`).join('');
+    const SITL = { '#': bucketLabel('perf'), '+': bucketLabel('good'), '!': bucketLabel('med'), '-': bucketLabel('oos'), 'o': 'Other first ball', 'T': 'Transition' };
+    const sitRows = myHE ? ['#','+','!','-','o','T'].filter(ph => myHE.phase[ph]?.a).map(ph => { const r = myHE.phase[ph]; const e2 = (r.k - r.e - r.b) / r.a; const te = HE.phaseEff[ph];
+      return `<tr><td>${SITL[ph]}</td><td class="num">${r.a}</td><td class="num" style="font-weight:700;color:${_plClr(e2, 0.35, 0.15)}">${_plE(e2)}</td><td class="num pl-muted">${_plE(te)}</td><td class="num" style="color:${e2 - te >= 0 ? 'var(--green)' : 'var(--red)'}">${_plD(e2 - te)}</td></tr>`; }).join('') : '';
+    const setterRows = Object.entries(A.setters).filter(([, r]) => r.a >= 3).sort((a, b) => b[1].a - a[1].a).slice(0, 5)
+      .map(([sp, r]) => `<tr><td>#${sp} ${getPlayerName(sp, lookSeason)}</td><td class="num">${r.a}</td><td class="num" style="font-weight:700;color:${_plClr((r.k-r.e-r.b)/r.a, 0.35, 0.15)}">${_plE((r.k-r.e-r.b)/r.a)}</td></tr>`).join('');
+    const ROTZ = { '1':'Z1','2':'Z6','3':'Z5','4':'Z4','5':'Z3','6':'Z2' };
+    const rotCells = Object.keys(A.rot).length ? ['4','3','2','5','6','1'].map(r => { const x = A.rot[r] || { k:0,e:0,b:0,a:0 }; const e2 = x.a ? (x.k-x.e-x.b)/x.a : null;
+      return `<div class="pl-rot"><div style="font-size:11px;font-weight:700">R${r} <span class="pl-muted" style="font-weight:400">setter ${ROTZ[r]}</span></div><div style="font-size:18px;font-weight:800;color:${_plClr(e2, 0.35, 0.15)}">${e2 === null ? '—' : (e2 * 100).toFixed(0) + '%'}</div><div class="pl-muted" style="font-size:11px">${x.a} att</div></div>`; }).join('') : '';
+    attack = `<div class="card pl-card" id="pl-sec-attack"><h3 class="pl-h">Attacking</h3><div class="pl-g2"><div>
+      <table class="pl-tbl"><tr><th>All attacks</th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff</th><th class="num">K%</th></tr>
+        <tr><td><b>Total</b></td>${effTd(ev['#']||0, ev['=']||0, ev['/']||0, A.A.att)}<td class="num">${_plP(ev['#']||0, A.A.att)}</td></tr></table>
+      <h3 class="pl-h" style="margin-top:14px">By set type</h3>
+      <table class="pl-tbl"><tr><th>Set</th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff</th></tr>${comboRows}</table>
+      ${setterRows ? `<h3 class="pl-h" style="margin-top:14px">By setter</h3><table class="pl-tbl"><tr><th>Setter</th><th class="num">Att</th><th class="num">Eff</th></tr>${setterRows}</table>` : (setN !== 'all' ? '<div class="pl-muted" style="font-size:11px;margin-top:10px">By-setter split is available for whole matches only.</div>' : '')}
+    </div><div>
+      ${sitRows ? `<h3 class="pl-h">By situation <span class="pl-muted">vs team on the same balls</span></h3>
+      <table class="pl-tbl"><tr><th>Situation</th><th class="num">Att</th><th class="num">His Eff</th><th class="num">Team</th><th class="num">Δ</th></tr>${sitRows}</table>` : ''}
+      ${myHE && myHE.n >= 10 ? `<div class="pl-kpis" style="grid-template-columns:repeat(4,1fr);margin-top:10px">
+        ${_plTile('Raw', _plE(myHE.raw))}${_plTile('Expected', _plE(myHE.exp), '', 'var(--text-muted)')}${_plTile('EOE', _plD(myHE.eoe), '', myHE.eoe >= 0 ? 'var(--green)' : 'var(--red)')}${_plTile('Adjusted', _plE(myHE.adj), heRank, 'var(--gold)')}</div>` : ''}
+      ${rotCells ? `<h3 class="pl-h" style="margin-top:14px">By rotation <span class="pl-muted">(matches)</span></h3><div class="pl-rots">${rotCells}</div>` : ''}
+      ${A.ph.n ? `<h3 class="pl-h" style="margin-top:14px">Pass &amp; Hit</h3><table class="pl-tbl"><tr><th></th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff</th><th class="num">FBSO%</th><th class="num">SO%</th></tr>
+        <tr><td>After his own pass</td>${effTd(A.ph.k, A.ph.e, A.ph.b, A.ph.n)}<td class="num">${_plP(A.ph.k, A.ph.n)}</td><td class="num">${_plP(A.ph.w, A.ph.n)}</td></tr>
+        <tr><td>Someone else passed</td>${effTd(A.np.k, A.np.e, A.np.b, A.np.n)}<td class="num">${_plP(A.np.k, A.np.n)}</td><td class="num">${_plP(A.np.w, A.np.n)}</td></tr></table>` : ''}
+    </div></div></div>`;
+  }
+
+  // ── Setting (setters) ──
+  let setting = '';
+  if (has.set) {
+    const ML = { perf: bucketLabel('perf'), good: bucketLabel('good'), med: bucketLabel('med'), oos: bucketLabel('oos'), fboth: 'Other first ball', transition: 'Transition' };
+    const mixRows = Object.entries(SE.mix).map(([k, v]) => `<tr><td>${ML[k]}</td><td class="num">${v.n}</td><td class="num">${_plP(v.n, SE.n)}</td><td class="num" style="font-weight:700;color:${_plClr(v.eff, 0.35, 0.15)}">${_plE(v.eff)}</td><td class="num pl-muted">${_plE(v.team)}</td></tr>`).join('');
+    const hitters = {};
+    if (setN === 'all') for (const sid of sids) { const s = DATA.sessions.find(x => x.id === sid);
+      for (const [an, combos] of Object.entries(s?.setter_attacks?.[num] || {})) for (const cv of Object.values(combos)) {
+        const r = hitters[an] || (hitters[an] = { k:0,e:0,b:0,a:0 }); r.k += cv.kills||0; r.e += cv.errors||0; r.b += cv.blocks||0; r.a += cv.attempts||0; } }
+    const hitRows = Object.entries(hitters).filter(([, r]) => r.a >= 3).sort((a, b) => b[1].a - a[1].a)
+      .map(([an, r]) => `<tr><td>#${an} ${getPlayerName(an, lookSeason)}</td>${effTd(r.k, r.e, r.b, r.a)}</tr>`).join('');
+    setting = `<div class="card pl-card" id="pl-sec-setting"><h3 class="pl-h">Setting <span class="pl-muted">— attacks off his sets, adjusted for pass quality</span></h3>
+      <div class="pl-kpis" style="grid-template-columns:repeat(5,1fr)">${_plTile('Sets', SE.n)}${_plTile('Raw Eff', _plE(SE.raw))}${_plTile('Expected', _plE(SE.exp), '', 'var(--text-muted)')}${_plTile('EOE', _plD(SE.eoe), '', SE.eoe >= 0 ? 'var(--green)' : 'var(--red)')}${_plTile('Adjusted', _plE(SE.adj), '', 'var(--gold)')}</div>
+      <div class="pl-g2" style="margin-top:12px"><div><h3 class="pl-h">By situation</h3><table class="pl-tbl"><tr><th>Before the set</th><th class="num">Sets</th><th class="num">Share</th><th class="num">Eff</th><th class="num">Team</th></tr>${mixRows}</table></div>
+      <div><h3 class="pl-h">By hitter he sets</h3>${hitRows ? `<table class="pl-tbl"><tr><th>Hitter</th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff</th></tr>${hitRows}</table>` : '<div class="pl-muted" style="font-size:11px">Available for whole sessions (not a single set).</div>'}
+      ${myPA ? `<div class="pl-muted" style="font-size:11px;margin-top:8px">Set-choice credit (Points Added, ${plPaMode === 'adj' ? 'adjusted' : 'basic'}): <b style="color:${myPA.v.Set >= 0 ? 'var(--green)' : 'var(--red)'}">${myPA.v.Set >= 0 ? '+' : ''}${myPA.v.Set.toFixed(1)}</b></div>` : ''}</div></div></div>`;
+  }
+
+  // ── Passing ──
+  let passing = '';
+  if (has.pass) {
+    const r = A.R.ev, n = A.R.att;
+    const grades = [['Perfect #','#','#3fae6a'],['Good +','+','#9ccc65'],['Medium !','!','#FEBC18'],['Poor −','-','#e05a4f'],['Overpass /','/','#888'],['Error =','=','#b50000']].filter(([, e]) => r[e]);
+    const bar = grades.map(([l, e, c]) => `<div style="width:${r[e] / n * 100}%;background:${c}" title="${l}: ${r[e]}"></div>`).join('');
+    const hiP = rcvPassScale === '4' ? 3 : 2.2, loP = rcvPassScale === '4' ? 2 : 1.5;
+    const zone = z => { const x = A.zones[z]; if (!x?.att) return `<span class="pl-muted">Z${z}</span>`; const av = passAvgFromEvals(x.ev, x.att);
+      return `<b style="color:${_plClr(av, hiP, loP)}">${av.toFixed(2)}</b><div class="pl-muted" style="font-size:11px">Z${z} · ${x.att}</div>`; };
+    passing = `<div class="card pl-card" id="pl-sec-passing"><h3 class="pl-h">Passing</h3><div class="pl-g3">
+      <div><div class="pl-muted" style="font-size:11px">Grade mix (${n} passes) · avg <b style="color:var(--text)">${passAvg.toFixed(2)}</b></div><div class="pl-bar" style="margin:6px 0">${bar}</div>
+        <table class="pl-tbl">${grades.map(([l, e]) => `<tr><td>${l}</td><td class="num">${r[e]}</td><td class="num">${_plP(r[e], n)}</td></tr>`).join('')}</table></div>
+      <div><div class="pl-muted" style="font-size:11px">By serve type</div><table class="pl-tbl" style="margin-top:6px"><tr><th>Serve</th><th class="num">Att</th><th class="num">Avg</th></tr>
+        <tr><td>Float</td><td class="num">${A.RM.att || '—'}</td><td class="num">${A.RM.att ? passAvgFromEvals(A.RM.ev, A.RM.att).toFixed(2) : '—'}</td></tr>
+        <tr><td>Topspin</td><td class="num">${A.RQ.att || '—'}</td><td class="num">${A.RQ.att ? passAvgFromEvals(A.RQ.ev, A.RQ.att).toFixed(2) : '—'}</td></tr></table>
+        <div class="pl-muted" style="font-size:11px;margin-top:10px">After his pass</div><table class="pl-tbl">
+        <tr><td>FBSO %</td><td class="num">${fbPct === null ? '—' : (fbPct * 100).toFixed(1) + '%'}</td></tr>
+        <tr><td>Sideout %</td><td class="num">${A.so[0] ? (A.so[1] / A.so[0] * 100).toFixed(1) + '%' : '<span class="pl-muted">matches only</span>'}</td></tr>
+        ${myPA ? `<tr><td>Points Added (pass)</td><td class="num" style="color:${myPA.v.Pass >= 0 ? 'var(--green)' : 'var(--red)'}">${myPA.v.Pass >= 0 ? '+' : ''}${myPA.v.Pass.toFixed(1)}</td></tr>` : ''}</table></div>
+      <div><div class="pl-muted" style="font-size:11px">By zone (net at top)</div><div class="pl-court">
+        <div class="pl-zone"><span class="pl-muted">Z4</span></div><div class="pl-zone"><span class="pl-muted">Z3</span></div><div class="pl-zone"><span class="pl-muted">Z2</span></div>
+        <div class="pl-zone">${zone('5')}</div><div class="pl-zone">${zone('6')}</div><div class="pl-zone">${zone('1')}</div></div></div>
+    </div></div>`;
+  }
+
+  // ── Serving / Block & Defense ──
+  const s = A.S.ev;
+  const serving = has.srv ? `<div class="card pl-card" id="pl-sec-serving"><h3 class="pl-h">Serving</h3><table class="pl-tbl">
+      <tr><th class="num">Att</th><th class="num">Ace</th><th class="num">Err</th><th class="num">+</th><th class="num">−</th><th class="num">Over</th><th class="num">Ace%</th><th class="num">Err%</th></tr>
+      <tr><td class="num">${A.S.att}</td><td class="num" style="color:var(--green)">${s['#']||0}</td><td class="num" style="color:var(--red)">${s['=']||0}</td><td class="num">${s['+']||0}</td><td class="num">${s['-']||0}</td><td class="num">${s['/']||0}</td><td class="num">${_plP(s['#']||0, A.S.att)}</td><td class="num">${_plP(s['=']||0, A.S.att)}</td></tr></table>
+      <div class="pl-muted" style="font-size:11px;margin-top:8px">Serve type: topspin ${A.SQ.att} · float ${A.SM.att}${A.so[2] ? ` · Point-scoring % on his serve: <b style="color:var(--text)">${(A.so[3] / A.so[2] * 100).toFixed(1)}%</b>` : ''}${myPA ? ` · Points Added (serve): <b style="color:${myPA.v.Serve >= 0 ? 'var(--green)' : 'var(--red)'}">${myPA.v.Serve >= 0 ? '+' : ''}${myPA.v.Serve.toFixed(1)}</b>` : ''}</div></div>` : '';
+  const b = A.B.ev, d = A.D.ev;
+  const defense = has.def ? `<div class="card pl-card" id="pl-sec-defense"><h3 class="pl-h">Block &amp; Defense</h3>
+      <table class="pl-tbl"><tr><th>Blocking</th><th class="num">Att</th><th class="num">Stuff</th><th class="num">Touch</th><th class="num">Err</th><th class="num">Pts/set</th></tr>
+        <tr><td></td><td class="num">${A.B.att}</td><td class="num" style="color:var(--green)">${b['#']||0}</td><td class="num">${(b['+']||0)+(b['!']||0)+(b['-']||0)}</td><td class="num" style="color:var(--red)">${b['=']||0}</td><td class="num">${blkPerSet === null ? '—' : blkPerSet.toFixed(2)}</td></tr></table>
+      <table class="pl-tbl" style="margin-top:10px"><tr><th>Digging</th><th class="num">Att</th><th class="num">Good</th><th class="num">Err</th><th class="num">Dig→Kill</th></tr>
+        <tr><td></td><td class="num">${A.D.att}</td><td class="num" style="color:var(--green)">${(d['#']||0)+(d['+']||0)}</td><td class="num" style="color:var(--red)">${d['=']||0}</td><td class="num">${A.digT ? (A.digK / A.digT * 100).toFixed(0) + '%' : '—'}</td></tr></table></div>` : '';
+
+  // ── Trends ──
+  const tr = A.trend;
+  const trends = `<div class="card pl-card" id="pl-sec-trends"><h3 class="pl-h">Trends <span class="pl-muted">— session by session (hover a dot)</span></h3><div class="pl-g3">
+      <div><div class="pl-muted" style="font-size:11px">Attack Eff</div>${_plSpark(tr.map(x => ({ ...x, v: x.aAtt >= 3 ? x.eff : null })), v => (v * 100).toFixed(0) + '%', '#FEBC18')}</div>
+      <div><div class="pl-muted" style="font-size:11px">Pass Avg</div>${_plSpark(tr.map(x => ({ ...x, v: x.rAtt >= 3 ? x.pass : null })), v => v.toFixed(2), '#4caf50')}</div>
+      <div><div class="pl-muted" style="font-size:11px">Ace %</div>${_plSpark(tr.map(x => ({ ...x, v: x.sAtt >= 3 ? x.ace : null })), v => (v * 100).toFixed(0) + '%', '#3b8fd9')}</div>
+    </div><div class="pl-muted" style="font-size:11px;margin-top:6px">Sessions with fewer than 3 attempts in a skill are skipped for that line.</div></div>`;
+
+  container.innerHTML = header + `<div class="pl-nav">${nav}</div>` + overview + attack + setting + passing +
+    (serving || defense ? `<div class="pl-g2">${serving}${defense}</div>` : '') + trends;
 }
+
+// One-click PDF of the current player profile (one page per section)
+function exportPlayerPDF() {
+  const root = document.getElementById('player-detail'); if (!root) return;
+  const name = root.querySelector('.detail-info h2')?.childNodes[0]?.textContent.trim() || 'Player';
+  const num = plCtx.num;
+  const sections = [...root.querySelectorAll('[id^="pl-sec-"]')].map(el => ({
+    title: `#${num} ${name} — ${el.querySelector('.pl-h')?.childNodes[0]?.textContent.trim() || ''}`,
+    html: _rptSnapshotPanel(el) }));
+  if (!sections.length) return;
+  sections.docTitle = `#${num} ${name} — Player Report`;
+  const win = window.open('', '_blank', 'width=1200,height=800');
+  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const typeLbl = { match:'Matches', practice:'Practices', both:'Matches + Practices' }[plType] || '';
+  const f = [['Player', `#${num} ${name}`], ['Season', plCtx.season === 'all' ? 'All seasons' : plCtx.season], ['Type', typeLbl],
+             ['Session', plSession === 'all' ? 'All' : (DATA.sessions.find(s => s.id === plSession)?.date || '')], ['Set', plSet === 'all' ? 'All sets' : `Set ${plSet}`],
+             ['Pass scale', rcvPassScale + '-point'], ['Points Added', plPaMode === 'adj' ? 'Situation-adjusted' : 'Basic']];
+  const filters = f.map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('');
+  _writePdf(win, { sections, filters, sessionLine: '', kpiHTML: '', dateStr: new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) });
+}
+
 
 function buildEvalPills(evals, total) {
   if (!evals || !total) return '';
