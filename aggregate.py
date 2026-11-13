@@ -1799,6 +1799,7 @@ def main(raw_path, out_path):
                 'match_rot_stats': compute_match_rotation_stats(acts_n, ls),
                 'opp_stats':       compute_opp_stats({'actions': acts_n}, ls) if two_sided else None,
                 'player_session':  luc_player_store(s, acts_n, ls, s.get('_keep_unnamed', set())),
+                'setter_tab':      compute_setter_tab(acts_n, ls),   # Reports: pass-adjusted setter efficiency by set
             }
             if full_roster:
                 res = opp_bundle(s, acts_n, roster=full_roster)

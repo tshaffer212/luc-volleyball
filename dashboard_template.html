@@ -254,6 +254,13 @@
   table.data-table.rpt-sticky td:nth-child(1), table.data-table.rpt-sticky td:nth-child(2),
   table.data-table.rpt-sticky th:nth-child(1), table.data-table.rpt-sticky th:nth-child(2) { white-space: nowrap; }
 
+  /* Setter pass-adjusted card: "?" hint */
+  .adj-help-btn { width:20px; height:20px; border-radius:50%; border:1px solid var(--gold); background:transparent; color:var(--gold);
+                  font-size:12px; font-weight:700; cursor:pointer; line-height:1; padding:0; }
+  .adj-help-btn:hover { background:rgba(254,188,24,.15); }
+  .adj-help { background:#191919; border:1px solid #333; border-radius:8px; padding:12px 14px; margin-bottom:12px; font-size:12px; line-height:1.55; color:var(--text); }
+  .adj-help p { margin:0 0 7px; } .adj-help p:last-child { margin-bottom:0; }
+
   /* Reports player picker */
   .pp-btn { margin-top:4px; padding:5px 11px; border-radius:4px; border:1px solid var(--border); background:var(--surface2);
             color:var(--text); font-size:12px; cursor:pointer; min-width:150px; text-align:left; }
@@ -663,6 +670,7 @@
     <div id="rpt-panel-setter"         class="card" style="padding:12px;overflow-x:auto;display:none"></div>
     <div id="rpt-panel-match-overview" class="card" style="padding:12px;overflow-x:auto;display:none"></div>
     <div id="rpt-panel-fbso-match"     class="card" style="padding:12px;overflow-x:auto;display:none"></div>
+    <div id="rpt-setter-adj" class="card mt-16" style="padding:16px;overflow-x:auto"></div>
   </div>
 </div>
 
@@ -4426,7 +4434,7 @@ function refreshRptSetOptions(isMatch) {
   sel.value = rptSetFilter;
 }
 
-const _SET_FIELDS = ['match_rot_stats','fbso_rcv','fbso_kills','fbso_by_player','opp_stats',
+const _SET_FIELDS = ['match_rot_stats','setter_tab','fbso_rcv','fbso_kills','fbso_by_player','opp_stats',
                      'match_rot_stats_opp','opp_fbso_rcv','opp_fbso_kills','opp_fbso_by_player','luc_stats'];
 function withRptSet(fn) {
   if (rptSetFilter === 'all' || !SETS_DATA) return fn();
@@ -4638,6 +4646,129 @@ function renderRptDetail() {
   return withRptFilters(renderRptDetailInner);
 }
 
+// ── Pass-adjusted setter efficiency (bottom of Reports) ──────────────────────
+// Compares setters fairly by accounting for the passes they had to set from.
+// Every attack is credited to the setter whose set came right before it, and
+// grouped by situation: first ball after a perfect / good / medium / poor pass,
+// other first ball (e.g. overpass), or transition. The "average setter" baseline
+// is the efficiency of ALL setters combined in the selected sessions.
+let setterAdjHelpOpen = false;
+function toggleSetterAdjHelp() {
+  setterAdjHelpOpen = !setterAdjHelpOpen;
+  const el = document.getElementById('setter-adj-help');
+  if (el) el.style.display = setterAdjHelpOpen ? 'block' : 'none';
+}
+
+function renderSetterAdjusted() {
+  const el = document.getElementById('rpt-setter-adj');
+  if (!el) return;
+  const SHRINK_M = 30;   // small-sample blend strength (≈ attempts)
+  const head = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px">Setter Efficiency — Adjusted for Pass Quality</div>
+      <button class="adj-help-btn" onclick="toggleSetterAdjHelp()" title="What do these numbers mean?">?</button>
+    </div>`;
+  const help = `<div id="setter-adj-help" class="adj-help" style="display:${setterAdjHelpOpen?'block':'none'}">
+      <p><b>Why adjust?</b> Attack efficiency depends heavily on the pass before the set. A setter who gets mostly perfect passes looks better than one who sets a lot of poor passes and transition balls, even if he isn't. These numbers level that out so setters can be compared fairly. Every attack is credited to the setter whose set came right before it; efficiency is always (K − E − BLK) / Att.</p>
+      <p><b>Situations</b> — every set is grouped by what came before it: first ball after a perfect / good / medium / poor pass, other first ball (e.g. off an overpass), or transition (off a dig or free ball). The <b>team baseline</b> is how efficient <i>all</i> setters together were in each situation in the selected sessions.</p>
+      <p><b>Raw Eff</b> — the setter's actual efficiency on every attack he set.</p>
+      <p><b>Expected</b> — what an average setter would have produced from <i>this setter's exact mix of passes</i> (his sets in each situation × the team baseline for that situation).</p>
+      <p><b>EOE (Efficiency Over Expected)</b> — Raw minus Expected. <span style="color:var(--green)">Positive</span> = his hitters scored more than his passes predicted; <span style="color:var(--red)">negative</span> = less. The quickest single "how good was he, given what he got" number.</p>
+      <p><b>Standardized</b> — his efficiency in each situation, re-weighted to the <i>team's average</i> pass mix: "what would his efficiency be if every setter had received the same passes?" Stays on the normal efficiency scale.</p>
+      <p><b>Adjusted (Std + small-sample)</b> — Standardized, but each situation is blended toward the team baseline when he has few sets there (≈${SHRINK_M} sets of team-average added). Keeps a handful of lucky or unlucky swings from swinging the number. This is the fairest at-a-glance comparison; rows are sorted by it.</p>
+      <p style="opacity:.75"><b>Keep in mind:</b> this adjusts for passing only — who the hitters are, opponents and match vs practice still differ between setters. Small totals (under ~150 sets) are still noisy.</p>
+    </div>`;
+
+  if (rptTeamSide === 'opp') {
+    el.innerHTML = head + help + `<div class="empty" style="padding:12px">Available for Loyola setters only — switch Team to Loyola.</div>`;
+    return;
+  }
+
+  // Situation buckets (3-pt scale: medium folds into the 2-point "good" bucket)
+  const merge3 = rcvPassScale === '3';
+  const BK = merge3 ? ['perf','good','oos','fboth','transition'] : ['perf','good','med','oos','fboth','transition'];
+  const BK_LBL = { perf: bucketLabel('perf'), good: bucketLabel('good'), med: bucketLabel('med'), oos: bucketLabel('oos'),
+                   fboth: 'Other first ball', transition: 'Transition' };
+  const z = () => ({ k:0, e:0, b:0, a:0 });
+  const add = (r, v) => { r.k += v.k; r.e += v.e; r.b += v.b; r.a += v.a; };
+  const sumAtk = sit => { const r = z(); for (const v of Object.values(sit?.atk || {})) add(r, {k:v.k, e:v.e, b:v.b, a:v.a}); return r; };
+  const eff = r => r.a ? (r.k - r.e - r.b) / r.a : null;
+
+  const setters = {};   // pnum -> {season, buckets:{bk:r}}
+  for (const s of DATA.sessions) {
+    if (!rptSelected.has(s.id) || !s.setter_tab) continue;
+    for (const [sp, sits] of Object.entries(s.setter_tab)) {
+      const o = setters[sp] || (setters[sp] = { season: s.season, b: Object.fromEntries(BK.map(k => [k, z()])) });
+      const perf = sumAtk(sits.perf), good = sumAtk(sits.good), med = sumAtk(sits.med), oos = sumAtk(sits.oos);
+      const fb = sumAtk(sits.fbso), tr = sumAtk(sits.transition);
+      add(o.b.perf, perf); add(o.b.oos, oos); add(o.b.transition, tr);
+      if (merge3) { add(o.b.good, good); add(o.b.good, med); } else { add(o.b.good, good); add(o.b.med, med); }
+      const other = { k: fb.k - perf.k - good.k - med.k - oos.k, e: fb.e - perf.e - good.e - med.e - oos.e,
+                      b: fb.b - perf.b - good.b - med.b - oos.b, a: fb.a - perf.a - good.a - med.a - oos.a };
+      add(o.b.fboth, other);
+    }
+  }
+
+  // Team baseline = every setter combined
+  const team = Object.fromEntries(BK.map(k => [k, z()]));
+  for (const o of Object.values(setters)) for (const k of BK) add(team[k], o.b[k]);
+  const teamTot = BK.reduce((n, k) => n + team[k].a, 0);
+  if (!teamTot) { el.innerHTML = head + help + `<div class="empty" style="padding:12px">No set → attack data for the selected sessions.</div>`; return; }
+  const BKU = BK.filter(k => team[k].a > 0);                   // situations that actually occur
+  const share = Object.fromEntries(BKU.map(k => [k, team[k].a / teamTot]));
+  const teamEff = Object.fromEntries(BKU.map(k => [k, eff(team[k])]));
+
+  // Which setters: listed setters always; anyone else only with real volume
+  let rows = Object.entries(setters).map(([p, o]) => {
+    const n = BKU.reduce((s, k) => s + o.b[k].a, 0);
+    return { p, o, n, listed: getPlayerGroup(p, o.season) === 'SETTERS' };
+  }).filter(r => r.n > 0 && (r.listed || r.n >= Math.max(25, teamTot * 0.05)));
+  if (rptPlayerFilter) rows = rows.filter(r => rptPlayerFilter.has(r.p));
+
+  const fmtE = v => v === null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const fmtD = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1);
+  for (const r of rows) {
+    const tot = z(); BKU.forEach(k => add(tot, r.o.b[k]));
+    r.raw = eff(tot);
+    r.exp = BKU.reduce((s, k) => s + r.o.b[k].a * teamEff[k], 0) / r.n;
+    r.eoe = r.raw - r.exp;
+    r.std = BKU.reduce((s, k) => s + share[k] * (r.o.b[k].a ? eff(r.o.b[k]) : teamEff[k]), 0);
+    r.adj = BKU.reduce((s, k) => { const b = r.o.b[k];
+      return s + share[k] * (((b.k - b.e - b.b) + SHRINK_M * teamEff[k]) / (b.a + SHRINK_M)); }, 0);
+  }
+  rows.sort((a, b) => b.adj - a.adj);
+
+  const BAR_CLR = { perf:'#3fae6a', good:'#9ccc65', med:'#FEBC18', oos:'#e05a4f', fboth:'#888', transition:'#3b8fd9' };
+  const mixBar = r => `<div style="display:flex;height:10px;width:150px;border-radius:3px;overflow:hidden;background:#222" title="${BKU.map(k=>`${BK_LBL[k]}: ${(r.o.b[k].a/r.n*100).toFixed(0)}% (${r.o.b[k].a})`).join('\n')}">${
+      BKU.map(k => `<div style="width:${r.o.b[k].a / r.n * 100}%;background:${BAR_CLR[k]}"></div>`).join('')}</div>`;
+  const legend = BKU.map(k => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="width:9px;height:9px;border-radius:2px;background:${BAR_CLR[k]}"></span>${BK_LBL[k]} <span style="color:var(--text-muted)">${fmtE(teamEff[k])} · ${(share[k]*100).toFixed(0)}% of sets</span></span>`).join('');
+
+  const body = rows.length ? rows.map(r => {
+    const nm = getPlayerName(r.p, r.o.season) || '';
+    const tag = r.listed ? '' : ` <span style="font-size:10px;color:var(--text-muted)">(${getPlayerGroup(r.p, r.o.season).toLowerCase().replace(/s$/,'')})</span>`;
+    const small = r.n < 150 ? ` <span title="Under ~150 sets — still noisy" style="color:var(--text-muted)">*</span>` : '';
+    return `<tr>
+      <td style="color:var(--gold);font-weight:700">#${r.p}</td><td style="white-space:nowrap">${nm}${tag}</td>
+      <td class="num">${r.n}${small}</td>
+      <td>${mixBar(r)}</td>
+      <td class="num">${fmtE(r.raw)}</td>
+      <td class="num" style="color:var(--text-muted)">${fmtE(r.exp)}</td>
+      <td class="num" style="font-weight:700;color:${r.eoe >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtD(r.eoe)}</td>
+      <td class="num">${fmtE(r.std)}</td>
+      <td class="num" style="font-weight:700;color:var(--gold)">${fmtE(r.adj)}</td>
+    </tr>`; }).join('')
+    : `<tr><td colspan="9" class="empty" style="padding:12px">No setters match the current Players filter.</td></tr>`;
+
+  el.innerHTML = head + help + `
+    <div style="font-size:11px;margin-bottom:10px;line-height:1.9"><b style="color:var(--text-muted)">Team baseline (all setters):</b> ${legend}</div>
+    <div class="xlsx-wrap"><table class="xlsx-tbl">
+      <thead><tr style="background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase">
+        <th>#</th><th>Setter</th><th class="num">Sets</th><th>Pass mix</th>
+        <th class="num">Raw Eff</th><th class="num">Expected</th><th class="num">EOE</th>
+        <th class="num">Standardized</th><th class="num" style="color:var(--gold)">Adjusted</th>
+      </tr></thead><tbody>${body}</tbody></table></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:6px">Sorted by Adjusted. * = under ~150 sets (noisy). Hover a pass-mix bar for exact counts. Follows the season, sessions, Set and Players filters (Players limits which setters are shown).</div>`;
+}
+
 function renderRptDetailInner() {
   const kpiEl   = document.getElementById('rpt-kpi-row');
   const xlsxEl  = document.getElementById('rpt-xlsx-area');
@@ -4735,6 +4866,7 @@ function renderRptDetailInner() {
   }
 
   showRptTab(rptActiveSubTab);
+  renderSetterAdjusted();
 }
 
 // ═══════════════════════════ TEAM TAB ════════════════════════════════════════
