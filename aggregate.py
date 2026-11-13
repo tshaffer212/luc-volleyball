@@ -342,6 +342,91 @@ def compute_setter_tab(actions, loyola_side):
             for sp, sits_ in out.items()}
 
 
+# ── Points Added (Reports) ────────────────────────────────────────────────────
+# For every touch we record: skill, result, situation, and whether that player's
+# team went on to win the rally. The dashboard turns these counts into "how much
+# did this touch change our chance of winning the rally vs an average touch".
+#   Situations (used by the situation-adjusted view):
+#     Serve / Pass : serve type — Q = topspin, F = float (M/H), u = unknown
+#     Attack       : phase/set-type — phase = pass grade before a first-ball attack
+#                    (# + ! - o=other) or T = transition; set-type group below
+#     Block / Dig  : set-type group of the opponent attack just before it
+#     X (setter)   : one per attack he set: the attack's phase/set-type (the setter's
+#                    choice of set, valued against an average set in that phase)
+PA_ATK_GROUP = {'X5':'pin','X6':'pin','V5':'high','V6':'high','V8':'high','VP':'high',
+                'X1':'quick','X2':'quick','X7':'quick','XP':'bic','X8':'dball'}
+
+def _pa_terminal(a):
+    """+1 = this action's team wins the rally, -1 = loses, 0 = rally continues."""
+    sk, ev = a.get('skill_code'), a.get('evaluation', '')
+    if sk == 'S': return 1 if ev == '#' else (-1 if ev == '=' else 0)
+    if sk == 'A': return 1 if ev == '#' else (-1 if ev in ('=', '/') else 0)
+    if sk == 'B': return 1 if ev == '#' else (-1 if ev == '=' else 0)
+    if sk in ('R', 'D', 'E'): return -1 if ev == '=' else 0
+    return 0
+
+def compute_points_added(actions, loyola_side):
+    rallies, cur = [], []
+    for a in actions:
+        if a.get('skill_code') == 'S' and cur:
+            rallies.append(cur); cur = []
+        cur.append(a)
+    if cur:
+        rallies.append(cur)
+    other = lambda sd: 'away' if sd == 'home' else 'home'
+    out = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0, 0])))   # set -> pnum -> key -> [n, wins]
+    for rally in rallies:
+        winner = None
+        for a in reversed(rally):
+            tm = _pa_terminal(a)
+            if tm and a.get('team_side') in ('home', 'away'):
+                winner = a['team_side'] if tm > 0 else other(a['team_side'])
+                break
+        if winner is None:
+            continue
+        rcv = {}; fb_used = set(); faced = {}; last_set = {}
+        for a in rally:
+            side, sk, ev = a.get('team_side'), a.get('skill_code'), a.get('evaluation', '')
+            pn = a.get('player_num') or ''
+            key = sit = None
+            setter_key = None
+            if sk in ('S', 'R'):
+                tq = a.get('technique') or ''
+                sit = 'Q' if tq == 'Q' else ('F' if tq in ('M', 'H') else 'u')
+                if sk == 'R' and side not in rcv:
+                    rcv[side] = ev
+            elif sk == 'E':
+                last_set[side] = a
+                sit = 'u'
+            elif sk == 'A':
+                if side in rcv and side not in fb_used:
+                    g = rcv[side]; phase = g if g in ('#', '+', '!', '-') else 'o'
+                else:
+                    phase = 'T'
+                fb_used.add(side)
+                grp = PA_ATK_GROUP.get(a.get('combo_code') or '', 'oth')
+                sit = phase + '/' + grp
+                faced[other(side)] = grp
+                st = last_set.pop(side, None)
+                if st is not None and st.get('player_num'):
+                    setter_key = (st['player_num'], 'X|' + ev + '|' + sit)   # attack result he set
+            elif sk in ('B', 'D'):
+                sit = faced.get(side, 'u')
+            else:
+                continue
+            if loyola_side != 'both' and side != loyola_side:
+                continue
+            if ev not in ('#', '+', '!', '-', '/', '='):
+                continue
+            won = 1 if winner == side else 0
+            sn = str(a.get('set_number') or 0)
+            if pn:
+                rec = out[sn][pn][f'{sk}|{ev}|{sit}']; rec[0] += 1; rec[1] += won
+            if setter_key:
+                rec = out[sn][setter_key[0]][setter_key[1]]; rec[0] += 1; rec[1] += won
+    return {sn: {pn: {k: v for k, v in keys.items()} for pn, keys in pl.items()} for sn, pl in out.items()}
+
+
 def compute_rally_sequences(actions, loyola_side):
     """
     Split actions into rallies and compute:
@@ -1309,6 +1394,7 @@ def main(raw_path, out_path):
             'setter_attacks': session_rally[sid]['setter_atk'],  # setter_pnum -> attacker_pnum -> combo -> {attempts,kills,errors,blocks}
             'match_rot_stats': session_rally[sid]['rot_stats'],  # None for practice
             'setter_tab':     compute_setter_tab(s.get('actions', []), ls),  # Setter tab: setter → situation → combos/calls
+            'pts_added':      compute_points_added(s.get('actions', []), ls),  # Reports: Points Added — set → player → key → [n, wins]
             # opp_stats: only populated when the file contains both teams' actions
             'opp_stats': compute_opp_stats(s, ls)
                          if s.get('type') == 'match' and
