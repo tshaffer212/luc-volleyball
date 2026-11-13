@@ -1196,6 +1196,8 @@
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
+    <div><label>Player</label><br><select id="player-select" onchange="onPlayerSelect(this.value)" style="min-width:260px;font-weight:600"></select></div>
+    <div class="filter-sep"></div>
     <div><label>Position</label><br><select id="player-pos-filter" onchange="renderPlayerList()">
       <option value="all">All Positions</option>
       <option value="2">Outside Hitter</option>
@@ -1229,13 +1231,9 @@
     </div>
   </div>
 
-  <div class="grid-2">
-    <div>
-      <div id="player-list" class="grid-auto"></div>
-    </div>
-    <div id="player-detail">
-      <div class="empty" style="margin-top:40px">Select a player to view details</div>
-    </div>
+  <div id="player-list" style="display:none"></div>
+  <div id="player-detail">
+    <div class="empty" style="margin-top:40px">Select a player to view details</div>
   </div>
 </div>
 
@@ -5920,47 +5918,42 @@ function renderPlayerList() {
     });
   }
 
-  container.innerHTML = displayPlayers.map(p => {
-    const A = p.agg.skills?.A;
-    const S = p.agg.skills?.S;
-    const isSelected = selectedPlayer === p.num && (selectedPlayerSeason === p.season || selectedPlayerSeason === 'all');
-    // Season chips for multi-season cards
-    const seasonChips = p.allSeasons
-      ? p.allSeasons.map(s => {
-          const isActiveSeason = selectedPlayer === p.num && selectedPlayerSeason === s;
-          return `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;cursor:pointer;margin:1px;background:${isActiveSeason?'var(--gold)':'var(--surface3)'};color:${isActiveSeason?'#000':'var(--text-muted)'};border:1px solid ${isActiveSeason?'var(--gold)':'var(--border)'}"
-            onclick="event.stopPropagation();selectPlayer('${p.num}','${s}')">${s.replace('Fall ','F').replace('Spring ','S')}</span>`;
-        }).join('')
-      : '';
-    const hasMultipleSeasons = p.allSeasons && p.allSeasons.length > 1;
-    return `<div class="player-card ${isSelected?'selected':''}" onclick="selectPlayer('${p.num}','${p.allSeasons?'all':p.season}')">
-      <div class="player-num">#${p.num}</div>
-      <div class="player-name">${p.name} ${p.is_libero ? '<span class="libero-badge">L</span>' : ''}</div>
-      <div class="player-pos">${POS_NAMES[p.position_code]||'Unknown'}</div>
-      ${hasMultipleSeasons ? `<div style="margin:4px 0 2px">${seasonChips}</div>` : ''}
-      ${!hasMultipleSeasons && p.season && p.season !== 'all' ? `<div style="font-size:10px;color:var(--text-dim);margin:2px 0">${p.season}</div>` : ''}
-      <div class="player-mini-stats">
-        <div class="player-mini-stat">
-          <div class="player-mini-val">${fmt(p.agg.actions)}</div>
-          <div class="player-mini-lbl">Actions</div>
-        </div>
-        ${A ? `<div class="player-mini-stat">
-          <div class="player-mini-val">${A.attempts}</div>
-          <div class="player-mini-lbl">Attacks</div>
-        </div>
-        <div class="player-mini-stat">
-          <div class="player-mini-val">${pct(A.kill_pct,0)}</div>
-          <div class="player-mini-lbl">Kill%</div>
-        </div>` : ''}
-        ${S && !A ? `<div class="player-mini-stat">
-          <div class="player-mini-val">${S.attempts}</div>
-          <div class="player-mini-lbl">Serves</div>
-        </div>` : ''}
-      </div>
-    </div>`;
-  }).join('') || '<div class="empty">No players match these filters</div>';
+  // Players go into one compact dropdown, grouped by position (in the chosen sort order)
+  container.innerHTML = '';
+  const sel = document.getElementById('player-select');
+  const GORDER = ['OUTSIDES','OPPOSITES','MIDDLES','SETTERS','LIBEROS'];
+  const GLABEL = { OUTSIDES:'Outside Hitters', OPPOSITES:'Opposites', MIDDLES:'Middle Blockers', SETTERS:'Setters', LIBEROS:'Liberos' };
+  const valOf = p => `${p.num}|${p.allSeasons ? 'all' : p.season}|${encodeURIComponent(p.name)}`;
+  const byGroup = {};
+  for (const p of displayPlayers) {
+    const g = getPlayerGroup(p.num, p.allSeasons ? p.allSeasons[p.allSeasons.length - 1] : p.season);
+    (byGroup[g] = byGroup[g] || []).push(p);
+  }
+  if (sel) {
+    sel.innerHTML = displayPlayers.length
+      ? GORDER.filter(g => byGroup[g]).concat(Object.keys(byGroup).filter(g => !GORDER.includes(g))).map(g =>
+          `<optgroup label="${GLABEL[g] || g}">${byGroup[g].map(p => {
+            const A = p.agg.skills?.A;
+            const extra = A ? ` — ${A.attempts} att · ${pct(A.kill_pct, 0)} K` : (p.agg.skills?.R ? ` — ${p.agg.skills.R.attempts} passes` : '');
+            const seas = p.allSeasons && p.allSeasons.length > 1 ? ` (${p.allSeasons.length} seasons)` : (seasonFilter === 'all' && p.season ? ` (${p.season})` : '');
+            return `<option value="${valOf(p)}">#${p.num} ${p.name}${seas}${extra}</option>`; }).join('')}</optgroup>`).join('')
+      : '<option value="">No players match these filters</option>';
+  }
+  // Keep the current player if he's still in the list, otherwise open the first one
+  const cur = displayPlayers.find(p => p.num === selectedPlayer && (p.allSeasons ? selectedPlayerSeason === 'all' || p.allSeasons.includes(selectedPlayerSeason) : p.season === selectedPlayerSeason));
+  const pick = cur || displayPlayers[0];
+  if (!pick) { document.getElementById('player-detail').innerHTML = '<div class="empty" style="margin-top:40px">No players match these filters</div>'; return; }
+  if (sel) sel.value = valOf(pick);
+  selectedPlayer = pick.num;
+  selectedPlayerSeason = pick.allSeasons ? 'all' : pick.season;   // profile always matches the dropdown entry
+  renderPlayerDetail(selectedPlayer, selectedPlayerSeason, pick.name);
+}
 
-  if (selectedPlayer) renderPlayerDetail(selectedPlayer, selectedPlayerSeason);
+function onPlayerSelect(v) {
+  if (!v) return;
+  const [num, season, nm] = v.split('|');
+  selectedPlayer = num; selectedPlayerSeason = season;
+  renderPlayerDetail(num, season, nm ? decodeURIComponent(nm) : null);
 }
 
 let selectedPlayerSeason = null;
@@ -5981,9 +5974,9 @@ function selectPlayer(num, season) {
 // Filters: Matches / Practices / Both, a single session, Set (matches), pass
 // scale, Points Added mode, and compare-to (position or team average).
 let plType = null, plSession = 'all', plSet = 'all', plCompare = 'pos', plPaMode = 'adj';
-let plCtx = { num: null, season: 'all' };
+let plCtx = { num: null, season: 'all', name: null };
 
-function plRerender() { if (plCtx.num) renderPlayerDetail(plCtx.num, plCtx.season); }
+function plRerender() { if (plCtx.num) renderPlayerDetail(plCtx.num, plCtx.season, plCtx.name); }
 function plSetType(t)   { plType = t; plSession = 'all'; plSet = 'all'; plRerender(); }
 function plSetSession(v){ plSession = v; plRerender(); }
 function plSetSetN(v)   {
@@ -6212,15 +6205,23 @@ function _plSpark(points, fmt, color) {
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────
-function renderPlayerDetail(num, detailSeason) {
+function renderPlayerDetail(num, detailSeason, nameHint) {
   detailSeason = detailSeason || 'all';
-  if (plCtx.num !== num || plCtx.season !== detailSeason) { plType = null; plSession = 'all'; plSet = 'all'; }
-  plCtx = { num, season: detailSeason };
+  // Jersey numbers get reused across seasons — in "All seasons" only include the
+  // seasons where this number belongs to the SAME person.
+  let seasons = detailSeason === 'all' ? orderedSeasons() : [detailSeason];
+  let name = nameHint || null;
+  if (detailSeason === 'all') {
+    if (!name) { const last = [...seasons].reverse().find(s => DATA.players_by_season?.[s]?.[num]); name = last ? DATA.players_by_season[last][num].name : null; }
+    const same = seasons.filter(s => DATA.players_by_season?.[s]?.[num]?.name === name);
+    if (same.length) seasons = same;
+  }
+  if (plCtx.num !== num || plCtx.season !== detailSeason || plCtx.name !== name) { plType = null; plSession = 'all'; plSet = 'all'; }
+  plCtx = { num, season: detailSeason, name };
   const container = document.getElementById('player-detail');
-  const seasons = detailSeason === 'all' ? orderedSeasons() : [detailSeason];
-  const p = getPlayerInfo(num, detailSeason === 'all' ? null : detailSeason);
+  const lookSeason = seasons[seasons.length - 1];
+  const p = getPlayerInfo(num, lookSeason);
   if (!p || !container) return;
-  const lookSeason = detailSeason === 'all' ? seasons[seasons.length - 1] : detailSeason;
   const group = getPlayerGroup(num, lookSeason);
 
   // Sessions this player appears in, per type
@@ -6274,7 +6275,7 @@ function renderPlayerDetail(num, detailSeason) {
         <div class="detail-num">#${num}</div>
         <div class="detail-info">
           <h2>${p.name} ${p.is_libero ? '<span class="libero-badge">Libero</span>' : ''}</h2>
-          <p>${PL_POS[group] || POS_NAMES[p.position_code] || ''} · ${detailSeason === 'all' ? 'All seasons' : detailSeason} · ${nM} matches · ${nP} practices${A.sets.size ? ` · ${A.sets.size} sets in view` : ''}</p>
+          <p>${PL_POS[group] || POS_NAMES[p.position_code] || ''} · ${detailSeason === 'all' ? (seasons.length > 1 ? `${seasons[0]} – ${seasons[seasons.length - 1]}` : seasons[0]) : detailSeason} · ${nM} matches · ${nP} practices${A.sets.size ? ` · ${A.sets.size} sets in view` : ''}</p>
         </div>
         ${myPA ? `<div style="margin-left:auto;text-align:right">
           <div class="pl-muted" style="font-size:11px">Points Added (${plPaMode === 'adj' ? 'situation-adj.' : 'basic'})</div>
