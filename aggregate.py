@@ -427,6 +427,65 @@ def compute_points_added(actions, loyola_side):
     return {sn: {pn: {k: v for k, v in keys.items()} for pn, keys in pl.items()} for sn, pl in out.items()}
 
 
+def compute_pass_hit(actions, loyola_side):
+    """
+    Pass & Hit: on every serve-receive possession, the first attack after the pass
+    that came off a SET. If the passer is also that hitter → 'ph' (passed & hit),
+    otherwise the hitter's attack goes in 'np' (first-ball attack without passing).
+    Returns { set: { pnum: { 'ph': {ev: [n, won]}, 'np': {ev: [n, won]},
+                             'pg': {pass_eval: n} } } }   (pg = grades of the passes in 'ph')
+    """
+    rallies, cur = [], []
+    for a in actions:
+        if a.get('skill_code') == 'S' and cur:
+            rallies.append(cur); cur = []
+        cur.append(a)
+    if cur:
+        rallies.append(cur)
+    other = lambda sd: 'away' if sd == 'home' else 'home'
+    out = defaultdict(lambda: defaultdict(lambda: {'ph': defaultdict(lambda: [0, 0]),
+                                                   'np': defaultdict(lambda: [0, 0]),
+                                                   'pg': defaultdict(int)}))
+    for rally in rallies:
+        winner = None
+        for a in reversed(rally):
+            tm = _pa_terminal(a)
+            if tm and a.get('team_side') in ('home', 'away'):
+                winner = a['team_side'] if tm > 0 else other(a['team_side'])
+                break
+        if winner is None:
+            continue
+        sides = [loyola_side] if loyola_side != 'both' else ['home', 'away']
+        for side in sides:
+            mine = [a for a in rally if a.get('team_side') == side]
+            ri = next((i for i, a in enumerate(mine) if a.get('skill_code') == 'R'), None)
+            if ri is None:
+                continue
+            rcv = mine[ri]
+            set_seen = False
+            for a in mine[ri + 1:]:
+                sk = a.get('skill_code')
+                if sk == 'E':
+                    set_seen = True
+                elif sk == 'A':
+                    if set_seen:
+                        ev = a.get('evaluation', '')
+                        hitter, passer = a.get('player_num') or '', rcv.get('player_num') or ''
+                        if hitter and ev in ('#', '+', '-', '/', '=', '!'):
+                            sn = str(a.get('set_number') or 0)
+                            won = 1 if winner == side else 0
+                            if hitter == passer:
+                                r = out[sn][hitter]['ph'][ev]; r[0] += 1; r[1] += won
+                                out[sn][hitter]['pg'][rcv.get('evaluation', '')] += 1
+                            else:
+                                r = out[sn][hitter]['np'][ev]; r[0] += 1; r[1] += won
+                    break        # only the first attack of the possession
+                elif sk in ('D', 'B'):
+                    break        # possession ended without a first-ball attack
+    return {sn: {pn: {'ph': dict(v['ph']), 'np': dict(v['np']), 'pg': dict(v['pg'])} for pn, v in pl.items()}
+            for sn, pl in out.items()}
+
+
 def compute_rally_sequences(actions, loyola_side):
     """
     Split actions into rallies and compute:
@@ -1395,6 +1454,7 @@ def main(raw_path, out_path):
             'match_rot_stats': session_rally[sid]['rot_stats'],  # None for practice
             'setter_tab':     compute_setter_tab(s.get('actions', []), ls),  # Setter tab: setter → situation → combos/calls
             'pts_added':      compute_points_added(s.get('actions', []), ls),  # Reports: Points Added — set → player → key → [n, wins]
+            'pass_hit':       compute_pass_hit(s.get('actions', []), ls),      # Reports: Pass & Hit — first-ball attacks by the passer vs others
             # opp_stats: only populated when the file contains both teams' actions
             'opp_stats': compute_opp_stats(s, ls)
                          if s.get('type') == 'match' and

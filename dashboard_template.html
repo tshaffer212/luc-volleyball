@@ -671,6 +671,8 @@
     <div id="rpt-panel-match-overview" class="card" style="padding:12px;overflow-x:auto;display:none"></div>
     <div id="rpt-panel-fbso-match"     class="card" style="padding:12px;overflow-x:auto;display:none"></div>
     <div id="rpt-setter-adj" class="card mt-16" style="padding:16px;overflow-x:auto"></div>
+    <div id="rpt-hitter-adj" class="card mt-16" style="padding:16px;overflow-x:auto"></div>
+    <div id="rpt-pass-hit" class="card mt-16" style="padding:16px;overflow-x:auto"></div>
     <div id="rpt-points-added" class="card mt-16" style="padding:16px;overflow-x:auto"></div>
   </div>
 </div>
@@ -4948,6 +4950,202 @@ function renderPointsAdded() {
     <div style="font-size:10px;color:var(--text-dim);margin-top:6px">${paMode==='adj' ? `Situation-adjusted · setter share ${paSetterShare*100}%` : 'Basic'} · values from all ${Object.keys(tables).map(t=>t==='match'?'matches':'practices').join(' / ')} in the selected season · players with 10+ touches · sorted by Total.</div>`;
 }
 
+// ── Hitter efficiency adjusted for situation (bottom of Reports) ─────────────
+// Same idea as the setter card, for attackers: each attack is compared with the
+// team's efficiency on the same kind of ball — the pass before it (perfect /
+// good / medium / poor / other first ball, or transition) AND the set type
+// (in-system pin, high ball, quick, BIC, D-ball). Data: pts_added 'A|ev|phase/group'.
+let hitterAdjHelpOpen = false;
+function toggleHitterAdjHelp() { hitterAdjHelpOpen = !hitterAdjHelpOpen; const e = document.getElementById('hitter-adj-help'); if (e) e.style.display = hitterAdjHelpOpen ? 'block' : 'none'; }
+const HA_PHASE = ['#','+','!','-','o','T'];
+const HA_GROUP = ['pin','high','quick','bic','dball','oth'];
+const HA_GROUP_LBL = { pin:'In-system pin', high:'High ball', quick:'Quick', bic:'BIC', dball:'D-ball', oth:'Other' };
+const HA_GROUP_CLR = { pin:'#8D0034', high:'#e07b39', quick:'#FEBC18', bic:'#3b8fd9', dball:'#a46bd6', oth:'#777' };
+function _haPhaseLbl(ph) { return ({'#':bucketLabel('perf'),'+':bucketLabel('good'),'!':bucketLabel('med'),'-':bucketLabel('oos'),'o':'Other first ball','T':'Transition'})[ph]; }
+const HA_PHASE_CLR = { '#':'#3fae6a', '+':'#9ccc65', '!':'#FEBC18', '-':'#e05a4f', 'o':'#888', 'T':'#3b8fd9' };
+
+function renderHitterAdjusted() {
+  const el = document.getElementById('rpt-hitter-adj');
+  if (!el) return;
+  const M = 20;
+  const head = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px">Hitter Efficiency — Adjusted for Situation</div>
+      <button class="adj-help-btn" onclick="toggleHitterAdjHelp()" title="What do these numbers mean?">?</button></div>`;
+  const help = `<div id="hitter-adj-help" class="adj-help" style="display:${hitterAdjHelpOpen?'block':'none'}">
+      <p><b>Why adjust?</b> A hitter's efficiency depends a lot on the ball he gets. An outside who takes the high balls off bad passes will look worse than a middle hitting quicks off perfect passes, even if he's the better attacker. This compares every hitter against the team on the <i>same kind of ball</i>. Efficiency is always (K − E − BLK) / Att.</p>
+      <p><b>Situation</b> = the pass before the attack (perfect / good / medium / poor / other first ball) or transition, <b>plus</b> the set type: in-system pin (X5, X6), high ball (V5, V6…), quick (X1, X2, X7), BIC (XP), D-ball (X8). The <b>team baseline</b> is how efficient all our hitters together were on each kind of ball in the selected sessions.</p>
+      <p><b>Raw Eff</b> — his actual efficiency. <b>Expected</b> — what an average hitter would have produced on <i>exactly his mix of balls</i>. <b>EOE</b> — Raw minus Expected (<span style="color:var(--green)">positive</span> = better than the balls he got predict).</p>
+      <p><b>Standardized</b> — his efficiency on each kind of ball, re-weighted to the average mix of balls <i>for his position</i> (as if every outside got the same balls as the other outsides, every middle the same as the other middles). <b>Adjusted</b> — Standardized with small samples blended toward the team baseline (≈${M} attempts of team-average added per kind of ball), so a few swings can't swing it. Rows are sorted by Adjusted.</p>
+      <p style="opacity:.75"><b>Keep in mind:</b> compare hitters mostly within the same position (outsides vs outsides) — middles and pins hit very different balls even after adjusting. The two bars show each hitter's mix: what pass came before (top) and what set he got (bottom). Under ~100 attempts is noisy (*).</p></div>`;
+  if (rptTeamSide === 'opp') { el.innerHTML = head + help + `<div class="empty" style="padding:12px">Available for Loyola only — switch Team to Loyola.</div>`; return; }
+
+  const norm = ph => (rcvPassScale === '3' && ph === '!') ? '+' : ph;
+  const z = () => ({k:0,e:0,b:0,a:0});
+  const hit = {};   // pnum -> {season, cells: {sit: r}}
+  for (const s of DATA.sessions) {
+    if (!rptSelected.has(s.id) || !s.pts_added) continue;
+    for (const [sn, pl] of Object.entries(s.pts_added)) {
+      if (rptSetFilter !== 'all' && s.type === 'match' && sn !== String(rptSetFilter)) continue;
+      for (const [pn, keys] of Object.entries(pl)) {
+        for (const [k, rec] of Object.entries(keys)) {
+          if (k[0] !== 'A') continue;
+          const [, ev, sit0] = k.split('|'); const [ph0, grp] = sit0.split('/'); const sit = norm(ph0) + '/' + grp;
+          const o = hit[pn] || (hit[pn] = { season: s.season, cells: {} });
+          const r = o.cells[sit] || (o.cells[sit] = z());
+          r.a += rec[0]; if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0];
+        }
+      }
+    }
+  }
+  const eff = r => r.a ? (r.k - r.e - r.b) / r.a : null;
+  const team = {}; let teamN = 0;
+  for (const o of Object.values(hit)) for (const [sit, r] of Object.entries(o.cells)) {
+    const t2 = team[sit] || (team[sit] = z()); t2.k += r.k; t2.e += r.e; t2.b += r.b; t2.a += r.a; teamN += r.a; }
+  if (!teamN) { el.innerHTML = head + help + `<div class="empty" style="padding:12px">No attacks in the selected sessions.</div>`; return; }
+  const teamTot = Object.values(team).reduce((a, r) => ({k:a.k+r.k,e:a.e+r.e,b:a.b+r.b,a:a.a+r.a}), z());
+  // Team efficiency per situation (blended toward the team's phase average for thin cells)
+  const phaseTeam = {};
+  for (const [sit, r] of Object.entries(team)) { const ph = sit.split('/')[0]; const p2 = phaseTeam[ph] || (phaseTeam[ph] = z()); p2.k += r.k; p2.e += r.e; p2.b += r.b; p2.a += r.a; }
+  const teamEff = {};
+  for (const [sit, r] of Object.entries(team)) { const ph = sit.split('/')[0]; const prior = eff(phaseTeam[ph]) ?? eff(teamTot);
+    teamEff[sit] = ((r.k - r.e - r.b) + 5 * prior) / (r.a + 5); }
+  const share = Object.fromEntries(Object.entries(team).map(([s2, r]) => [s2, r.a / teamN]));
+
+  let rows = Object.entries(hit).map(([p, o]) => {
+    const tot = Object.values(o.cells).reduce((a, r) => ({k:a.k+r.k,e:a.e+r.e,b:a.b+r.b,a:a.a+r.a}), z());
+    return { p, o, tot, n: tot.a };
+  }).filter(r => r.n >= 10 && getPlayerInfo(r.p, r.o.season));
+  if (rptPlayerFilter) rows = rows.filter(r => rptPlayerFilter.has(r.p));
+  // Standardize to each POSITION GROUP's mix of balls (a middle never hits high
+  // outside balls, so re-weighting him to the whole team's mix would be unfair)
+  const grpOf = p => getPlayerGroup(p, hit[p].season);
+  const posMix = {};
+  for (const [p, o] of Object.entries(hit)) {
+    const g = grpOf(p); const pm = posMix[g] || (posMix[g] = { n: 0, cells: {} });
+    for (const [sit, c] of Object.entries(o.cells)) { pm.cells[sit] = (pm.cells[sit] || 0) + c.a; pm.n += c.a; }
+  }
+  for (const r of rows) {
+    const pm = posMix[grpOf(r.p)];
+    const shareP = Object.fromEntries(Object.entries(pm.cells).map(([sit, n]) => [sit, n / pm.n]));
+    r.raw = eff(r.tot);
+    r.exp = Object.entries(r.o.cells).reduce((s2, [sit, c]) => s2 + c.a * teamEff[sit], 0) / r.n;
+    r.eoe = r.raw - r.exp;
+    r.std = Object.keys(shareP).reduce((s2, sit) => { const c = r.o.cells[sit]; return s2 + shareP[sit] * (c && c.a ? eff(c) : teamEff[sit]); }, 0);
+    r.adj = Object.keys(shareP).reduce((s2, sit) => { const c = r.o.cells[sit] || z(); return s2 + shareP[sit] * (((c.k - c.e - c.b) + M * teamEff[sit]) / (c.a + M)); }, 0);
+    r.phase = {}; r.grp = {};
+    for (const [sit, c] of Object.entries(r.o.cells)) { const [ph, g] = sit.split('/'); r.phase[ph] = (r.phase[ph]||0) + c.a; r.grp[g] = (r.grp[g]||0) + c.a; }
+  }
+  const GORD = ['OUTSIDES','OPPOSITES','MIDDLES','SETTERS','LIBEROS'];
+  rows.sort((a, b) => (GORD.indexOf(grpOf(a.p)) - GORD.indexOf(grpOf(b.p))) || (b.adj - a.adj));
+
+  const fmtE = v => v === null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const fmtD = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1);
+  const mix = (obj, order, clr, lbl, n) => `<div style="display:flex;height:7px;width:140px;border-radius:2px;overflow:hidden;background:#222" title="${order.filter(k=>obj[k]).map(k=>`${lbl(k)}: ${obj[k]} (${(obj[k]/n*100).toFixed(0)}%)`).join('\n')}">${
+    order.filter(k=>obj[k]).map(k => `<div style="width:${obj[k]/n*100}%;background:${clr[k]}"></div>`).join('')}</div>`;
+  const POSL = { OUTSIDES:'OH', OPPOSITES:'OPP', MIDDLES:'MB', SETTERS:'S', LIBEROS:'L' };
+  const phTeam = HA_PHASE.filter(ph => phaseTeam[ph]?.a);
+  const grpTeam = {}; for (const [sit, r] of Object.entries(team)) { const g = sit.split('/')[1]; const g2 = grpTeam[g] || (grpTeam[g] = z()); g2.k += r.k; g2.e += r.e; g2.b += r.b; g2.a += r.a; }
+  const legend1 = phTeam.map(ph => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="width:9px;height:9px;border-radius:2px;background:${HA_PHASE_CLR[ph]}"></span>${_haPhaseLbl(ph)} <span style="color:var(--text-muted)">${fmtE(eff(phaseTeam[ph]))}</span></span>`).join('');
+  const legend2 = HA_GROUP.filter(g => grpTeam[g]?.a).map(g => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><span style="width:9px;height:9px;border-radius:2px;background:${HA_GROUP_CLR[g]}"></span>${HA_GROUP_LBL[g]} <span style="color:var(--text-muted)">${fmtE(eff(grpTeam[g]))}</span></span>`).join('');
+  let lastG = null;
+  const body = rows.length ? rows.map(r => {
+      const g = grpOf(r.p); const hdr = g !== lastG ? `<tr style="background:var(--maroon);color:#fff"><td colspan="10" style="font-weight:700;font-size:12px;padding:5px 8px">${g}</td></tr>` : '';
+      lastG = g;
+      return hdr + `<tr>
+      <td style="color:var(--gold);font-weight:700">#${r.p}</td><td style="white-space:nowrap">${getPlayerName(r.p, r.o.season)}</td>
+      <td style="color:var(--text-muted)">${POSL[g]||''}</td>
+      <td class="num">${r.n}${r.n < 100 ? ' <span style="color:var(--text-muted)" title="Under ~100 attempts — noisy">*</span>' : ''}</td>
+      <td>${mix(r.phase, HA_PHASE, HA_PHASE_CLR, _haPhaseLbl, r.n)}<div style="height:3px"></div>${mix(r.grp, HA_GROUP, HA_GROUP_CLR, g => HA_GROUP_LBL[g], r.n)}</td>
+      <td class="num">${fmtE(r.raw)}</td>
+      <td class="num" style="color:var(--text-muted)">${fmtE(r.exp)}</td>
+      <td class="num" style="font-weight:700;color:${r.eoe >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtD(r.eoe)}</td>
+      <td class="num">${fmtE(r.std)}</td>
+      <td class="num" style="font-weight:700;color:var(--gold)">${fmtE(r.adj)}</td></tr>`; }).join('')
+    : `<tr><td colspan="10" class="empty" style="padding:12px">No hitters with 10+ attempts for the current filters.</td></tr>`;
+  el.innerHTML = head + help + `
+    <div style="font-size:11px;line-height:1.9"><b style="color:var(--text-muted)">Team by pass:</b> ${legend1}</div>
+    <div style="font-size:11px;line-height:1.9;margin-bottom:10px"><b style="color:var(--text-muted)">Team by set type:</b> ${legend2}</div>
+    <div class="xlsx-wrap"><table class="xlsx-tbl"><thead><tr style="background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase">
+      <th>#</th><th>Hitter</th><th>Pos</th><th class="num">Att</th><th>Mix (pass · set type)</th>
+      <th class="num">Raw Eff</th><th class="num">Expected</th><th class="num">EOE</th><th class="num">Standardized</th><th class="num" style="color:var(--gold)">Adjusted</th>
+    </tr></thead><tbody>${body}</tbody></table></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:6px">Grouped by position, sorted by Adjusted within each · hitters with 10+ attempts · * under ~100 attempts · hover the bars for counts. Follows the season, sessions, Set and Players filters.</div>`;
+}
+
+// ── Pass & Hit (bottom of Reports) ───────────────────────────────────────────
+// On serve-receive possessions: when a player passes AND gets the first set after
+// his own pass, how does that attack go — vs his first-ball attacks when someone
+// else passed? Data: session.pass_hit (set → player → ph / np / pass grades).
+let passHitHelpOpen = false;
+function togglePassHitHelp() { passHitHelpOpen = !passHitHelpOpen; const e = document.getElementById('pass-hit-help'); if (e) e.style.display = passHitHelpOpen ? 'block' : 'none'; }
+
+function renderPassHit() {
+  const el = document.getElementById('rpt-pass-hit');
+  if (!el) return;
+  const head = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px">Pass &amp; Hit — attacking right after your own pass</div>
+      <button class="adj-help-btn" onclick="togglePassHitHelp()" title="What do these numbers mean?">?</button></div>`;
+  const help = `<div id="pass-hit-help" class="adj-help" style="display:${passHitHelpOpen?'block':'none'}">
+      <p><b>What it shows.</b> Only serve-receive possessions count. <b>Passed &amp; hit</b> = the player took the serve-receive pass <i>and</i> then got the first set and attacked it. <b>Didn't pass</b> = his first-ball attacks on possessions where someone else passed — the comparison for how much passing first affects his swing.</p>
+      <p><b>Columns.</b> <b>K / E / BLK / Att</b> kills, errors, blocked, attempts. <b>Eff</b> = (K − E − BLK) / Att. <b>FBSO%</b> = first-ball sideout: kills on that first attack ÷ attempts (we scored right away). <b>SO%</b> = sideout: how often we won the rally in the end (also counts points won later in the rally). <b>Err%</b> = (errors + blocked) ÷ attempts. <b>Pass avg</b> = the average of his passes on those possessions (uses the selected pass scale). <b>Δ Eff</b> = Eff after passing − Eff without passing (<span style="color:var(--red)">negative</span> = his swing drops when he has to pass first).</p>
+      <p style="opacity:.75"><b>Keep in mind:</b> samples are small — a single match gives only a handful of pass-and-hit swings. Only first-ball attacks off a set are counted (not overpasses or second-ball attacks).</p></div>`;
+  if (rptTeamSide === 'opp') { el.innerHTML = head + help + `<div class="empty" style="padding:12px">Available for Loyola only — switch Team to Loyola.</div>`; return; }
+
+  const z = () => ({ n:0, k:0, e:0, b:0, w:0 });
+  const pl = {};
+  for (const s of DATA.sessions) {
+    if (!rptSelected.has(s.id) || !s.pass_hit) continue;
+    for (const [sn, pp] of Object.entries(s.pass_hit)) {
+      if (rptSetFilter !== 'all' && s.type === 'match' && sn !== String(rptSetFilter)) continue;
+      for (const [pn, v] of Object.entries(pp)) {
+        if (!getPlayerInfo(pn, s.season)) continue;
+        const o = pl[pn] || (pl[pn] = { season: s.season, ph: z(), np: z(), pg: {} });
+        for (const g of ['ph','np']) for (const [ev, rec] of Object.entries(v[g] || {})) {
+          const r = o[g]; r.n += rec[0]; r.w += rec[1];
+          if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0];
+        }
+        for (const [ev, n] of Object.entries(v.pg || {})) o.pg[ev] = (o.pg[ev] || 0) + n;
+      }
+    }
+  }
+  let rows = Object.entries(pl).map(([p, o]) => ({ p, ...o })).filter(r => r.ph.n >= 3);
+  if (rptPlayerFilter) rows = rows.filter(r => rptPlayerFilter.has(r.p));
+  rows.sort((a, b) => b.ph.n - a.ph.n);
+  const pct = (a, n) => n ? (a / n * 100).toFixed(1) + '%' : '—';
+  const eff = r => r.n ? (r.k - r.e - r.b) / r.n : null;
+  const fE = v => v === null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const POSL = { OUTSIDES:'OH', OPPOSITES:'OPP', MIDDLES:'MB', SETTERS:'S', LIBEROS:'L' };
+  const tot = { ph: z(), np: z() };
+  const cells = (r, bold='') => `<td class="num" style="color:var(--green);${bold}">${r.k}</td><td class="num" style="color:var(--red);${bold}">${r.e}</td><td class="num" style="${bold}">${r.b||'—'}</td><td class="num" style="${bold}">${r.n}</td>
+      <td class="num" style="font-weight:700;${bold}">${fE(eff(r))}</td><td class="num" style="${bold}">${pct(r.k, r.n)}</td><td class="num" style="${bold}">${pct(r.w, r.n)}</td><td class="num" style="color:var(--red);${bold}">${pct(r.e + r.b, r.n)}</td>`;
+  const body = rows.length ? rows.map(r => {
+    for (const g of ['ph','np']) for (const k of ['n','k','e','b','w']) tot[g][k] += r[g][k];
+    const pgN = Object.values(r.pg).reduce((a, b) => a + b, 0);
+    const pAvg = pgN ? passAvgFromEvals(r.pg, pgN) : null;
+    const d = (eff(r.ph) !== null && eff(r.np) !== null) ? eff(r.ph) - eff(r.np) : null;
+    return `<tr><td style="color:var(--gold);font-weight:700">#${r.p}</td><td style="white-space:nowrap">${getPlayerName(r.p, r.season)}</td>
+      <td style="color:var(--text-muted)">${POSL[getPlayerGroup(r.p, r.season)]||''}</td>
+      ${cells(r.ph)}<td class="num" style="color:var(--gold)">${pAvg === null ? '—' : pAvg.toFixed(2)}</td>
+      <td class="num" style="border-left:2px solid #333">${r.np.n || '—'}</td><td class="num">${fE(eff(r.np))}</td><td class="num">${pct(r.np.k, r.np.n)}</td><td class="num">${pct(r.np.w, r.np.n)}</td><td class="num" style="color:var(--red)">${pct(r.np.e + r.np.b, r.np.n)}</td>
+      <td class="num" style="font-weight:700;border-left:2px solid #333;color:${d === null ? 'var(--text-muted)' : d >= 0 ? 'var(--green)' : 'var(--red)'}">${d === null ? '—' : (d >= 0 ? '+' : '') + (d * 100).toFixed(1)}</td></tr>`; }).join('')
+    + `<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="3">TOTAL</td>${cells(tot.ph)}<td></td>
+       <td class="num">${tot.np.n}</td><td class="num">${fE(eff(tot.np))}</td><td class="num">${pct(tot.np.k, tot.np.n)}</td><td class="num">${pct(tot.np.w, tot.np.n)}</td><td class="num">${pct(tot.np.e + tot.np.b, tot.np.n)}</td>
+       <td class="num">${eff(tot.ph) !== null && eff(tot.np) !== null ? ((eff(tot.ph) - eff(tot.np) >= 0 ? '+' : '') + ((eff(tot.ph) - eff(tot.np)) * 100).toFixed(1)) : '—'}</td></tr>`
+    : `<tr><td colspan="20" class="empty" style="padding:12px">No players with 3+ pass-and-hit attacks for the current filters.</td></tr>`;
+  el.innerHTML = head + help + `
+    <div class="xlsx-wrap"><table class="xlsx-tbl"><thead>
+      <tr style="background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase">
+        <th colspan="3"></th><th colspan="9" style="text-align:center;color:var(--gold)">Passed &amp; hit</th>
+        <th colspan="5" style="text-align:center;border-left:2px solid #333">First ball — didn't pass</th><th style="border-left:2px solid #333"></th></tr>
+      <tr style="background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase">
+        <th>#</th><th>Player</th><th>Pos</th>
+        <th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff</th><th class="num">FBSO%</th><th class="num">SO%</th><th class="num">Err%</th><th class="num">Pass avg</th>
+        <th class="num" style="border-left:2px solid #333">Att</th><th class="num">Eff</th><th class="num">FBSO%</th><th class="num">SO%</th><th class="num">Err%</th>
+        <th class="num" style="border-left:2px solid #333">Δ Eff</th></tr></thead>
+      <tbody>${body}</tbody></table></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:6px">Serve-receive possessions only · first attack after a set · players with 3+ pass-and-hit attacks, sorted by that count. Follows the season, sessions, Set and Players filters.</div>`;
+}
+
 function renderRptDetailInner() {
   const kpiEl   = document.getElementById('rpt-kpi-row');
   const xlsxEl  = document.getElementById('rpt-xlsx-area');
@@ -5046,6 +5244,8 @@ function renderRptDetailInner() {
 
   showRptTab(rptActiveSubTab);
   renderSetterAdjusted();
+  renderHitterAdjusted();
+  renderPassHit();
   renderPointsAdded();
 }
 
