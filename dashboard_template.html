@@ -283,7 +283,7 @@
   .pl-tbl th { font-size:10px; text-transform:uppercase; color:var(--text-muted); text-align:left; padding:5px 6px; border-bottom:1px solid var(--border); font-weight:600; }
   .pl-tbl th.num, .pl-tbl td.num { text-align:right; font-variant-numeric:tabular-nums; }
   .pl-tbl td { padding:5px 6px; border-bottom:1px solid #222; }
-  .pl-pa-row { display:grid; grid-template-columns:60px 1fr 46px; gap:8px; align-items:center; margin:5px 0; font-size:12px; }
+  .pl-pa-row { display:grid; grid-template-columns:135px 1fr 52px; gap:8px; align-items:center; margin:5px 0; font-size:12px; }
   .pl-pa-track { position:relative; height:12px; background:#222; border-radius:3px; } .pl-pa-mid { position:absolute; left:50%; top:0; bottom:0; width:1px; background:#555; }
   .pl-ins { border-left:3px solid var(--gold); padding:6px 10px; background:#1c1a12; border-radius:4px; margin:6px 0; font-size:12px; }
   .pl-ins.bad { border-color:var(--red); background:#1f1515; } .pl-ins.good { border-color:var(--green); background:#131d14; }
@@ -4834,15 +4834,20 @@ function renderSetterAdjusted() {
 //                        attack turned out (sets aren't graded in our coding).
 // Values come from ALL sessions of the same type (matches / practices) in the
 // selected season(s), so they're stable even when one match is selected.
-let paMode = 'basic', paSetterShare = 0.25, paHelpOpen = false, paValuesOpen = false;
-function setPaMode(m) { paMode = m; withRptFilters(renderPointsAdded); }
-function setPaShare(v) { paSetterShare = +v; withRptFilters(renderPointsAdded); }
+let paView = 'team', paPos = 'OUTSIDES', paHelpOpen = false, paValuesOpen = false, paWeightsOpen = false;
+function setPaView(v) { paView = v; withRptFilters(renderPointsAdded); }
+function setPaPos(v) { paPos = v; withRptFilters(renderPointsAdded); }
 function togglePaHelp() { paHelpOpen = !paHelpOpen; const e = document.getElementById('pa-help'); if (e) e.style.display = paHelpOpen ? 'block' : 'none'; }
 function togglePaValues() { paValuesOpen = !paValuesOpen; const e = document.getElementById('pa-values'); if (e) e.style.display = paValuesOpen ? 'block' : 'none'; }
+function togglePaWeights() { paWeightsOpen = !paWeightsOpen; const e = document.getElementById('pa-weights'); if (e) e.style.display = paWeightsOpen ? 'block' : 'none'; }
 
 const PA_SKILL = { S:'Serve', R:'Pass', A:'Attack', E:'Set', X:'Set', B:'Block', D:'Dig' };
 const PA_COLS  = ['Serve','Pass','Attack','Set','Block','Dig'];
-const PA_M = 20;   // small-sample blend for situation values
+// Weighted categories (order shown in tables) — weights come from aggregate.py PA_WEIGHTS
+const PA_WCOLS = ['Competition','Attack','Pass','Block','Serve','Dig','Set'];
+const PA_WLBL  = { Competition:'Competition', Attack:'Attacking', Pass:'Serve Receive', Block:'Blocking', Serve:'Serving', Dig:'Defense', Set:'Setting' };
+const PA_M = 20;   // small-sample blend (used by the hitter / setter situation cards)
+const PA_POS_ORDER = ['OUTSIDES','OPPOSITES','MIDDLES','SETTERS','LIBEROS'];
 
 function _paNorm(key) {
   // 3-pt pass scale: medium (!) is a 2-point pass → same as good (+)
@@ -4855,10 +4860,10 @@ function _paNorm(key) {
 
 // Build value tables from a pool of sessions (all players, all sets)
 function _paTables(sessions) {
-  const P = {};
+  const P = {}; const XA = [0, 0];   // XA = every attack that came off a set: [n, rallies won]
   for (const s of sessions) for (const pl of Object.values(s.pts_added || {})) for (const [pnV, keys] of Object.entries(pl))
     if (!isVirt(pnV)) for (const [k0, v] of Object.entries(keys)) {
-      if (k0[0] === 'X') continue;
+      if (k0[0] === 'X') { XA[0] += v[0]; XA[1] += v[1]; continue; }
       const k = _paNorm(k0); const r = P[k] || (P[k] = [0,0]); r[0] += v[0]; r[1] += v[1];
     }
   const acc = {}; const put = (k, v) => { const r = acc[k] || (acc[k] = [0,0]); r[0] += v[0]; r[1] += v[1]; };
@@ -4871,6 +4876,8 @@ function _paTables(sessions) {
   const shr = (k, prior) => { const r = acc[k]; return r ? (r[1] + PA_M * prior) / (r[0] + PA_M) : prior; };
   return {
     basic(sk, ev)   { const b = wp('sk:' + sk), e = wp('ev:' + sk + '|' + ev); return (b === null || e === null) ? 0 : e - b; },
+    // Setting: value of the attack result off a set vs the average attack off a set (an average setter nets ~0)
+    setVal(ev)      { const e = wp('ev:A|' + ev); return (e === null || !XA[0]) ? 0 : e - XA[1] / XA[0]; },
     evWp(sk, ev)    { return wp('ev:' + sk + '|' + ev); },
     skWp(sk)        { return wp('sk:' + sk); },
     sitBase(sk, sit) { return shr('sit:' + sk + '|' + sit, wp('sk:' + sk) ?? 0); },
@@ -4881,25 +4888,26 @@ function _paTables(sessions) {
   };
 }
 
-// Points for n touches with this key, split into skill columns
+
+// Points for n touches with this key (each touch vs the average touch of the same skill).
+// Sets (X keys = the attack result that followed his set) earn the value of that attack result.
 function _paValue(T, key, n, out) {
-  const [sk, ev, sit] = _paNorm(key).split('|');
-  if (paMode === 'basic') {
-    if (sk === 'X') return;
-    out[PA_SKILL[sk]] += n * T.basic(sk, ev);
-    return;
-  }
-  if (sk === 'A') {
-    out.Attack += n * (1 - paSetterShare) * (T.sitEv('A', ev, sit) - T.atkSit(sit));
-  } else if (sk === 'X') {
-    const decision  = T.atkSit(sit) - T.atkPhase(sit.split('/')[0]);   // chose a better / worse set than average here
-    const execution = paSetterShare * (T.sitEv('A', ev, sit) - T.atkSit(sit));
-    out.Set += n * (decision + execution);
-  } else if (sk === 'E') {
-    out.Set += n * T.basic('E', ev);                                    // set errors
-  } else {
-    out[PA_SKILL[sk]] += n * (T.sitEv(sk, ev, sit) - T.sitBase(sk, sit));
-  }
+  const [sk, ev] = _paNorm(key).split('|');
+  if (sk === 'X') { out.Set += n * T.setVal(ev); return; }
+  if (PA_SKILL[sk]) out[PA_SKILL[sk]] += n * T.basic(sk, ev);
+}
+function paWeightsFor(group) { return (DATA.pa_weights || {})[group] || {}; }
+// Competition = practice drill results (competition.csv): wins above .500 = (W − L) / 2
+function paCompetition(pn, season, dates) {
+  const c = ((DATA.competition || {})[season] || {})[pn]; let w = 0, l = 0;
+  if (c) for (const [d, r] of Object.entries(c)) if (!dates || dates.has(d)) { w += r[0]; l += r[1]; }
+  return { pts: (w - l) / 2, w, l };
+}
+// Weighted score: Σ weight × category points (weights for the player's position, rows = 100%)
+function paWeighted(v, comp, group) {
+  const W = paWeightsFor(group); const w = {}; let total = 0;
+  for (const c of PA_WCOLS) { const raw = c === 'Competition' ? comp : (v[c] || 0); w[c] = (W[c] || 0) * raw; total += w[c]; }
+  return { w, total };
 }
 
 function renderPointsAdded() {
@@ -4909,18 +4917,17 @@ function renderPointsAdded() {
   const head = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
       <div style="font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px">Points Added</div>
       <button class="adj-help-btn" onclick="togglePaHelp()" title="What is Points Added?">?</button>
-      <div style="display:flex;gap:4px;margin-left:8px">${btn(paMode==='basic','Basic',"setPaMode('basic')")}${btn(paMode==='adj','Situation-adjusted',"setPaMode('adj')")}</div>
-      ${paMode==='adj' ? `<label style="font-size:11px;color:var(--text-muted);margin-left:6px">Setter share of attack result
-        <select onchange="setPaShare(this.value)" style="margin-left:4px">${[0,0.25,0.5].map(v=>`<option value="${v}" ${v===paSetterShare?'selected':''}>${v*100}%</option>`).join('')}</select></label>` : ''}
-      <button onclick="togglePaValues()" style="margin-left:auto;padding:4px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:11px;background:transparent;color:var(--text-muted)">${paValuesOpen?'Hide':'Show'} value table</button>
+      <div style="display:flex;gap:4px;margin-left:8px">${btn(paView==='team','Overall team',"setPaView('team')")}${btn(paView==='pos','By position',"setPaView('pos')")}</div>
+      ${paView==='pos' ? `<select onchange="setPaPos(this.value)" style="margin-left:4px">${PA_POS_ORDER.map(g=>`<option value="${g}" ${g===paPos?'selected':''}>${g.charAt(0)+g.slice(1).toLowerCase()}</option>`).join('')}</select>` : ''}
+      <button onclick="togglePaWeights()" style="margin-left:auto;padding:4px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:11px;background:transparent;color:var(--text-muted)">${paWeightsOpen?'Hide':'Show'} weights</button>
+      <button onclick="togglePaValues()" style="padding:4px 11px;border-radius:4px;border:1px solid var(--border);cursor:pointer;font-size:11px;background:transparent;color:var(--text-muted)">${paValuesOpen?'Hide':'Show'} value table</button>
     </div>`;
   const help = `<div id="pa-help" class="adj-help" style="display:${paHelpOpen?'block':'none'}">
-      <p><b>What it measures.</b> Every touch changes our chance of winning the rally. <b>Points Added</b> is how much a player's touches raised or lowered that chance compared with an average player making the same touches. +1.0 ≈ one extra point won for the team. It puts every position — liberos, middles, setters — on the same scale.</p>
-      <p><b>How a touch is valued.</b> For each kind of touch (e.g. a "+" pass) we look at how often our team went on to win the rally after it, across all sessions of the same type (matches or practices) in the selected season. Value = that win % − the win % after an average touch of that skill. Example: if we win 76% of rallies after a perfect pass and 60% after an average pass, a perfect pass is worth +0.16.</p>
-      <p><b>Basic</b> compares each touch with the average touch of the same skill. <b>Situation-adjusted</b> compares it with the average touch <i>in the same situation</i>: serves and passes by serve type (float vs topspin), attacks by the pass before them and the set type (an out-of-system high ball isn't held to the standard of a perfect-pass quick), blocks and digs by the type of attack they faced. This is fairer to players who get the hard balls.</p>
-      <p><b>Setters.</b> Sets aren't graded in our coding, so in Basic setters only get credit for serving, blocking, digging (and lose points for set errors). In Situation-adjusted they also get: <b>set choice</b> — how much better (or worse) the sets they chose usually score in that situation compared with an average set there (e.g. using a quick off a perfect pass), and a <b>share of the attack result</b> on balls they set (set quality affects the hitter even when it isn't graded). The share is adjustable; the hitter gets the rest.</p>
-      <p><b>Columns.</b> <b>Total</b> = points added in the selected sessions; <b>Per set</b> = Total ÷ sets he played in (fairer when playing time differs). The skill columns show where the value comes from — green adds, red costs.</p>
-      <p style="opacity:.75"><b>Keep in mind:</b> small samples swing a lot (one match ≈ a few points of noise); opponent strength isn't accounted for. Values follow the season, sessions, Set and Players filters; Loyola only.</p>
+      <p><b>What it measures.</b> Every touch changes our chance of winning the rally. A touch's <b>points</b> = how often we win the rally after that kind of touch minus how often we win after an average touch of the same skill (all sessions of the same type in the selected season). +1.0 ≈ one extra point for the team.</p>
+      <p><b>Categories.</b> Attacking, Serve Receive, Blocking, Serving, Defense (digs) come straight from his touches. <b>Setting</b> = the value of the attack result that came off each of his sets compared with the average attack off a set (kill = plus, error/blocked = minus; an average setter nets about 0), plus set errors. <b>Competition</b> = practice drill results from <code>private/competition.csv</code>: wins above .500 = (W − L) ÷ 2.</p>
+      <p><b>Score.</b> Each position has its own weights (each row adds to 100% — see "Show weights"). Score = Σ weight × that category's points, so an outside's passing counts 25% while a middle's counts 0%. The category columns show the <b>weighted</b> points (they add up to the Score); hover a cell for the raw points. <b>Per set</b> = Score ÷ sets he played in.</p>
+      <p><b>Overall team</b> ranks everyone together (each with his own position's weights). <b>By position</b> shows one position group and its average.</p>
+      <p style="opacity:.75"><b>Keep in mind:</b> small samples swing a lot; opponent strength isn't accounted for. Follows the season, sessions, Set and Players filters; Loyola only.</p>
     </div>`;
 
   if (rptTeamSide === 'opp') { el.innerHTML = head + help + `<div class="empty" style="padding:12px">Available for Loyola only — switch Team to Loyola.</div>`; return; }
@@ -4934,9 +4941,11 @@ function renderPointsAdded() {
   }
 
   // Sum each player's touches across the selected sessions (and set, if filtered)
-  const players = {};
+  const players = {}; const dates = new Set();
   for (const s of DATA.sessions) {
-    if (!rptSelected.has(s.id) || !s.pts_added || !tables[s.type]) continue;
+    if (!rptSelected.has(s.id)) continue;
+    if (s.date) dates.add(s.date);
+    if (!s.pts_added || !tables[s.type]) continue;
     const T = tables[s.type];
     for (const [sn, pl] of Object.entries(s.pts_added)) {
       if (rptSetFilter !== 'all' && s.type === 'match' && sn !== String(rptSetFilter)) continue;
@@ -4952,35 +4961,60 @@ function renderPointsAdded() {
       }
     }
   }
-  let rows = Object.entries(players).map(([p, o]) => ({ p, ...o, total: PA_COLS.reduce((a, c) => a + o.v[c], 0) }))
-    .filter(r => r.touches >= 10);
+  let rows = Object.entries(players).map(([p, o]) => {
+    const group = getPlayerGroup(p, o.season);
+    const comp = paCompetition(p, o.season, rptSetFilter === 'all' ? dates : new Set());
+    const W = paWeighted(o.v, comp.pts, group);
+    return { p, ...o, group, comp, w: W.w, total: W.total };
+  }).filter(r => r.touches >= 10);
   if (rptPlayerFilter) rows = rows.filter(r => rptPlayerFilter.has(r.p));
+  if (paView === 'pos') rows = rows.filter(r => r.group === paPos);
   rows.sort((a, b) => b.total - a.total);
 
-  const f = v => (v >= 0 ? '+' : '') + v.toFixed(1);
-  const clr = v => Math.abs(v) < 0.05 ? 'var(--text-muted)' : v > 0 ? 'var(--green)' : 'var(--red)';
-  const maxPer = Math.max(0.01, ...rows.map(r => Math.abs(r.total / Math.max(1, r.sets.size))));
+  const f = v => (v >= 0 ? '+' : '') + v.toFixed(2);
+  const clr = v => Math.abs(v) < 0.005 ? 'var(--text-muted)' : v > 0 ? 'var(--green)' : 'var(--red)';
+  const maxPer = Math.max(0.001, ...rows.map(r => Math.abs(r.total / Math.max(1, r.sets.size))));
   const bar = v => { const w = Math.min(50, Math.abs(v) / maxPer * 50);
     return `<div style="position:relative;width:110px;height:10px;background:#222;border-radius:3px">
       <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:#555"></div>
       <div style="position:absolute;top:0;bottom:0;${v>=0?'left:50%':'right:50%'};width:${w}%;background:${v>=0?'var(--green)':'var(--red)'};border-radius:2px"></div></div>`; };
   const POSL = { OUTSIDES:'OH', OPPOSITES:'OPP', MIDDLES:'MB', SETTERS:'S', LIBEROS:'L' };
-  const team = Object.fromEntries(PA_COLS.map(c => [c, rows.filter(r => !isVirt(r.p)).reduce((a, r) => a + r.v[c], 0)]));
+  const WP = paView === 'pos' ? paWeightsFor(paPos) : null;
+  const rawOf = (r, c) => c === 'Competition' ? r.comp.pts : (r.v[c] || 0);
+  const cell = (r, c) => { const wt = paWeightsFor(r.group)[c] || 0, v = r.w[c];
+    if (!wt) return `<td class="num" style="color:var(--text-dim)" title="0% for ${r.group.toLowerCase()}">·</td>`;
+    const tip = c === 'Competition' ? `${r.comp.w}-${r.comp.l} in drills · ${f(rawOf(r, c))} raw × ${Math.round(wt*100)}%` : `${f(rawOf(r, c))} raw points × ${Math.round(wt*100)}%`;
+    return `<td class="num" style="color:${clr(v)}" title="${tip}">${Math.abs(v) < 0.005 ? '—' : f(v)}</td>`; };
   const body = rows.length ? rows.map(r => {
     const per = r.total / Math.max(1, r.sets.size);
     return `<tr>
       <td style="color:var(--gold);font-weight:700">#${r.p}</td><td style="white-space:nowrap">${getPlayerName(r.p, r.season)}</td>
-      <td style="color:var(--text-muted)">${POSL[getPlayerGroup(r.p, r.season)] || ''}</td>
+      <td style="color:var(--text-muted)">${POSL[r.group] || ''}</td>
       <td class="num">${r.sets.size}</td>
       <td class="num" style="font-weight:700;color:${clr(r.total)}">${f(r.total)}</td>
-      <td class="num" style="color:${clr(per)}">${(per >= 0 ? '+' : '') + per.toFixed(2)}</td>
+      <td class="num" style="color:${clr(per)}">${(per >= 0 ? '+' : '') + per.toFixed(3)}</td>
       <td>${bar(per)}</td>
-      ${PA_COLS.map(c => `<td class="num" style="color:${clr(r.v[c])}">${Math.abs(r.v[c]) < 0.05 ? '—' : f(r.v[c])}</td>`).join('')}
-    </tr>`; }).join('') + `<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="4">TEAM</td>
-      <td class="num">${f(PA_COLS.reduce((a,c)=>a+team[c],0))}</td><td></td><td></td>${PA_COLS.map(c => `<td class="num">${f(team[c])}</td>`).join('')}</tr>`
-    : `<tr><td colspan="13" class="empty" style="padding:12px">No players with enough touches for the current filters.</td></tr>`;
+      ${PA_WCOLS.map(c => cell(r, c)).join('')}
+    </tr>`; }).join('')
+    : `<tr><td colspan="14" class="empty" style="padding:12px">No players with enough touches for the current filters.</td></tr>`;
+  // By position: group average row (real players only — virtual copies never count in totals)
+  let avgRow = '';
+  if (paView === 'pos') {
+    const real = rows.filter(r => !isVirt(r.p));
+    if (real.length) {
+      const avg = c => real.reduce((a, r) => a + r.w[c], 0) / real.length;
+      const aTot = real.reduce((a, r) => a + r.total, 0) / real.length;
+      const aPer = real.reduce((a, r) => a + r.total / Math.max(1, r.sets.size), 0) / real.length;
+      avgRow = `<tr style="background:var(--maroon);color:#fff;font-weight:700"><td colspan="4">${paPos} AVERAGE</td>
+        <td class="num">${f(aTot)}</td><td class="num">${(aPer >= 0 ? '+' : '') + aPer.toFixed(3)}</td><td></td>${PA_WCOLS.map(c => `<td class="num">${(WP[c]||0) ? f(avg(c)) : '·'}</td>`).join('')}</tr>`;
+    }
+  }
 
-  // Value table (Basic values: what each result is worth, per session type)
+  // Weights table + value table
+  const wTbl = `<table class="xlsx-tbl" style="width:auto"><thead><tr style="background:#1e1e1e;color:var(--text-muted);font-size:11px"><th>Position</th>${PA_WCOLS.map(c=>`<th class="num">${PA_WLBL[c]}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
+    ${PA_POS_ORDER.map(g => { const W = paWeightsFor(g); const t = PA_WCOLS.reduce((a,c)=>a+(W[c]||0),0);
+      return `<tr${paView==='pos'&&g===paPos?' style="background:rgba(254,188,24,.08)"':''}><td>${g.charAt(0)+g.slice(1).toLowerCase()}</td>${PA_WCOLS.map(c=>`<td class="num" style="color:${(W[c]||0)?'var(--text)':'var(--text-dim)'}">${Math.round((W[c]||0)*100)}%</td>`).join('')}<td class="num">${Math.round(t*100)}%</td></tr>`; }).join('')}
+    </tbody></table>`;
   const EVS = ['#','+','!','-','/','='];
   const valTbl = Object.entries(tables).map(([type, T]) => `
     <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:8px 0 4px;text-transform:uppercase">${type === 'match' ? 'Matches' : 'Practices'} — value of each result (vs average touch of that skill)</div>
@@ -4990,15 +5024,17 @@ function renderPointsAdded() {
         const n = T.count('ev:' + sk + '|' + e); if (n < 5) return '<td class="num xlsx-dim">—</td>';
         const v = T.basic(sk, e); return `<td class="num" style="color:${clr(v)}" title="${n} touches · win ${(T.evWp(sk,e)*100).toFixed(0)}%">${(v>=0?'+':'')+v.toFixed(2)}</td>`; }).join('')}</tr>`; }).join('')}
     </tbody></table>`).join('');
+  const hasComp = Object.keys(DATA.competition || {}).length > 0;
 
   el.innerHTML = head + help + `
+    <div id="pa-weights" style="display:${paWeightsOpen?'block':'none'};margin-bottom:12px">${wTbl}</div>
     <div id="pa-values" style="display:${paValuesOpen?'block':'none'};margin-bottom:12px">${valTbl}</div>
     <div class="xlsx-wrap"><table class="xlsx-tbl">
       <thead><tr style="background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase">
-        <th>#</th><th>Player</th><th>Pos</th><th class="num">Sets</th><th class="num" style="color:var(--gold)">Total</th><th class="num">Per set</th><th></th>
-        ${PA_COLS.map(c => `<th class="num">${c}</th>`).join('')}
-      </tr></thead><tbody>${body}</tbody></table></div>
-    <div style="font-size:10px;color:var(--text-dim);margin-top:6px">${paMode==='adj' ? `Situation-adjusted · setter share ${paSetterShare*100}%` : 'Basic'} · values from all ${Object.keys(tables).map(t=>t==='match'?'matches':'practices').join(' / ')} in the selected season · players with 10+ touches · sorted by Total.</div>`;
+        <th>#</th><th>Player</th><th>Pos</th><th class="num">Sets</th><th class="num" style="color:var(--gold)">Score</th><th class="num">Per set</th><th></th>
+        ${PA_WCOLS.map(c => `<th class="num">${PA_WLBL[c]}${WP ? `<div style="font-size:10px;color:var(--gold);text-transform:none">${Math.round((WP[c]||0)*100)}%</div>` : ''}</th>`).join('')}
+      </tr></thead><tbody>${body}${avgRow}</tbody></table></div>
+    <div style="font-size:10px;color:var(--text-dim);margin-top:6px">${paView==='pos' ? `${paPos.toLowerCase()} only · ${paPos.toLowerCase()} weights` : 'Everyone, each scored with his own position\'s weights'} · category columns are weighted points (hover for raw) · values from all ${Object.keys(tables).map(t=>t==='match'?'matches':'practices').join(' / ')} in the selected season · players with 10+ touches · sorted by Score.${hasComp ? '' : ' <b>No competition results yet</b> — add practice drill wins to private/competition.csv.'}</div>`;
 }
 
 // ── Hitter efficiency adjusted for situation (bottom of Reports) ─────────────
@@ -5987,7 +6023,7 @@ function selectPlayer(num, season) {
 // (setters only), passing, serving, block & defense and session trends.
 // Filters: Matches / Practices / Both, a single session, Set (matches), pass
 // scale, Points Added mode, and compare-to (position or team average).
-let plType = null, plSession = 'all', plSet = 'all', plCompare = 'pos', plPaMode = 'adj';
+let plType = null, plSession = 'all', plSet = 'all', plCompare = 'pos';
 let plCtx = { num: null, season: 'all', name: null };
 
 function plRerender() { if (plCtx.num) renderPlayerDetail(plCtx.num, plCtx.season, plCtx.name); }
@@ -6003,7 +6039,6 @@ function plSetSetN(v)   {
   plRerender();
 }
 function plSetCompare(v){ plCompare = v; plRerender(); }
-function plSetPaMode(v) { plPaMode = v; plRerender(); }
 function plScrollTo(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 
 const PL_POS = { OUTSIDES:'Outside Hitter', OPPOSITES:'Opposite', MIDDLES:'Middle Blocker', SETTERS:'Setter', LIBEROS:'Libero' };
@@ -6097,23 +6132,27 @@ function plPointsAdded(players, sids, setN, seasons) {
     const pool = DATA.sessions.filter(s => s.type === type && seasons.includes(s.season) && s.pts_added);
     if (pool.length) tables[type] = _paTables(pool);
   }
-  const savedMode = paMode; paMode = plPaMode;
-  const out = {};
-  try {
-    for (const sid of sids) {
-      const s = DATA.sessions.find(x => x.id === sid); const T = tables[s?.type]; if (!T) continue;
-      for (const [sn, pl] of Object.entries(s.pts_added || {})) {
-        if (setN !== 'all' && sn !== String(setN)) continue;
-        for (const p of players) {
-          const keys = pl[p]; if (!keys) continue;
-          const o = out[p] || (out[p] = { v: Object.fromEntries(PA_COLS.map(c => [c, 0])), touches: 0, sets: new Set() });
-          for (const [k, rec] of Object.entries(keys)) { _paValue(T, k, rec[0], o.v); if (k[0] !== 'X') o.touches += rec[0]; }
-          o.sets.add(sid + '|' + sn);
-        }
+  const out = {}; const dates = new Set(); let season = null;
+  for (const sid of sids) {
+    const s = DATA.sessions.find(x => x.id === sid); if (!s) continue;
+    if (s.date) dates.add(s.date); season = season || s.season;
+    const T = tables[s.type]; if (!T) continue;
+    for (const [sn, pl] of Object.entries(s.pts_added || {})) {
+      if (setN !== 'all' && sn !== String(setN)) continue;
+      for (const p of players) {
+        const keys = pl[p]; if (!keys) continue;
+        const o = out[p] || (out[p] = { v: Object.fromEntries(PA_COLS.map(c => [c, 0])), touches: 0, sets: new Set(), season: s.season });
+        for (const [k, rec] of Object.entries(keys)) { _paValue(T, k, rec[0], o.v); if (k[0] !== 'X') o.touches += rec[0]; }
+        o.sets.add(sid + '|' + sn);
       }
     }
-  } finally { paMode = savedMode; }
-  for (const o of Object.values(out)) { o.total = PA_COLS.reduce((a, c) => a + o.v[c], 0); o.per = o.total / Math.max(1, o.sets.size); }
+  }
+  for (const [p, o] of Object.entries(out)) {
+    o.group = getPlayerGroup(p, o.season);
+    o.comp = paCompetition(p, o.season, setN === 'all' ? dates : new Set());
+    const W = paWeighted(o.v, o.comp.pts, o.group);
+    o.w = W.w; o.total = W.total; o.per = o.total / Math.max(1, o.sets.size);
+  }
   return out;
 }
 
@@ -6260,7 +6299,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
   // Teammates at the same position (for ranks)
   const roster = DATA.players_by_season?.[lookSeason] || DATA.players;
   const mates = Object.keys(roster).filter(pn => getPlayerGroup(pn, lookSeason) === group);
-  const PA = plPointsAdded([...new Set([...mates, num])], sids, setN, seasons);
+  const PA = plPointsAdded([...new Set([...mates, num])], sids, setN, seasons);   // weighted by position
   const myPA = PA[num];
   const paRank = (() => { const arr = Object.entries(PA).filter(([, o]) => o.touches >= 10).sort((a, b) => b[1].total - a[1].total).map(([pn]) => pn);
     const i = arr.indexOf(num); return i >= 0 ? `#${i + 1} of ${arr.length} ${PL_GROUP_PLURAL[group] || ''}` : ''; })();
@@ -6292,9 +6331,9 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
           <p>${PL_POS[group] || POS_NAMES[p.position_code] || ''} · ${detailSeason === 'all' ? (seasons.length > 1 ? `${seasons[0]} – ${seasons[seasons.length - 1]}` : seasons[0]) : detailSeason} · ${nM} matches · ${nP} practices${A.sets.size ? ` · ${A.sets.size} sets in view` : ''}</p>
         </div>
         ${myPA ? `<div style="margin-left:auto;text-align:right">
-          <div class="pl-muted" style="font-size:11px">Points Added (${plPaMode === 'adj' ? 'situation-adj.' : 'basic'})</div>
+          <div class="pl-muted" style="font-size:11px">Points Added (weighted)</div>
           <div style="font-size:26px;font-weight:800;color:${myPA.total >= 0 ? 'var(--green)' : 'var(--red)'}">${myPA.total >= 0 ? '+' : ''}${myPA.total.toFixed(1)}</div>
-          <div class="pl-muted" style="font-size:11px">${myPA.per >= 0 ? '+' : ''}${myPA.per.toFixed(2)} per set${paRank ? ` · <b style="color:var(--gold)">${paRank}</b>` : ''}</div></div>` : ''}
+          <div class="pl-muted" style="font-size:11px">${myPA.per >= 0 ? '+' : ''}${myPA.per.toFixed(3)} per set${paRank ? ` · <b style="color:var(--gold)">${paRank}</b>` : ''}</div></div>` : ''}
       </div>
       <div class="pl-filters">
         ${chip(plType === 'match', 'Matches', "plSetType('match')")}${chip(plType === 'practice', 'Practices', "plSetType('practice')")}${chip(plType === 'both', 'Both', "plSetType('both')")}
@@ -6303,7 +6342,6 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
         <span class="pl-sep"></span>
         <span class="pl-muted" style="font-size:11px">Pass scale</span>${chip(rcvPassScale === '4', '4-pt', "setRcvPassScale('4')")}${chip(rcvPassScale === '3', '3-pt', "setRcvPassScale('3')")}
         <span class="pl-sep"></span>
-        <span class="pl-muted" style="font-size:11px">Points Added</span>${chip(plPaMode === 'basic', 'Basic', "plSetPaMode('basic')")}${chip(plPaMode === 'adj', 'Adjusted', "plSetPaMode('adj')")}
         <span class="pl-sep"></span>
         <span class="pl-muted" style="font-size:11px">Compare to</span>
         <select onchange="plSetCompare(this.value)"><option value="pos" ${plCompare === 'pos' ? 'selected' : ''}>${PL_POSS[group] || 'Position'} average</option><option value="team" ${plCompare === 'team' ? 'selected' : ''}>Team average</option></select>
@@ -6346,10 +6384,12 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
   const tiles = [...ORDER, 'pa', 'eff', 'pass', 'serve', 'dig', 'block'].filter((k, i, a) => a.indexOf(k) === i).map(k => T[k]).filter(Boolean).slice(0, 6).join('');
 
   // ── Points Added bars ──
-  const paBars = myPA ? (() => { const mx = Math.max(1, ...PA_COLS.map(c => Math.abs(myPA.v[c])));
-    return PA_COLS.map(c => { const v = myPA.v[c]; return `<div class="pl-pa-row"><span>${c}</span><div class="pl-pa-track"><div class="pl-pa-mid"></div>
+  const paBars = myPA ? (() => { const W = paWeightsFor(group); const cols = PA_WCOLS.filter(c => W[c]);
+    const mx = Math.max(0.01, ...cols.map(c => Math.abs(myPA.w[c])));
+    return cols.map(c => { const v = myPA.w[c]; const raw = c === 'Competition' ? myPA.comp.pts : myPA.v[c];
+      return `<div class="pl-pa-row" title="${(raw >= 0 ? '+' : '') + raw.toFixed(2)} raw × ${Math.round(W[c] * 100)}%"><span>${PA_WLBL[c]} <span class="pl-muted" style="font-size:10px">${Math.round(W[c] * 100)}%</span></span><div class="pl-pa-track"><div class="pl-pa-mid"></div>
       <div style="position:absolute;top:0;bottom:0;${v >= 0 ? 'left:50%' : 'right:50%'};width:${Math.abs(v) / mx * 50}%;background:${v >= 0 ? 'var(--green)' : 'var(--red)'};border-radius:2px"></div></div>
-      <b style="text-align:right;color:${Math.abs(v) < 0.05 ? 'var(--text-muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${v.toFixed(1)}</b></div>`; }).join(''); })() : '<div class="pl-muted">No Points Added data.</div>';
+      <b style="text-align:right;color:${Math.abs(v) < 0.005 ? 'var(--text-muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</b></div>`; }).join(''); })() : '<div class="pl-muted">No Points Added data.</div>';
 
   // ── Auto insights ──
   const ins = [];
@@ -6372,7 +6412,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
 
   const overview = `<div class="card pl-card" id="pl-sec-overview"><h3 class="pl-h">At a glance <span class="pl-muted">vs ${avgLbl} average</span></h3>
     <div class="pl-kpis">${tiles}</div>
-    <div class="pl-g2" style="margin-top:14px"><div><h3 class="pl-h">Where his points come from <span class="pl-muted">${plPaMode === 'adj' ? 'situation-adjusted' : 'basic'}</span></h3>${paBars}</div>
+    <div class="pl-g2" style="margin-top:14px"><div><h3 class="pl-h">Where his points come from <span class="pl-muted">weighted for ${(PL_POSS[group] || 'his position').toLowerCase()}</span></h3>${paBars}</div>
     <div><h3 class="pl-h">Insights</h3>${insights}</div></div></div>`;
 
   // ── Attacking ──
@@ -6423,7 +6463,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
       <div class="pl-kpis" style="grid-template-columns:repeat(5,1fr)">${_plTile('Sets', SE.n)}${_plTile('Raw Eff', _plE(SE.raw))}${_plTile('Expected', _plE(SE.exp), '', 'var(--text-muted)')}${_plTile('EOE', _plD(SE.eoe), '', SE.eoe >= 0 ? 'var(--green)' : 'var(--red)')}${_plTile('Adjusted', _plE(SE.adj), '', 'var(--gold)')}</div>
       <div class="pl-g2" style="margin-top:12px"><div><h3 class="pl-h">By situation</h3><table class="pl-tbl"><tr><th>Before the set</th><th class="num">Sets</th><th class="num">Share</th><th class="num">Eff</th><th class="num">Team</th></tr>${mixRows}</table></div>
       <div><h3 class="pl-h">By hitter he sets</h3>${hitRows ? `<table class="pl-tbl"><tr><th>Hitter</th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff</th></tr>${hitRows}</table>` : '<div class="pl-muted" style="font-size:11px">Available for whole sessions (not a single set).</div>'}
-      ${myPA ? `<div class="pl-muted" style="font-size:11px;margin-top:8px">Set-choice credit (Points Added, ${plPaMode === 'adj' ? 'adjusted' : 'basic'}): <b style="color:${myPA.v.Set >= 0 ? 'var(--green)' : 'var(--red)'}">${myPA.v.Set >= 0 ? '+' : ''}${myPA.v.Set.toFixed(1)}</b></div>` : ''}</div></div></div>`;
+      ${myPA ? `<div class="pl-muted" style="font-size:11px;margin-top:8px">Setting points (attack results off his sets): <b style="color:${myPA.v.Set >= 0 ? 'var(--green)' : 'var(--red)'}">${myPA.v.Set >= 0 ? '+' : ''}${myPA.v.Set.toFixed(1)}</b> raw · ${myPA.w.Set >= 0 ? '+' : ''}${myPA.w.Set.toFixed(2)} weighted</div>` : ''}</div></div></div>`;
   }
 
   // ── Passing ──
@@ -6492,7 +6532,7 @@ function exportPlayerPDF() {
   const typeLbl = { match:'Matches', practice:'Practices', both:'Matches + Practices' }[plType] || '';
   const f = [['Player', `#${num} ${name}`], ['Season', plCtx.season === 'all' ? 'All seasons' : plCtx.season], ['Type', typeLbl],
              ['Session', plSession === 'all' ? 'All' : (DATA.sessions.find(s => s.id === plSession)?.date || '')], ['Set', plSet === 'all' ? 'All sets' : `Set ${plSet}`],
-             ['Pass scale', rcvPassScale + '-point'], ['Points Added', plPaMode === 'adj' ? 'Situation-adjusted' : 'Basic']];
+             ['Pass scale', rcvPassScale + '-point'], ['Points Added', 'Weighted by position']];
   const filters = f.map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('');
   _writePdf(win, { sections, filters, sessionLine: '', kpiHTML: '', dateStr: new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) });
 }

@@ -59,6 +59,14 @@ open('dashboard.html','w').write(t.replace('__DASHBOARD_DATA__', data))
 "
 ```
 
+### Points Added (weighted by position)
+Basic values only (each touch vs the average touch of that skill; no situation-adjusted mode). Setting =
+attack result off his sets vs the average attack off a set (`T.setVal`) + set errors. Each player's score =
+Σ position weight × category points, weights in `PA_WEIGHTS` (aggregate.py → `DATA.pa_weights`, rows = 100%).
+Competition = practice drill results from `private/competition.csv` (Date, Number, Player, Wins, Losses;
+git-ignored) → (W − L) / 2, counted on dates of the sessions in view. Reports card: "Overall team" and
+"By position" views. Same scoring on the coach Player tab and the player portal.
+
 ### Coach-only virtual players (Jake Read 2.0)
 `VIRTUAL_PLAYERS` in `aggregate.py` adds `7L` = "Jake Read 2.0", a libero-only copy of #7 (Fall 2027 only):
 only R/RM/RQ/D/F/E skills (and R/D/E/X Points Added touches) are copied, he's in the LIBEROS group, and

@@ -249,8 +249,8 @@ def main():
                 if pn_ in VIRT:
                     continue
                 for k, v in keys.items():
-                    if k[0] == 'X':
-                        continue
+                    if k[0] == 'X':        # attacks off a set: only the overall total is needed (setting baseline)
+                        k = 'X|*|*'
                     c = dst.setdefault(k, [0, 0]); c[0] += v[0]; c[1] += v[1]
 
     sessions = sorted([s for s in d['sessions'] if s['season'] not in SKIP_SEASONS and s['type'] in ('match', 'practice')],
@@ -345,6 +345,13 @@ def main():
             if se in pool:
                 payload['pool'][se] = pool[se]
         payload['seasons'] = [s for s in order if any(x['se'] == s for x in payload['sessions'])]
+        # Points Added weighting for his position + his own practice-competition results
+        POSG = {'1': 'LIBEROS', '2': 'OUTSIDES', '3': 'OPPOSITES', '4': 'MIDDLES', '5': 'SETTERS'}
+        grp = 'LIBEROS' if p.get('is_libero') else POSG.get(str(p.get('position_code')), 'OUTSIDES')
+        payload['pa_w'] = (d.get('pa_weights') or {}).get(grp, {})
+        payload['pa_grp'] = grp
+        payload['comp'] = {se: (d.get('competition') or {}).get(se, {}).get(n_) for se, n_ in nums.items()
+                           if (d.get('competition') or {}).get(se, {}).get(n_)}
         fid = pid(name)
         (OUT / f'{fid}.json').write_text(json.dumps(encrypt(payload, pw[name]), separators=(',', ':')))
         roster_out.append({'id': fid, 'num': num, 'name': name})

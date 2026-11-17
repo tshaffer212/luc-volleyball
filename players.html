@@ -134,7 +134,7 @@ function signOut() { PD = null; ss.del('luc_pp'); location.reload(); }
 document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
 
 // ── State ────────────────────────────────────────────────────────────────────
-const F = { season: null, type: 'match', sel: null, set: 'all', scale: '4', tab: 'servrcv', paMode: 'adj', sdPhase: 'all' };
+const F = { season: null, type: 'match', sel: null, set: 'all', scale: '4', tab: 'servrcv', sdPhase: 'all' };
 const POS = { '1': 'Libero', '2': 'Outside Hitter', '3': 'Opposite', '4': 'Middle', '5': 'Setter' };
 const POSG = { '1': 'LIBEROS', '2': 'OUTSIDES', '3': 'OPPOSITES', '4': 'MIDDLES', '5': 'SETTERS' };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -477,28 +477,28 @@ function paNorm(key) {
   return `${sk}|${(sk === 'R' && ev === '!') ? '+' : ev}|${(sk === 'A' || sk === 'X') && sit && sit[0] === '!' ? '+' + sit.slice(1) : sit}`;
 }
 function paTables(pool) {
-  const P = {};
-  for (const [k0, v] of Object.entries(pool)) { if (k0[0] === 'X') continue; const k = paNorm(k0); const r = P[k] || (P[k] = [0, 0]); r[0] += v[0]; r[1] += v[1]; }
+  const P = {}; const XA = [0, 0];
+  for (const [k0, v] of Object.entries(pool)) { if (k0[0] === 'X') { XA[0] += v[0]; XA[1] += v[1]; continue; } const k = paNorm(k0); const r = P[k] || (P[k] = [0, 0]); r[0] += v[0]; r[1] += v[1]; }
   const acc = {}; const put = (k, v) => { const r = acc[k] || (acc[k] = [0, 0]); r[0] += v[0]; r[1] += v[1]; };
   for (const [k, v] of Object.entries(P)) { const [sk, ev, sit] = k.split('|'); put('sk:' + sk, v); put('ev:' + sk + '|' + ev, v); put('sit:' + sk + '|' + sit, v); put('evsit:' + k, v); if (sk === 'A') put('ph:' + sit.split('/')[0], v); }
   const wp = k => acc[k] && acc[k][0] ? acc[k][1] / acc[k][0] : null;
   const shr = (k, prior) => { const r = acc[k]; return r ? (r[1] + PA_M * prior) / (r[0] + PA_M) : prior; };
   return {
     basic(sk, ev) { const b = wp('sk:' + sk), e = wp('ev:' + sk + '|' + ev); return (b === null || e === null) ? 0 : e - b; },
+    setVal(ev) { const e = wp('ev:A|' + ev); return (e === null || !XA[0]) ? 0 : e - XA[1] / XA[0]; },
     sitBase(sk, sit) { return shr('sit:' + sk + '|' + sit, wp('sk:' + sk) ?? 0); },
     sitEv(sk, ev, sit) { return shr('evsit:' + sk + '|' + ev + '|' + sit, wp('ev:' + sk + '|' + ev) ?? 0); },
     atkSit(sit) { const ph = sit.split('/')[0]; return shr('sit:A|' + sit, wp('ph:' + ph) ?? wp('sk:A') ?? 0); },
     atkPhase(ph) { return shr('ph:' + ph, wp('sk:A') ?? 0); },
   };
 }
-function paValue(T, key, n, out) {
-  const [sk, ev, sit] = paNorm(key).split('|');
-  if (F.paMode === 'basic') { if (sk !== 'X') out[PA_SKILL[sk]] += n * T.basic(sk, ev); return; }
-  if (sk === 'A') out.Attack += n * (1 - PA_SHARE) * (T.sitEv('A', ev, sit) - T.atkSit(sit));
-  else if (sk === 'X') out.Set += n * ((T.atkSit(sit) - T.atkPhase(sit.split('/')[0])) + PA_SHARE * (T.sitEv('A', ev, sit) - T.atkSit(sit)));
-  else if (sk === 'E') out.Set += n * T.basic('E', ev);
-  else out[PA_SKILL[sk]] += n * (T.sitEv(sk, ev, sit) - T.sitBase(sk, sit));
+function paValue(T, key, n, out) {          // each touch vs the average touch of that skill
+  const [sk, ev] = paNorm(key).split('|');
+  if (sk === 'X') { out.Set += n * T.setVal(ev); return; }   // attack result off his set vs the average attack off a set
+  if (PA_SKILL[sk]) out[PA_SKILL[sk]] += n * T.basic(sk, ev);
 }
+const PA_WCOLS = ['Competition', 'Attack', 'Pass', 'Block', 'Serve', 'Dig', 'Set'];
+const PA_WLBL = { Competition: 'Competition', Attack: 'Attacking', Pass: 'Serve Receive', Block: 'Blocking', Serve: 'Serving', Dig: 'Defense', Set: 'Setting' };
 function cardPA() {
   const seasons = F.season === 'all' ? Object.keys(PD.pool) : [F.season];
   const v = Object.fromEntries(PA_COLS.map(c => [c, 0])); let touches = 0;
@@ -508,17 +508,27 @@ function cardPA() {
     const T = paTables(pool);
     for (const [k, rec] of Object.entries(keys)) { paValue(T, k, rec[0], v); if (k[0] !== 'X') touches += rec[0]; }
   }
-  const total = PA_COLS.reduce((a, c) => a + v[c], 0), per = total / Math.max(1, AG.sets);
-  const f = x => (x >= 0 ? '+' : '') + x.toFixed(1), clr = x => Math.abs(x) < 0.05 ? 'm' : x > 0 ? 'g' : 'r';
-  const tg = `<span class="tg" style="margin-left:auto">${[['basic', 'Basic'], ['adj', 'Situation-adjusted']].map(([m, l]) => `<button class="${F.paMode === m ? 'on' : ''}" onclick="F.paMode='${m}';render()">${l}</button>`).join('')}</span>`;
-  const help = `<div class="help" id="h-pa"><b>Points Added</b> measures how much your touches raised or lowered our chance of winning the rally compared with an average touch of the same kind (+1.0 ≈ one extra point for the team). Values come from how often our team wins the rally after each kind of touch, across every session of the same type this season. <b>Situation-adjusted</b> compares each touch with the average touch in the same situation (serve type faced, pass before the attack + set type, attack faced on blocks/digs). Small samples swing a lot.</div>`;
-  if (!touches) return card('Points Added' + helpBtn('h-pa') + tg, help + '<div class="empty">No touches in these sessions.</div>');
-  return card('Points Added' + helpBtn('h-pa') + tg, help + `<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px">
-      <div><div class="m">Total</div><div style="font-size:26px;font-weight:800" class="${clr(total)}">${f(total)}</div></div>
-      <div><div class="m">Per set</div><div style="font-size:26px;font-weight:800" class="${clr(per)}">${(per >= 0 ? '+' : '') + per.toFixed(2)}</div></div>
+  // Competition: practice drill results on the dates in view (wins above .500 = (W − L) / 2)
+  const dates = new Set(selected().map(s => s.d)); let cw = 0, cl = 0;
+  if (F.set === 'all') for (const [se, byDate] of Object.entries(PD.comp || {})) if (F.season === 'all' || se === F.season)
+    for (const [d, r] of Object.entries(byDate || {})) if (dates.has(d)) { cw += r[0]; cl += r[1]; }
+  const raw = { ...v, Competition: (cw - cl) / 2 };
+  const W = PD.pa_w || {}; const cols = PA_WCOLS.filter(c => W[c]);
+  const wv = Object.fromEntries(cols.map(c => [c, W[c] * raw[c]]));
+  const total = cols.reduce((a, c) => a + wv[c], 0), per = total / Math.max(1, AG.sets);
+  const f = (x, d = 2) => (x >= 0 ? '+' : '') + x.toFixed(d), clr = x => Math.abs(x) < 0.005 ? 'm' : x > 0 ? 'g' : 'r';
+  const posName = { OUTSIDES: 'outside', OPPOSITES: 'opposite', MIDDLES: 'middle', SETTERS: 'setter', LIBEROS: 'libero' }[PD.pa_grp] || 'position';
+  const help = `<div class="help" id="h-pa"><b>Points Added</b> measures how much your touches raised or lowered our chance of winning the rally compared with an average touch of the same skill (+1.0 ≈ one extra point for the team). <b>Setting</b> = the attack result off each of your sets vs the average attack off a set. <b>Competition</b> = practice drill results, (wins − losses) ÷ 2. Your <b>score</b> weights each category by how much it matters for a ${posName} (the % column). Small samples swing a lot.</div>`;
+  if (!touches && !cw && !cl) return card('Points Added' + helpBtn('h-pa'), help + '<div class="empty">No touches in these sessions.</div>');
+  return card('Points Added' + helpBtn('h-pa'), help + `<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px">
+      <div><div class="m">Score</div><div style="font-size:26px;font-weight:800" class="${clr(total)}">${f(total)}</div></div>
+      <div><div class="m">Per set</div><div style="font-size:26px;font-weight:800" class="${clr(per)}">${f(per, 3)}</div></div>
       <div><div class="m">Sets · touches</div><div style="font-size:26px;font-weight:800">${AG.sets} · ${touches}</div></div></div>` +
-    tbl(PA_COLS.map(c => `<th class="n">${c}</th>`).join(''), `<tr>${PA_COLS.map(c => `<td class="n ${clr(v[c])}"><b>${Math.abs(v[c]) < 0.05 ? '—' : f(v[c])}</b></td>`).join('')}</tr>`));
+    tbl('<th>Category</th><th class="n">Weight</th><th class="n">Raw points</th><th class="n">Weighted</th>',
+      cols.map(c => `<tr><td>${PA_WLBL[c]}${c === 'Competition' ? ` <span class="m">(${cw}-${cl})</span>` : ''}</td><td class="n m">${Math.round(W[c] * 100)}%</td><td class="n ${clr(raw[c])}">${f(raw[c])}</td><td class="n ${clr(wv[c])}"><b>${f(wv[c])}</b></td></tr>`).join('') +
+      `<tr class="tot"><td>SCORE</td><td class="n">100%</td><td></td><td class="n">${f(total)}</td></tr>`));
 }
+
 function cardEOE() {
   const me = hitterCells(); const n = Object.values(me.cells).reduce((s, r) => s + r.a, 0);
   const help = `<div class="help" id="h-eoe"><b>Expected</b> is what an average Loyola hitter would hit on exactly your mix of balls (the pass before the attack + the set type), using the whole team's results on each kind of ball. <b>EOE</b> = your actual efficiency − expected. Positive means you did better than the balls you got would predict. Efficiency is (K − E − BLK) / Att.</div>`;

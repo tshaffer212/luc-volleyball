@@ -1063,6 +1063,61 @@ def fix_right_side_typos(session):
     return report
 
 
+# ── Points Added: position weights (share of each player's score, rows = 100%) ─
+# Score = Σ weight × that category's points. Categories: Competition (practice
+# drill wins, from competition.csv), Attack, Pass (serve receive), Block, Serve,
+# Dig (defense), Set (value of the attack result off his sets + set errors).
+PA_WEIGHTS = {
+    'OUTSIDES':  {'Competition': .10, 'Attack': .25, 'Pass': .25, 'Block': .10, 'Serve': .15, 'Dig': .10, 'Set': .05},
+    'MIDDLES':   {'Competition': .10, 'Attack': .39, 'Pass': .00, 'Block': .35, 'Serve': .10, 'Dig': .05, 'Set': .01},
+    'OPPOSITES': {'Competition': .10, 'Attack': .35, 'Pass': .00, 'Block': .20, 'Serve': .25, 'Dig': .08, 'Set': .02},
+    'SETTERS':   {'Competition': .20, 'Attack': .05, 'Pass': .00, 'Block': .15, 'Serve': .15, 'Dig': .10, 'Set': .35},
+    'LIBEROS':   {'Competition': .10, 'Attack': .00, 'Pass': .55, 'Block': .00, 'Serve': .00, 'Dig': .25, 'Set': .10},
+}
+COMPETITION_CSV = os.path.join('private', 'competition.csv')   # Date, Number, Player, Wins, Losses (git-ignored: players can't read others' results)
+
+
+def load_competition(path, sessions_index, players_by_season):
+    """competition.csv -> {season: {pnum: {date: [wins, losses]}}}. Missing file -> {}."""
+    import csv, datetime
+    if not os.path.exists(path):
+        return {}
+    date_season = {}
+    for e in sessions_index:
+        if e.get('date'):
+            date_season.setdefault(e['date'], e['season'])
+    seasons_sorted = sorted({e['season'] for e in sessions_index if e.get('date')},
+                            key=lambda se: max(x['date'] for x in sessions_index if x['season'] == se and x.get('date')))
+    out, skipped = {}, 0
+    with open(path, newline='', encoding='utf-8-sig') as f:
+        for row in csv.DictReader(f):
+            r = {(k or '').strip().lower(): (v or '').strip() for k, v in row.items()}
+            ds = r.get('date', '')
+            d = None
+            for fmt in ('%Y-%m-%d', '%m/%d/%Y', '%m/%d/%y'):
+                try:
+                    d = datetime.datetime.strptime(ds, fmt).strftime('%Y-%m-%d'); break
+                except ValueError:
+                    pass
+            try:
+                w, l = int(float(r.get('wins') or 0)), int(float(r.get('losses') or 0))
+            except ValueError:
+                d = None
+            if not d:
+                skipped += 1; continue
+            se = date_season.get(d) or (seasons_sorted[-1] if seasons_sorted else None)
+            roster = players_by_season.get(se, {})
+            name, num = r.get('player', '').lower(), r.get('number', '').lstrip('#')
+            pn = next((n for n, p in roster.items() if not p.get('virtual') and p.get('name', '').lower() == name), None) if name else None
+            pn = pn or (num if num in roster else None)
+            if not pn:
+                skipped += 1; continue
+            c = out.setdefault(se, {}).setdefault(pn, {}).setdefault(d, [0, 0])
+            c[0] += w; c[1] += l
+    if skipped:
+        print(f"  ⚠  competition.csv: skipped {skipped} row(s) (bad date/number or unknown player)", file=sys.stderr)
+    return out
+
 # ── Coach-only virtual players ────────────────────────────────────────────────
 # A second, position-specific copy of a real player, shown on the COACH dashboard
 # only (build_player_portal.py skips them). Only the listed skills are copied, and
@@ -1127,6 +1182,9 @@ def add_virtual_players(output, sets_out):
                         se_d['player_session'][num] = c
                 if src in (se_d.get('fbso_by_player') or {}):
                     se_d['fbso_by_player'][num] = list(se_d['fbso_by_player'][src])
+        comp = (output.get('competition') or {}).get(se, {})
+        if src in comp:
+            comp[num] = comp[src]                    # same drill results as the real player
         vmeta[num] = {'src': src, 'season': se}
     output['virtual_players'] = vmeta
 
@@ -2044,6 +2102,10 @@ def main(raw_path, out_path):
             per[str(n)] = e
         sets_out[sid] = per
 
+    output['pa_weights'] = PA_WEIGHTS
+    output['competition'] = load_competition(
+        os.path.join(os.path.dirname(os.path.abspath(out_path)), COMPETITION_CSV),
+        output['sessions'], output['players_by_season'])
     add_virtual_players(output, sets_out)
 
     sets_path = os.path.join(os.path.dirname(os.path.abspath(out_path)), 'dashboard_sets.json')
