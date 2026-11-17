@@ -1263,6 +1263,11 @@
 <script>
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const DATA = __DASHBOARD_DATA__;
+// Coach-only virtual players (e.g. '7L' = Jake Read 2.0, libero-only copy of #7).
+// They get their own rows / player page but are left out of EVERY team and
+// position-group total so nothing is double counted.
+const VIRT = DATA.virtual_players || {};
+const isVirt = p => Object.prototype.hasOwnProperty.call(VIRT, String(p));
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const MAROON = '#8D0034';
@@ -1734,6 +1739,7 @@ function aggregateSessionStats(sessionIds) {
   let totalActions = 0;
   for (const [key, ps] of Object.entries(DATA.player_session)) {
     if (!sessionIds.has(ps.session_id)) continue;
+    if (isVirt(ps.player_num)) continue;
     totalActions += ps.actions || 0;
     for (const [sk, sv] of Object.entries(ps.skills || {})) {
       ensureSkill(sk);
@@ -2511,7 +2517,8 @@ function buildMatchOverviewPanel(sessionIds) {
   let tRMAtt=0,tRMPts=0,tRMPerf=0,tRMErr=0;
   let tRQAtt=0,tRQPts=0,tRQPerf=0,tRQErr=0;
   const teamZones={}, teamZonesM={}, teamZonesQ={};
-  for (const p of Object.values(pstats)) {
+  for (const [pnT, p] of Object.entries(pstats)) {
+    if (isVirt(pnT)) continue;
     tK+=p.A.k; tE+=p.A.e; tBK+=p.A.bk||0; tA+=p.A.att;
     tSAtt+=p.S.att; tSAce+=p.S.ace; tSErr+=p.S.err;
     tSPos+=p.S.pos; tSNeg+=p.S.neg; tSOver+=p.S.over;
@@ -2698,10 +2705,12 @@ function buildMatchOverviewPanel(sessionIds) {
     html+=grpHdr(key,18);
     for (const n of nums) {
       const r=pstats[n].R, rm=pstats[n].RM, rq=pstats[n].RQ;
+      if (!isVirt(n)) {
       gAtt+=r.att; gPts+=r.pts; gPerf+=r.perf; gGood+=r.good; gMed+=r.med;
       gOos+=r.oos; gOver+=r.over; gErr+=r.err;
       gMatt+=rm.att; gMpts+=rm.pts; gMperf+=rm.perf; gMerr+=rm.err;
       gQatt+=rq.att; gQpts+=rq.pts; gQperf+=rq.perf; gQerr+=rq.err;
+      }
       html+=`<tr><td style="font-weight:600">#${n}</td><td>${pName(n)}</td>${rcvCells4(rm)}${rcvCells4(rq)}${rcvCells9(r)}</tr>`;
     }
     html+=subRow(key,`${rcvCells4sum(gMatt,gMpts,gMperf,gMerr)}${rcvCells4sum(gQatt,gQpts,gQperf,gQerr)}<td class="num">${gAtt}</td><td class="num">${gAtt?(gPts/gAtt).toFixed(2):'---'}</td><td class="num">${cntPct(gPerf,gAtt)}</td><td class="num">${cntPct(gGood,gAtt)}</td><td class="num">${cntPct(gMed,gAtt)}</td><td class="num">${cntPct(gOos,gAtt)}</td><td class="num">${cntPct(gOver,gAtt)}</td><td class="num">${cntPct(gErr,gAtt)}</td>`);
@@ -3065,7 +3074,7 @@ function buildPlayerGroups(sidFilter) {
 
     if (!players[pnum]) {
       players[pnum] = {
-        pnum, season,
+        pnum, season, virt: isVirt(pnum),
         name:  getPlayerName(pnum, season),
         group: getPlayerGroup(pnum, season),
         sEv:{}, sAtt:0,   // serve
@@ -3192,6 +3201,7 @@ function buildServeRcvSheet(groups) {
   const CH = `background:#1e1e1e;color:var(--text-muted);font-size:11px;text-transform:uppercase;`;
 
   function totalize(players) {
+    players = players.filter(p => !p.virt);   // virtual (coach-only) players never count in totals
     const pl = { pnum:'*', name:'GROUP TOTAL', sEv:{}, sAtt:0,
                  rEv:{}, rAtt:0, rPts:null, rCat:null,
                  rmEv:{}, rmAtt:0, rmPts:null, rmCat:null,
@@ -3427,6 +3437,7 @@ function buildZoneSheet(groups) {
   }
 
   function subtotalRow(label, players, style='background:var(--surface3)') {
+    players = players.filter(p => !p.virt);
     const { byZone, byZoneM, byZoneQ } = mergeGroupZones(players);
     const totZd = { attempts:0, evals:{}, rcv_pts: null };
     for (const z of ZONES) {
@@ -3534,6 +3545,7 @@ function getSessionSetterMap() {
   const bySession = {};
   for (const ps of Object.values(DATA.player_session)) {
     if (!rptSelected.has(ps.session_id)) continue;
+    if (isVirt(ps.player_num)) continue;
     if (!bySession[ps.session_id]) bySession[ps.session_id] = [];
     bySession[ps.session_id].push(ps);
   }
@@ -4399,6 +4411,7 @@ function buildBlockDefSheet(groups) {
           <td style="white-space:nowrap">${p.name}</td>
           ${dRow(p.dEv, p.dAtt, false, p.digTotR, p.digKillR)}
         </tr>`;
+        if (p.virt) continue;
         grpAtt[0] += p.dAtt; teamAtt[0] += p.dAtt;
         grpDigR[0] += p.digTotR; grpDigR[1] += p.digKillR;
         teamDigR[0] += p.digTotR; teamDigR[1] += p.digKillR;
@@ -4520,7 +4533,7 @@ function withRptPlayers(fn) {
       if (!rptSelected.has(s.id)) continue;
       saved.sess.push([s, s.fbso_rcv, s.fbso_kills, s.setter_attacks]);
       let r = 0, k = 0;
-      for (const [p, v] of Object.entries(s.fbso_by_player || {})) if (pf.has(p)) { r += v[0]; k += v[1]; }
+      for (const [p, v] of Object.entries(s.fbso_by_player || {})) if (pf.has(p) && !(isVirt(p) && pf.has(VIRT[p].src))) { r += v[0]; k += v[1]; }
       s.fbso_rcv = r; s.fbso_kills = k;
       if (s.setter_attacks) s.setter_attacks = Object.fromEntries(Object.entries(s.setter_attacks).map(([snm, atks]) =>
         [snm, Object.fromEntries(Object.entries(atks).filter(([anm]) => pf.has(anm)))]));
@@ -4843,8 +4856,8 @@ function _paNorm(key) {
 // Build value tables from a pool of sessions (all players, all sets)
 function _paTables(sessions) {
   const P = {};
-  for (const s of sessions) for (const pl of Object.values(s.pts_added || {})) for (const keys of Object.values(pl))
-    for (const [k0, v] of Object.entries(keys)) {
+  for (const s of sessions) for (const pl of Object.values(s.pts_added || {})) for (const [pnV, keys] of Object.entries(pl))
+    if (!isVirt(pnV)) for (const [k0, v] of Object.entries(keys)) {
       if (k0[0] === 'X') continue;
       const k = _paNorm(k0); const r = P[k] || (P[k] = [0,0]); r[0] += v[0]; r[1] += v[1];
     }
@@ -4952,7 +4965,7 @@ function renderPointsAdded() {
       <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:#555"></div>
       <div style="position:absolute;top:0;bottom:0;${v>=0?'left:50%':'right:50%'};width:${w}%;background:${v>=0?'var(--green)':'var(--red)'};border-radius:2px"></div></div>`; };
   const POSL = { OUTSIDES:'OH', OPPOSITES:'OPP', MIDDLES:'MB', SETTERS:'S', LIBEROS:'L' };
-  const team = Object.fromEntries(PA_COLS.map(c => [c, rows.reduce((a, r) => a + r.v[c], 0)]));
+  const team = Object.fromEntries(PA_COLS.map(c => [c, rows.filter(r => !isVirt(r.p)).reduce((a, r) => a + r.v[c], 0)]));
   const body = rows.length ? rows.map(r => {
     const per = r.total / Math.max(1, r.sets.size);
     return `<tr>
@@ -5336,6 +5349,7 @@ function getTeamStats() {
         if (!key.startsWith(key.split('|')[0])) continue;
         // Match by session_id
         if (ps.session_id !== sess.id) continue;
+        if (isVirt(ps.player_num)) continue;
         agg.actions += ps.actions || 0;
         for (const [sk, sv] of Object.entries(ps.skills || {})) {
           if (!agg.skills[sk]) agg.skills[sk] = {attempts:0, evals:{}};
@@ -6071,7 +6085,7 @@ function plGroupTotals(sids, setN) {
   }
   for (const [sid, entries] of Object.entries(bySession)) {
     const s = DATA.sessions.find(x => x.id === sid); if (!s) continue;
-    for (const [pn, v] of entries) { add(getPlayerGroup(pn, s.season), v.skills || {}); add('TEAM', v.skills || {}); }
+    for (const [pn, v] of entries) { if (isVirt(pn)) continue; add(getPlayerGroup(pn, s.season), v.skills || {}); add('TEAM', v.skills || {}); }
   }
   return G;
 }
@@ -7929,6 +7943,7 @@ function renderSetterCourt(allCombos, totalAtt) {
 function getSetterSessionMap(seasons) {
   const bySession = {};
   for (const [key, ps] of Object.entries(DATA.player_session)) {
+    if (isVirt(ps.player_num)) continue;
     const sid = ps.session_id;
     const sess = DATA.sessions.find(s => s.id === sid);
     if (!sess || !seasons.includes(sess.season)) continue;

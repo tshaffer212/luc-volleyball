@@ -1063,6 +1063,74 @@ def fix_right_side_typos(session):
     return report
 
 
+# ── Coach-only virtual players ────────────────────────────────────────────────
+# A second, position-specific copy of a real player, shown on the COACH dashboard
+# only (build_player_portal.py skips them). Only the listed skills are copied, and
+# the page leaves virtual players out of every team / position-group total so
+# nothing is double counted. Their group (e.g. LIBEROS) gives them the right
+# benchmark: the other players at that position.
+VIRTUAL_PLAYERS = [
+    {'num': '7L', 'src': '7', 'season': 'Fall 2027', 'name': 'Jake Read 2.0',
+     'first_name': 'Jake', 'last_name': 'Read 2.0', 'position_code': '1', 'is_libero': True,
+     'skills': ['R', 'RM', 'RQ', 'D', 'F', 'E'],      # passing, digs, free balls, sets
+     'pa_skills': ['R', 'D', 'E', 'X']},               # Points Added touch types kept
+]
+
+
+def add_virtual_players(output, sets_out):
+    vmeta = {}
+    for v in VIRTUAL_PLAYERS:
+        src, num, se = v['src'], v['num'], v['season']
+        base = (output['players_by_season'].get(se) or {}).get(src)
+        if not base:
+            continue
+        info = dict(base, number=num, name=v['name'], first_name=v['first_name'], last_name=v['last_name'],
+                    position_code=v['position_code'], is_libero=v['is_libero'], virtual=True, virtual_of=src)
+        output['players_by_season'][se][num] = info
+        output['players'][num] = info
+        keep = set(v['skills'])
+
+        def copy_ps(ps, sid=None):
+            sk = {k: x for k, x in (ps.get('skills') or {}).items() if k in keep}
+            out = {k: x for k, x in ps.items() if k != 'skills'}
+            out.update(player_num=num, skills=sk, virtual=True,
+                       actions=sum(x.get('attempts', 0) for k, x in sk.items() if k not in ('RM', 'RQ')))
+            if sid:
+                out['session_id'] = sid
+            return out
+
+        sids = {e['id'] for e in output['sessions'] if e.get('season') == se}
+        for key, ps in list(output['player_session'].items()):
+            pn, sid = key.split('|', 1)
+            if pn == src and sid in sids:
+                c = copy_ps(ps, sid)
+                if c['actions']:
+                    output['player_session'][f'{num}|{sid}'] = c
+        pse = output['player_season'].get(f'{src}|{se}')
+        if pse:
+            output['player_season'][f'{num}|{se}'] = copy_ps(pse)
+        for e in output['sessions']:
+            if e['id'] not in sids:
+                continue
+            if src in (e.get('fbso_by_player') or {}):
+                e['fbso_by_player'][num] = list(e['fbso_by_player'][src])
+            for sn, pl in (e.get('pts_added') or {}).items():
+                if src in pl:
+                    kk = {k: x for k, x in pl[src].items() if k.split('|')[0] in v['pa_skills']}
+                    if kk:
+                        pl[num] = kk
+            for sn, se_d in (sets_out.get(e['id']) or {}).items():
+                sp = (se_d.get('player_session') or {}).get(src)
+                if sp:
+                    c = copy_ps(sp)
+                    if c['actions']:
+                        se_d['player_session'][num] = c
+                if src in (se_d.get('fbso_by_player') or {}):
+                    se_d['fbso_by_player'][num] = list(se_d['fbso_by_player'][src])
+        vmeta[num] = {'src': src, 'season': se}
+    output['virtual_players'] = vmeta
+
+
 def main(raw_path, out_path):
     print(f"Loading {raw_path} ...", file=sys.stderr)
     with open(raw_path) as f:
@@ -1975,6 +2043,8 @@ def main(raw_path, out_path):
                     })
             per[str(n)] = e
         sets_out[sid] = per
+
+    add_virtual_players(output, sets_out)
 
     sets_path = os.path.join(os.path.dirname(os.path.abspath(out_path)), 'dashboard_sets.json')
     with open(sets_path, 'w') as f:

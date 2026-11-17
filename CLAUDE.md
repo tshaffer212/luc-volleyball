@@ -59,6 +59,14 @@ open('dashboard.html','w').write(t.replace('__DASHBOARD_DATA__', data))
 "
 ```
 
+### Coach-only virtual players (Jake Read 2.0)
+`VIRTUAL_PLAYERS` in `aggregate.py` adds `7L` = "Jake Read 2.0", a libero-only copy of #7 (Fall 2027 only):
+only R/RM/RQ/D/F/E skills (and R/D/E/X Points Added touches) are copied, he's in the LIBEROS group, and
+`DATA.virtual_players` tells the dashboard to show his rows but leave him out of EVERY team and
+position-group total (JS helper `isVirt(pnum)`). Any new code that sums players into a team/group total
+must skip `isVirt(...)` players. The player portal never creates a login for virtual players.
+The real #7 Jake Read stays an outside hitter with all his data.
+
 ### Player portal (players.html)
 `build_player_portal.py` (run automatically by `rebuild.py`, or by hand after the rebuild above) writes one
 locked file per current-roster player to `player_data/<id>.json` plus `player_data/roster.json`.

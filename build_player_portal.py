@@ -207,10 +207,11 @@ def main():
     d = json.load(open(DASH))
     sets_data = json.load(open(SETS)) if SETS.exists() else {}
     pbs = d['players_by_season']
+    VIRT = set(d.get('virtual_players') or {})   # coach-only copies: no login, not in any team pool
     order = [s for s in ['Spring 2025', 'Fall 2025', 'Spring 2026', 'Fall 2026', 'Spring 2027', 'Fall 2027',
                          'Spring 2028', 'Fall 2028'] if s in pbs]
     roster_season = args.season or order[-1]
-    roster = pbs[roster_season]
+    roster = {n: p for n, p in pbs[roster_season].items() if not p.get('virtual')}   # coach-only copies never get a login
 
     # name -> {season: num}
     by_name = collections.defaultdict(dict)
@@ -218,6 +219,8 @@ def main():
         if se in SKIP_SEASONS:
             continue
         for n, p in pl.items():
+            if p.get('virtual'):
+                continue
             by_name[p['name']][se] = n
 
     # passwords
@@ -242,7 +245,9 @@ def main():
             continue
         dst = pool.setdefault(s['season'], {}).setdefault(s['type'], {})
         for pl in s['pts_added'].values():
-            for keys in pl.values():
+            for pn_, keys in pl.items():
+                if pn_ in VIRT:
+                    continue
                 for k, v in keys.items():
                     if k[0] == 'X':
                         continue
