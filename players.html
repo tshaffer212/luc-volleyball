@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Loyola Volleyball · Player Reports</title>
+<style>
+:root{--maroon:#8D0034;--maroon-dark:#5c0023;--maroon-light:#b5004a;--gold:#FEBC18;--bg:#0f0f0f;--surface:#1a1a1a;--surface2:#242424;--border:#333;--text:#f0f0f0;--muted:#999;--dim:#666;--green:#4caf50;--red:#ef5350}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,'Segoe UI',system-ui,sans-serif;font-size:13px}
+.wrap{max-width:1250px;margin:0 auto;padding:18px}
+.m{color:var(--muted);font-size:11px}.g{color:var(--green)}.r{color:var(--red)}.gold{color:var(--gold)}
+.n{text-align:right;font-variant-numeric:tabular-nums}
+/* login */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 0,#2a0012,#0f0f0f 70%);padding:20px}
+.lbox{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--gold);border-radius:12px;padding:26px}
+.lbox .logo{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:1px}
+.lbox label{display:block;font-size:11px;color:var(--muted);margin:16px 0 5px;text-transform:uppercase;letter-spacing:.6px}
+.lbox select,.lbox input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-size:15px}
+.lbox button{width:100%;margin-top:18px;background:var(--maroon);border:0;border-radius:6px;padding:11px;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+.lbox button:disabled{opacity:.6;cursor:wait}
+#lerr{color:var(--red);font-size:12px;margin-top:10px;min-height:16px;text-align:center}
+/* app */
+#app{display:none}
+header{background:linear-gradient(135deg,var(--maroon-dark),var(--maroon) 55%,var(--maroon-light));border-bottom:3px solid var(--gold);border-radius:10px 10px 0 0;padding:14px 18px;display:flex;align-items:center;gap:16px}
+header .num{font-size:34px;font-weight:800;color:var(--gold)}header h2{font-size:20px}
+header button{margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.45);border-radius:6px;padding:6px 12px;color:#fff;cursor:pointer;font-size:12px}
+.filters{background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:12px 18px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+.filters label.h{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
+.filters select{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-size:12px}
+.tg{display:inline-flex;gap:4px}.tg button,.btn{padding:5px 11px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface2);color:var(--text);cursor:pointer}
+.tg button.on,.btn.on{background:var(--maroon);border-color:var(--maroon);color:#fff}
+.dd{position:relative}.ddp{position:absolute;z-index:20;top:100%;left:0;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;max-height:340px;overflow:auto;width:290px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.ddp label{display:flex;gap:8px;align-items:center;padding:4px 2px;font-size:12px;cursor:pointer}.ddp .tag{font-size:10px;color:var(--muted);margin-left:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px}.kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}.kpi .v{font-size:24px;font-weight:800;margin-top:2px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}.tabs button{padding:7px 13px;border-radius:6px;border:1px solid var(--border);font-size:12px;background:var(--surface2);color:var(--text);cursor:pointer}.tabs button.on{background:var(--maroon);border-color:var(--maroon)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+h3{font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}th{font-size:10px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px;border-bottom:1px solid var(--border);white-space:nowrap}th.n{text-align:right}th.c{text-align:center}
+td{padding:6px;border-bottom:1px solid #232323;white-space:nowrap}
+tr.tot td{border-top:2px solid var(--gold);font-weight:700;color:var(--gold)}tr.dim td{color:#aaa;font-style:italic}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
+.brow{display:grid;grid-template-columns:150px 1fr 60px 64px;gap:8px;align-items:center;margin:7px 0}.btrack{height:14px;background:#262626;border-radius:3px;overflow:hidden}.bfill{height:100%;background:linear-gradient(90deg,var(--maroon),var(--gold))}.bv{font-weight:700;text-align:right}
+.rots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.rot{background:var(--surface2);border-radius:8px;padding:10px;text-align:center}.rl{font-size:11px;font-weight:700;color:var(--muted)}.rv{font-size:22px;font-weight:800}
+.empty{color:var(--muted);padding:14px;text-align:center}
+.help{background:#141b24;border:1px solid #23344a;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.55;color:#c8d6e5;margin-bottom:10px;display:none}.help b{color:#fff}
+.qb{width:18px;height:18px;border-radius:50%;border:1px solid var(--muted);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;line-height:16px;padding:0}
+.mix{display:flex;height:8px;width:160px;border-radius:2px;overflow:hidden;background:#222}
+.foot{color:var(--dim);font-size:11px;text-align:center;margin:20px 0}
+@media(max-width:640px){.wrap{padding:10px}header .num{font-size:26px}.brow{grid-template-columns:90px 1fr 54px 54px}.g2{grid-template-columns:1fr}}
+@media print{body{background:#fff;color:#000}.filters,.tabs,header button,.qb,.foot{display:none!important}.card,.kpi{border-color:#bbb;background:#fff}header{border-radius:0}td,th{color:#000!important}}
+</style></head>
+<body>
+
+<div id="login"><div class="lbox">
+  <div class="logo">LOYOLA VOLLEYBALL</div><div class="m">Player Reports</div>
+  <label for="lp">Player</label><select id="lp"><option value="">Loading…</option></select>
+  <label for="lpw">Password</label><input id="lpw" type="password" autocomplete="current-password" placeholder="xxxx-xxxx-xxxx">
+  <button id="lbtn" onclick="signIn()">Sign in</button>
+  <div id="lerr"></div>
+  <div class="m" style="margin-top:8px;text-align:center">Forgot your password? Ask Coach.</div>
+</div></div>
+
+<div id="app"><div class="wrap">
+  <header><div class="num" id="h-num"></div><div><h2 id="h-name"></h2><div style="font-size:12px;opacity:.85" id="h-sub"></div></div><button onclick="signOut()">Sign out</button></header>
+  <div class="filters">
+    <div><label class="h">Season</label><select id="f-season" onchange="setF('season',this.value)"></select></div>
+    <div><label class="h">Session Type</label><span class="tg" id="f-type"></span></div>
+    <div class="dd"><label class="h">Sessions</label><button class="btn" id="f-sess-btn" onclick="toggleSess(event)"></button><div class="ddp" id="f-sess" style="display:none" onclick="event.stopPropagation()"></div></div>
+    <div id="f-set-wrap"><label class="h">Set</label><select id="f-set" onchange="setF('set',this.value)"></select></div>
+    <div><label class="h">Pass Scale</label><span class="tg" id="f-scale"></span></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="panel"></div>
+  <div class="foot" id="foot"></div>
+</div></div>
+
+<script>
+'use strict';
+// ── Decrypt (matches build_player_portal.py) ─────────────────────────────────
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function unlock(file, pw) {
+  const salt = b64(file.salt), nonce = b64(file.nonce), ct = b64(file.ct), tag = b64(file.tag);
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: file.iter, hash: 'SHA-256' }, base, 512));
+  const hm = { name: 'HMAC', hash: 'SHA-256' };
+  const ek = await crypto.subtle.importKey('raw', bits.slice(0, 32), hm, false, ['sign']);
+  const mk = await crypto.subtle.importKey('raw', bits.slice(32), hm, false, ['verify']);
+  const msg = new Uint8Array(nonce.length + ct.length); msg.set(nonce); msg.set(ct, nonce.length);
+  if (!(await crypto.subtle.verify('HMAC', mk, tag, msg))) throw new Error('badpw');
+  const nb = Math.ceil(ct.length / 32), jobs = [];
+  for (let i = 0; i < nb; i++) { const m = new Uint8Array(nonce.length + 4); m.set(nonce); new DataView(m.buffer).setUint32(nonce.length, i); jobs.push(crypto.subtle.sign('HMAC', ek, m)); }
+  const ks = await Promise.all(jobs);
+  const out = new Uint8Array(ct.length);
+  for (let i = 0; i < nb; i++) { const k = new Uint8Array(ks[i]); const o = i * 32; for (let j = 0; j < 32 && o + j < ct.length; j++) out[o + j] = ct[o + j] ^ k[j]; }
+  const txt = await new Response(new Blob([out]).stream().pipeThrough(new DecompressionStream('deflate'))).text();
+  return JSON.parse(txt);
+}
+
+let ROSTER = null, PD = null;
+const ss = { get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+             set(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }, del(k) { try { sessionStorage.removeItem(k); } catch (e) {} } };
+
+async function loadRoster() {
+  const sel = document.getElementById('lp');
+  try {
+    ROSTER = await (await fetch('player_data/roster.json', { cache: 'no-cache' })).json();
+    sel.innerHTML = '<option value="">Select your name</option>' + ROSTER.players.map(p => `<option value="${p.id}">#${p.num} ${esc(p.name)}</option>`).join('');
+    const saved = ss.get('luc_pp');
+    if (saved) { const [id, pw] = JSON.parse(saved); sel.value = id; document.getElementById('lpw').value = pw; signIn(true); }
+  } catch (e) { sel.innerHTML = '<option value="">Could not load roster</option>'; }
+}
+async function signIn(auto) {
+  const id = document.getElementById('lp').value, pw = document.getElementById('lpw').value.trim();
+  const err = document.getElementById('lerr'), btn = document.getElementById('lbtn');
+  if (!id) { err.textContent = 'Select your name.'; return; }
+  if (!pw) { err.textContent = 'Enter your password.'; return; }
+  if (!window.crypto?.subtle || !window.DecompressionStream) { err.textContent = 'This browser is too old. Update Safari/Chrome and try again.'; return; }
+  btn.disabled = true; btn.textContent = 'Unlocking…'; err.textContent = '';
+  try {
+    const f = await (await fetch(`player_data/${id}.json`, { cache: 'no-cache' })).json();
+    PD = await unlock(f, pw);
+    ss.set('luc_pp', JSON.stringify([id, pw]));
+    document.getElementById('lpw').value = '';
+    startApp();
+  } catch (e) {
+    err.textContent = e.message === 'badpw' ? 'Incorrect password.' : 'Something went wrong. Try again.';
+    if (auto) ss.del('luc_pp');
+  } finally { btn.disabled = false; btn.textContent = 'Sign in'; }
+}
+function signOut() { PD = null; ss.del('luc_pp'); location.reload(); }
+document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+
+// ── State ────────────────────────────────────────────────────────────────────
+const F = { season: null, type: 'match', sel: null, set: 'all', scale: '4', tab: 'servrcv', paMode: 'adj', sdPhase: 'all' };
+const POS = { '1': 'Libero', '2': 'Outside Hitter', '3': 'Opposite', '4': 'Middle', '5': 'Setter' };
+const POSG = { '1': 'LIBEROS', '2': 'OUTSIDES', '3': 'OPPOSITES', '4': 'MIDDLES', '5': 'SETTERS' };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function startApp() {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  const p = PD.player;
+  F.season = PD.seasons[PD.seasons.length - 1];
+  const num = p.nums[F.season];
+  document.getElementById('h-num').textContent = '#' + num;
+  document.getElementById('h-name').textContent = p.name;
+  if (!PD.sessions.some(s => s.se === F.season && s.t === 'match')) F.type = 'both';
+  document.getElementById('foot').textContent = 'Data updated ' + PD.gen + ' · only your own stats are in this page';
+  document.addEventListener('click', () => { document.getElementById('f-sess').style.display = 'none'; });
+  render();
+}
+function setF(k, v) { F[k] = v; if (k === 'season' || k === 'type') { F.sel = null; F.set = 'all'; } render(); }
+
+// ── Data selection + aggregation ─────────────────────────────────────────────
+function inScope() { return PD.sessions.filter(s => (F.season === 'all' || s.se === F.season) && (F.type === 'both' || s.t === F.type)); }
+function selected() { return inScope().filter(s => !F.sel || F.sel.has(s.id)); }
+function addInto(dst, src) {
+  for (const [k, v] of Object.entries(src || {})) {
+    if (v === null || v === undefined) continue;
+    if (Array.isArray(v)) { const c = dst[k] || (dst[k] = v.map(() => 0)); v.forEach((x, i) => c[i] += x || 0); }
+    else if (typeof v === 'object') addInto(dst[k] || (dst[k] = {}), v);
+    else if (typeof v === 'number') dst[k] = (dst[k] || 0) + v;
+  }
+  return dst;
+}
+const hasTouch = pa => pa && Object.keys(pa).some(k => k[0] !== 'X');
+function nameOf(se, n) { return (PD.names[se] || {})[n] || ('#' + n); }
+function keyed(obj, se) {   // re-key setter/hitter numbers by name so seasons with different numbers merge correctly
+  const o = {}; for (const [k, v] of Object.entries(obj || {})) o[(k === 'OTHER' || k === 'MISC' || k === 'OVR') ? k : nameOf(se, k)] = v; return o;
+}
+function aggregate() {
+  const A = { sk: {}, rz: {}, dk: [0, 0], rot: {}, bs: {}, fb: [0, 0], pa: {}, ph: {}, hc: {}, sd: {}, sbt: {}, sbo: {}, sets: 0, n: 0, months: {} };
+  for (const s of selected()) {
+    const slices = (F.set !== 'all' && s.t === 'match') ? (s.s && s.s[F.set] ? [s.s[F.set]] : []) : [s.a];
+    for (const x of slices) {
+      A.n++;
+      addInto(A.sk, x.sk); addInto(A.rz, x.rz); addInto(A, { dk: x.dk || [0, 0], fb: x.fb || [0, 0] });
+      addInto(A.rot, x.rot); addInto(A.bs, keyed(x.bs, s.se));
+      addInto(A.pa[s.t] || (A.pa[s.t] = {}), x.pa); addInto(A.ph, x.ph); addInto(A.hc, x.hc);
+      if (x.sd) { const sd = {}; for (const [h, ph] of Object.entries(keyed(x.sd, s.se))) sd[h] = ph; addInto(A.sd, sd); }
+      addInto(A.sbt, x.sbt); addInto(A.sbo, x.sbo);
+      const mk = s.d.slice(0, 7); addInto(A.months[mk] || (A.months[mk] = {}), { A: x.sk?.A, R: x.sk?.R, S: x.sk?.S });
+    }
+    // sets played (for per-set numbers)
+    if (s.t === 'match' && F.set === 'all') A.sets += Object.values(s.s || {}).filter(x => hasTouch(x.pa)).length || (hasTouch(s.a.pa) ? 1 : 0);
+    else if (slices.length && hasTouch(slices[0].pa)) A.sets += 1;
+  }
+  return A;
+}
+
+// ── Formatting helpers ───────────────────────────────────────────────────────
+const pct = (x, n) => n ? (x / n * 100).toFixed(1) + '%' : '—';
+const effv = (k, e, b, a) => a ? (k - e - b) / a : null;
+const fE = v => v === null || v === undefined ? '—' : (v * 100).toFixed(1) + '%';
+const fS = v => v === null || v === undefined ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+const ec = v => v === null ? '' : v >= 0.30 ? 'g' : v < 0.10 ? 'r' : '';
+const evA = (ev, n) => ({ k: ev?.['#'] || 0, e: ev?.['='] || 0, b: ev?.['/'] || 0, a: n || 0 });
+function passPts(ev) { ev = ev || {}; return F.scale === '4' ? 4 * (ev['#'] || 0) + 3 * (ev['+'] || 0) + 2 * (ev['!'] || 0) + (ev['-'] || 0) + 0.5 * (ev['/'] || 0)
+  : 3 * (ev['#'] || 0) + 2 * (ev['+'] || 0) + 2 * (ev['!'] || 0) + (ev['-'] || 0) + 0.5 * (ev['/'] || 0); }
+const passAvg = (ev, n) => n ? passPts(ev) / n : null;
+function catPts(c) { return F.scale === '4' ? 4 * (c.perf || 0) + 3 * (c.good || 0) + 2 * (c.med || 0) + (c.oos || 0) + 0.5 * (c.over || 0)
+  : 3 * (c.perf || 0) + 2 * (c.good || 0) + 2 * (c.med || 0) + (c.oos || 0) + 0.5 * (c.over || 0); }
+const pac = v => v === null ? '' : v >= (F.scale === '4' ? 3 : 2) ? 'g' : v < (F.scale === '4' ? 2 : 1.5) ? 'r' : '';
+const cname = c => (PD.cn || {})[c] || '';
+function atkRow(label, r, cls = '') {
+  const e = effv(r.k, r.e, r.b ?? r.bk ?? 0, r.a);
+  return `<tr class="${cls}"><td>${label}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.b ?? r.bk ?? 0}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${pct(r.k, r.a)}</td></tr>`;
+}
+const ATK_H = '<th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th><th class="n">K%</th>';
+const card = (title, body, extra = '') => `<div class="card"><h3>${title}${extra}</h3>${body}</div>`;
+const helpBtn = id => ` <button class="qb" onclick="const e=document.getElementById('${id}');e.style.display=e.style.display==='block'?'none':'block'">?</button>`;
+const tbl = (head, rows) => `<div class="tw"><table><tr>${head}</tr>${rows}</table></div>`;
+function bucketLbl(b) {
+  const L = F.scale === '3' ? { perf: '3-pt pass (#)', good: '2-pt pass (+ / !)', oos: '1-pt pass (-)' } : { perf: '4-pt pass (#)', good: '3-pt pass (+)', med: '2-pt pass (!)', oos: '1-pt pass (-)' };
+  return L[b] || ({ fboth: 'Other first ball', transition: 'Transition', fbso: 'First ball' }[b]) || b;
+}
+
+// ── Filters UI ───────────────────────────────────────────────────────────────
+function renderFilters() {
+  const p = PD.player;
+  const sSel = document.getElementById('f-season');
+  sSel.innerHTML = PD.seasons.slice().reverse().map(s => `<option value="${s}">${s}</option>`).join('') + (PD.seasons.length > 1 ? '<option value="all">All seasons</option>' : '');
+  sSel.value = F.season;
+  const num = F.season === 'all' ? p.nums[PD.seasons[PD.seasons.length - 1]] : p.nums[F.season];
+  document.getElementById('h-num').textContent = '#' + num;
+  document.getElementById('h-sub').textContent = (POS[p.pos] || '') + ' · ' + (F.season === 'all' ? 'All seasons' : F.season);
+  document.getElementById('f-type').innerHTML = [['match', 'Matches'], ['practice', 'Practices'], ['both', 'Both']]
+    .map(([v, l]) => `<button class="${F.type === v ? 'on' : ''}" onclick="setF('type','${v}')">${l}</button>`).join('');
+  document.getElementById('f-scale').innerHTML = [['4', '4-pt'], ['3', '3-pt']]
+    .map(([v, l]) => `<button class="${F.scale === v ? 'on' : ''}" onclick="setF('scale','${v}')">${l}</button>`).join('');
+  const sc = inScope(), n = F.sel ? sc.filter(s => F.sel.has(s.id)).length : sc.length;
+  const noun = F.type === 'match' ? 'matches' : F.type === 'practice' ? 'practices' : 'sessions';
+  document.getElementById('f-sess-btn').innerHTML = (F.sel ? `${n} of ${sc.length} ${noun}` : `All ${sc.length} ${noun}`) + ' <span style="opacity:.6">▾</span>';
+  const fmtD = d => new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  document.getElementById('f-sess').innerHTML = `<div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn" onclick="sessAll(true)">All</button><button class="btn" onclick="sessAll(false)">None</button></div>` +
+    sc.slice().reverse().map(s => `<label><input type="checkbox" ${!F.sel || F.sel.has(s.id) ? 'checked' : ''} onchange="sessToggle('${esc(s.id).replace(/'/g, "\\'")}',this.checked)"> ${fmtD(s.d)} · ${s.t === 'match' ? 'vs ' : ''}${esc(s.o)}<span class="tag">${s.t === 'match' ? 'Match' : 'Practice'}</span></label>`).join('');
+  // Set filter (matches only)
+  const sets = new Set(); selected().forEach(s => { if (s.t === 'match') Object.keys(s.s || {}).forEach(k => sets.add(+k)); });
+  const showSet = sets.size > 0;
+  document.getElementById('f-set-wrap').style.display = showSet ? '' : 'none';
+  if (F.set !== 'all' && !sets.has(+F.set)) F.set = 'all';
+  document.getElementById('f-set').innerHTML = '<option value="all">All sets</option>' + [...sets].sort((a, b) => a - b).map(n => `<option value="${n}">Set ${n}</option>`).join('');
+  document.getElementById('f-set').value = F.set;
+}
+function toggleSess(e) { e.stopPropagation(); const p = document.getElementById('f-sess'); p.style.display = p.style.display === 'none' ? 'block' : 'none'; }
+function sessToggle(id, on) { const all = inScope().map(s => s.id); if (!F.sel) F.sel = new Set(all); on ? F.sel.add(id) : F.sel.delete(id); if (F.sel.size === all.length) F.sel = null; renderKeepOpen(); }
+function sessAll(on) { F.sel = on ? null : new Set(); renderKeepOpen(); }
+function renderKeepOpen() { render(); document.getElementById('f-sess').style.display = 'block'; }
+
+// ── Main render ──────────────────────────────────────────────────────────────
+let AG = null;
+function render() {
+  renderFilters();
+  AG = aggregate();
+  const sk = AG.sk, A = sk.A || {}, S = sk.S || {}, R = sk.R || {}, B = sk.B || {}, D = sk.D || {}, E = sk.E || {};
+  const a = evA(A.ev, A.n), aE = effv(a.k, a.e, a.b, a.a);
+  const k = [];
+  if (A.n) k.push(['Attack Eff', `<span class="${ec(aE)}">${fE(aE)}</span>`, `${A.n} att · K% ${pct(a.k, a.a)}`]);
+  if (PD.player.setter && E.n) k.push(['Sets', E.n, `${(E.ev || {})['='] || 0} set errors`]);
+  if (S.n) k.push(['Serve Ace %', pct(S.ev['#'] || 0, S.n), `${S.ev['#'] || 0} aces / ${S.n} serves`]);
+  if (S.n) k.push(['Serve Error %', `<span class="r">${pct(S.ev['='] || 0, S.n)}</span>`, `${S.ev['='] || 0} errors`]);
+  if (R.n) { const pv = passAvg(R.ev, R.n); k.push(['Pass Avg', `<span class="${pac(pv)}">${pv.toFixed(2)}</span>`, `${R.n} passes · ${F.scale}-pt scale`]); }
+  if (B.n) k.push(['Block Kills', (B.ev || {})['#'] || 0, `${B.n} block touches`]);
+  if (D.n) k.push(['Digs', D.n - ((D.ev || {})['='] || 0), `${D.n} dig attempts`]);
+  document.getElementById('kpis').innerHTML = AG.n ? k.map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="m">${s}</div></div>`).join('') : '';
+  const TABS = [['servrcv', 'Serve & Receive'], ['attack', 'Attack by Set Type'], ['setter', 'Attack by Setter'], ['rot', 'Attack by Rotation'], ['blk', 'Block & Defense'], ['adv', 'Advanced']];
+  if (PD.player.setter) TABS.splice(3, 0, ['dist', 'Setter Breakdown']);
+  if (!TABS.some(t => t[0] === F.tab)) F.tab = 'servrcv';
+  document.getElementById('tabs').innerHTML = TABS.map(([v, l]) => `<button class="${F.tab === v ? 'on' : ''}" onclick="F.tab='${v}';render()">${l}</button>`).join('') +
+    `<button style="margin-left:auto" onclick="window.print()">⤓ Print / PDF</button>`;
+  const P = document.getElementById('panel');
+  if (!AG.n) { P.innerHTML = '<div class="card empty">No data for these filters.</div>'; return; }
+  P.innerHTML = ({ servrcv: tabServe, attack: tabAttack, setter: tabSetter, dist: tabDist, rot: tabRot, blk: tabBlock, adv: tabAdv })[F.tab]();
+}
+
+// ── Serve & Receive ──────────────────────────────────────────────────────────
+function tabServe() {
+  const sk = AG.sk; let html = '';
+  const srow = (lbl, r) => { if (!r || !r.n) return ''; const ev = r.ev || {}; const avg = (3 * (ev['#'] || 0) + 2 * (ev['+'] || 0) + 2 * (ev['/'] || 0) + (ev['-'] || 0)) / r.n;
+    return `<tr><td>${lbl}</td><td class="n">${r.n}</td><td class="n g">${ev['#'] || 0}</td><td class="n">${ev['+'] || 0}</td><td class="n">${ev['/'] || 0}</td><td class="n">${ev['-'] || 0}</td><td class="n r">${ev['='] || 0}</td><td class="n"><b>${pct(ev['#'] || 0, r.n)}</b></td><td class="n r">${pct(ev['='] || 0, r.n)}</td><td class="n">${avg.toFixed(2)}</td></tr>`; };
+  if (sk.S && sk.S.n) html += card('Serving', tbl('<th></th><th class="n">Att</th><th class="n">Ace</th><th class="n">Pos (+)</th><th class="n">Over (/)</th><th class="n">Neg (-)</th><th class="n">Err</th><th class="n">Ace%</th><th class="n">Err%</th><th class="n">Srv Avg</th>',
+    srow('All serves', sk.S) + srow('Float', sk.SM) + srow('Topspin / jump', sk.SQ)) + '<div class="m" style="margin-top:6px">Serve avg: ace 3 · positive/overpass 2 · negative 1 · error 0.</div>');
+  const four = F.scale === '4';
+  const cats = four ? ['perf', 'good', 'med', 'oos', 'over', 'err'] : ['perf', 'good', 'oos', 'over', 'err'];
+  const pv = four ? { perf: 4, good: 3, med: 2, oos: 1, over: '½', err: 0 } : { perf: 3, good: 2, oos: 1, over: '½', err: 0 };
+  const CN = { perf: 'Perf', good: 'Good', med: 'Med', oos: 'OoS', over: 'Over', err: 'Err' };
+  const catOf = r => { const c = r.cat ? { ...r.cat } : { perf: r.ev['#'] || 0, good: r.ev['+'] || 0, med: r.ev['!'] || 0, oos: r.ev['-'] || 0, over: r.ev['/'] || 0, err: r.ev['='] || 0 }; if (!four) { c.good = (c.good || 0) + (c.med || 0); c.med = 0; } return c; };
+  const rrow = (lbl, r) => { if (!r || !r.n) return ''; const c = catOf(r); const av = passAvg(r.ev, r.n);
+    return `<tr><td>${lbl}</td><td class="n">${r.n}</td>${cats.map(k => `<td class="n">${c[k] || 0}</td>`).join('')}<td class="n ${pac(av)}"><b>${av.toFixed(2)}</b></td><td class="n">${pct((c.perf || 0) + (c.good || 0), r.n)}</td><td class="n r">${pct(c.err || 0, r.n)}</td></tr>`; };
+  if (sk.R && sk.R.n) {
+    html += card('Reception', tbl(`<th></th><th class="n">Att</th>${cats.map(k => `<th class="n">${CN[k]} · ${pv[k]}</th>`).join('')}<th class="n">Pass Avg</th><th class="n">Perf+Good%</th><th class="n">Err%</th>`,
+      rrow('All passes', sk.R) + rrow('vs Float', sk.RM) + rrow('vs Topspin', sk.RQ)) +
+      (AG.fb[0] ? `<div style="margin-top:10px">First-ball sideout when you passed: <b class="gold">${pct(AG.fb[1], AG.fb[0])}</b> <span class="m">(${AG.fb[1]} kills on ${AG.fb[0]} passes)</span></div>` : ''));
+    const zs = Object.entries(AG.rz).filter(([, v]) => v.n);
+    if (zs.length) html += card('Passing by Zone', tbl('<th>Zone</th><th class="n">Att</th><th class="n">Pass Avg</th><th class="n">Perf%</th><th class="n">Err%</th>',
+      zs.sort((a, b) => a[0] - b[0]).map(([z, v]) => { const av = passAvg(v.ev, v.n); return `<tr><td>Zone ${z}</td><td class="n">${v.n}</td><td class="n ${pac(av)}"><b>${av.toFixed(2)}</b></td><td class="n">${pct(v.ev['#'] || 0, v.n)}</td><td class="n r">${pct(v.ev['='] || 0, v.n)}</td></tr>`; }).join('')));
+  } else html += card('Reception', '<div class="empty">No receptions in these sessions.</div>');
+  const rs = AG.rot.s || {}, rr = AG.rot.r || {};
+  const rk = ['1', '2', '3', '4', '5', '6'].filter(r => (rs[r] && rs[r].att) || (rr[r] && rr[r].att));
+  if (rk.length) html += card('By Rotation', tbl('<th>Rotation</th><th class="n">Serves</th><th class="n">Ace</th><th class="n">Err</th><th class="n">Passes</th><th class="n">Pass Avg</th>',
+    rk.map(r => { const s = rs[r] || {}, p = rr[r] || {}; const av = p.att ? catPts(four ? p : { ...p, good: (p.good || 0) + (p.med || 0), med: 0 }) / p.att : null;
+      return `<tr><td>R${r}</td><td class="n">${s.att || '—'}</td><td class="n g">${s.att ? s.ace : ''}</td><td class="n r">${s.att ? s.err : ''}</td><td class="n">${p.att || '—'}</td><td class="n ${pac(av)}">${av === null ? '—' : av.toFixed(2)}</td></tr>`; }).join('')) + '<div class="m" style="margin-top:6px">Matches only.</div>');
+  return html || card('Serve & Receive', '<div class="empty">No serves or passes in these sessions.</div>');
+}
+
+// ── Attack by set type (+ by pass before the attack) ─────────────────────────
+function tabAttack() {
+  const A = AG.sk.A;
+  if (!A || !A.n) return card('Attack by Set Type', '<div class="empty">No attacks in these sessions.</div>');
+  const rows = Object.entries(A.c || {}).sort((a, b) => b[1].n - a[1].n).map(([c, v]) => atkRow(`<b>${c}</b> <span class="m">${esc(cname(c))}</span>`, evA(v.ev, v.n))).join('');
+  let html = card('Attack by Set Type', tbl('<th>Set type</th>' + ATK_H, rows + atkRow('TOTAL', evA(A.ev, A.n), 'tot')));
+  // by pass quality before the attack (from the Points Added touch log)
+  const cells = hitterCells();
+  if (Object.keys(cells.ph).length) {
+    const PH = ['#', '+', '!', '-', 'o', 'T'].filter(p => cells.ph[p]);
+    const lbl = { '#': bucketLbl('perf'), '+': bucketLbl('good'), '!': bucketLbl('med'), '-': bucketLbl('oos'), o: 'Other first ball', T: 'Transition' };
+    html += card('Attack by Pass Before It', tbl('<th>Situation</th>' + ATK_H, PH.map(p => atkRow(lbl[p], cells.ph[p])).join('')));
+  }
+  return html;
+}
+function hitterCells() {    // his attacks by situation from the touch log: sit "phase/group" -> {k,e,b,a}
+  const norm = ph => (F.scale === '3' && ph === '!') ? '+' : ph;
+  const out = { cells: {}, ph: {}, grp: {} }; const z = () => ({ k: 0, e: 0, b: 0, a: 0 });
+  for (const pa of Object.values(AG.pa)) for (const [k, rec] of Object.entries(pa)) {
+    if (k[0] !== 'A') continue;
+    const [, ev, sit0] = k.split('|'); const [ph0, g] = sit0.split('/'); const ph = norm(ph0), sit = ph + '/' + g;
+    for (const r of [out.cells[sit] || (out.cells[sit] = z()), out.ph[ph] || (out.ph[ph] = z()), out.grp[g] || (out.grp[g] = z())]) {
+      r.a += rec[0]; if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0];
+    }
+  }
+  return out;
+}
+
+// ── Attack by setter (his own attacks only) ──────────────────────────────────
+function tabSetter() {
+  const bs = AG.bs; const keys = Object.keys(bs).filter(k => bs[k].OVR && bs[k].OVR.a);
+  if (!keys.length) return card('Attack by Setter', '<div class="empty">No attacks in these sessions.</div>');
+  const real = keys.filter(k => k !== 'OTHER' && k !== 'MISC').sort((a, b) => bs[b].OVR.a - bs[a].OVR.a);
+  const lab = k => k === 'OTHER' ? 'Other (non-setter sets)' : k === 'MISC' ? 'MISC (setter not identified)' : esc(k);
+  const tot = { k: 0, e: 0, bk: 0, a: 0 }; keys.forEach(k => ['k', 'e', 'bk', 'a'].forEach(f => tot[f] += bs[k].OVR[f] || 0));
+  const rows = real.map(k => atkRow(lab(k), bs[k].OVR)).join('') + ['OTHER', 'MISC'].filter(k => keys.includes(k)).map(k => atkRow(lab(k), bs[k].OVR, 'dim')).join('') + atkRow('TOTAL', tot, 'tot');
+  const bars = real.map(k => { const r = bs[k].OVR, e = effv(r.k, r.e, r.bk, r.a);
+    return `<div class="brow"><div style="font-size:12px;overflow:hidden;text-overflow:ellipsis">${lab(k)}</div><div class="btrack"><div class="bfill" style="width:${Math.max(0, Math.min(1, (e || 0) / 0.6)) * 100}%"></div></div><div class="bv">${fE(e)}</div><div class="m n">${r.a} att</div></div>`; }).join('');
+  const combos = [...new Set(real.flatMap(k => Object.keys(bs[k]).filter(c => c !== 'OVR')))].sort((a, b) => real.reduce((s, k) => s + (bs[k][b]?.a || 0), 0) - real.reduce((s, k) => s + (bs[k][a]?.a || 0), 0));
+  const mx = `<div class="tw"><table><tr><th></th>${real.map(k => `<th colspan="5" class="c" style="border-left:2px solid #333">${lab(k)}</th>`).join('')}</tr>
+    <tr><th>Set type</th>${real.map(() => '<th class="n" style="border-left:2px solid #333">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th>').join('')}</tr>
+    ${combos.map(c => `<tr><td><b>${c}</b> <span class="m">${esc(cname(c))}</span></td>${real.map(k => { const v = bs[k][c]; if (!v || !v.a) return '<td class="n m" colspan="5" style="border-left:2px solid #333">—</td>'; const e = effv(v.k, v.e, v.bk, v.a);
+      return `<td class="n" style="border-left:2px solid #333">${v.k}</td><td class="n">${v.e}</td><td class="n">${v.bk}</td><td class="n">${v.a}</td><td class="n ${ec(e)}">${fE(e)}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  return `<div class="g2">${card('Attack by Setter', tbl('<th>Setter</th>' + ATK_H, rows) + '<div class="m" style="margin-top:8px">Other = second-ball / out-of-system sets by non-setters. MISC = the setter couldn\'t be identified in the code.</div>')}${card('Efficiency by Setter', bars)}</div>` + card('Set Type × Setter', mx);
+}
+
+// ── Setter breakdown (setters only: full distribution) ───────────────────────
+function tabDist() {
+  const sd = AG.sd; const phases = ['all', 'fbso', 'perf', 'good', 'med', 'oos', 'transition'].filter(p => Object.values(sd).some(h => h[p]));
+  if (!Object.keys(sd).length) return card('Setter Breakdown', '<div class="empty">No sets in these sessions.</div>');
+  if (!phases.includes(F.sdPhase)) F.sdPhase = 'all';
+  const PL = { all: 'All', fbso: 'First ball', perf: bucketLbl('perf'), good: bucketLbl('good'), med: bucketLbl('med'), oos: bucketLbl('oos'), transition: 'Transition' };
+  const btns = `<div class="tg" style="margin-bottom:10px;flex-wrap:wrap">${phases.map(p => `<button class="${F.sdPhase === p ? 'on' : ''}" onclick="F.sdPhase='${p}';render()">${PL[p]}</button>`).join('')}</div>`;
+  const ph = F.sdPhase;
+  const hit = Object.keys(sd).filter(h => h !== 'OVR' && sd[h][ph] && sd[h][ph].OVR && sd[h][ph].OVR.a).sort((a, b) => sd[b][ph].OVR.a - sd[a][ph].OVR.a);
+  const tot = { k: 0, e: 0, bk: 0, a: 0 }; hit.forEach(h => ['k', 'e', 'bk', 'a'].forEach(f => tot[f] += sd[h][ph].OVR[f] || 0));
+  const rows = hit.map(h => { const r = sd[h][ph].OVR, e = effv(r.k, r.e, r.bk, r.a);
+    return `<tr><td>${esc(h)}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.bk}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${pct(r.k, r.a)}</td><td class="n gold">${pct(r.a, tot.a)}</td></tr>`; }).join('') +
+    `<tr class="tot"><td>TOTAL</td><td class="n">${tot.k}</td><td class="n">${tot.e}</td><td class="n">${tot.bk}</td><td class="n">${tot.a}</td><td class="n">${fE(effv(tot.k, tot.e, tot.bk, tot.a))}</td><td class="n">${pct(tot.k, tot.a)}</td><td class="n">100%</td></tr>`;
+  const combos = {}; hit.forEach(h => Object.entries(sd[h][ph]).forEach(([c, v]) => { if (c !== 'OVR') addInto(combos[c] || (combos[c] = {}), v); }));
+  const crow = Object.entries(combos).sort((a, b) => b[1].a - a[1].a).map(([c, v]) => atkRow(`<b>${c}</b> <span class="m">${esc(cname(c))}</span>`, v) .replace('</tr>', `<td class="n gold">${pct(v.a, tot.a)}</td></tr>`)).join('');
+  const cl = Object.keys(combos).sort((a, b) => combos[b].a - combos[a].a);
+  const mx = `<div class="tw"><table><tr><th>Hitter</th>${cl.map(c => `<th class="n">${c}</th>`).join('')}</tr>${hit.map(h => `<tr><td>${esc(h)}</td>${cl.map(c => { const v = sd[h][ph][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  return btns + `<div class="g2">${card('Distribution by Hitter', tbl('<th>Hitter</th>' + ATK_H + '<th class="n">Share</th>', rows))}${card('Distribution by Set Type', tbl('<th>Set type</th>' + ATK_H + '<th class="n">Share</th>', crow))}</div>` +
+    card('Hitter × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx);
+}
+
+// ── Rotation ─────────────────────────────────────────────────────────────────
+function tabRot() {
+  const ra = AG.rot.a || {};
+  const rk = ['1', '2', '3', '4', '5', '6'].filter(r => ra[r] && ra[r].OVR && ra[r].OVR.a);
+  if (!rk.length) return card('Attack by Rotation', '<div class="empty">No rotation data (matches only).</div>');
+  const grid = ['4', '3', '2', '5', '6', '1'].map(r => { const v = (ra[r] || {}).OVR; if (!v || !v.a) return `<div class="rot"><div class="rl">R${r}</div><div class="rv m">—</div></div>`;
+    const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">R${r}</div><div class="rv ${ec(e)}">${fE(e)}</div><div class="m">${v.k}K · ${v.e}E · ${v.bk}BLK · ${v.a} att</div></div>`; }).join('');
+  const rows = rk.map(r => atkRow('R' + r, ra[r].OVR)).join('');
+  const cl = [...new Set(rk.flatMap(r => Object.keys(ra[r]).filter(c => c !== 'OVR')))].sort();
+  const mx = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(c => `<th class="n">${c}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => { const v = ra[r][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  return `<div class="g2">${card('Attack by Rotation', `<div class="rots">${grid}</div><div class="m" style="margin-top:8px">Laid out like the court: R4 · R3 · R2 front, R5 · R6 · R1 back.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
+    card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx);
+}
+
+// ── Block & defense ──────────────────────────────────────────────────────────
+function tabBlock() {
+  const sk = AG.sk; const EV = ['#', '+', '!', '-', '/', '='];
+  const L = { B: ['Block', { '#': 'Kill block', '+': 'Good touch', '!': 'Medium', '-': 'Poor touch', '/': 'Invasion / over', '=': 'Error' }],
+              D: ['Dig', { '#': 'Perfect', '+': 'Good', '!': 'Medium', '-': 'Poor', '/': 'Overpass', '=': 'Error' }],
+              F: ['Free ball', { '#': 'Perfect', '+': 'Good', '!': 'Medium', '-': 'Poor', '/': 'Overpass', '=': 'Error' }] };
+  let html = '';
+  for (const s of ['B', 'D', 'F']) {
+    const r = sk[s]; if (!r || !r.n) continue;
+    const used = EV.filter(e => r.ev[e]);
+    html += card(L[s][0], tbl('<th class="n">Total</th>' + used.map(e => `<th class="n">${L[s][1][e]} (${e})</th>`).join(''),
+      `<tr><td class="n"><b>${r.n}</b></td>${used.map(e => `<td class="n ${e === '#' ? 'g' : e === '=' ? 'r' : ''}">${r.ev[e]} <span class="m">${pct(r.ev[e], r.n)}</span></td>`).join('')}</tr>`) +
+      (s === 'D' && AG.dk[1] ? `<div style="margin-top:10px">We scored a kill in <b class="gold">${pct(AG.dk[0], AG.dk[1])}</b> of the rallies after your dig <span class="m">(${AG.dk[0]} / ${AG.dk[1]})</span></div>` : ''));
+  }
+  return html || card('Block & Defense', '<div class="empty">No blocks or digs in these sessions.</div>');
+}
+
+// ── Advanced ─────────────────────────────────────────────────────────────────
+const PA_SKILL = { S: 'Serve', R: 'Pass', A: 'Attack', E: 'Set', X: 'Set', B: 'Block', D: 'Dig' };
+const PA_COLS = ['Serve', 'Pass', 'Attack', 'Set', 'Block', 'Dig'], PA_M = 20, PA_SHARE = 0.25;
+function paNorm(key) {
+  if (F.scale !== '3') return key;
+  const [sk, ev, sit] = key.split('|');
+  return `${sk}|${(sk === 'R' && ev === '!') ? '+' : ev}|${(sk === 'A' || sk === 'X') && sit && sit[0] === '!' ? '+' + sit.slice(1) : sit}`;
+}
+function paTables(pool) {
+  const P = {};
+  for (const [k0, v] of Object.entries(pool)) { if (k0[0] === 'X') continue; const k = paNorm(k0); const r = P[k] || (P[k] = [0, 0]); r[0] += v[0]; r[1] += v[1]; }
+  const acc = {}; const put = (k, v) => { const r = acc[k] || (acc[k] = [0, 0]); r[0] += v[0]; r[1] += v[1]; };
+  for (const [k, v] of Object.entries(P)) { const [sk, ev, sit] = k.split('|'); put('sk:' + sk, v); put('ev:' + sk + '|' + ev, v); put('sit:' + sk + '|' + sit, v); put('evsit:' + k, v); if (sk === 'A') put('ph:' + sit.split('/')[0], v); }
+  const wp = k => acc[k] && acc[k][0] ? acc[k][1] / acc[k][0] : null;
+  const shr = (k, prior) => { const r = acc[k]; return r ? (r[1] + PA_M * prior) / (r[0] + PA_M) : prior; };
+  return {
+    basic(sk, ev) { const b = wp('sk:' + sk), e = wp('ev:' + sk + '|' + ev); return (b === null || e === null) ? 0 : e - b; },
+    sitBase(sk, sit) { return shr('sit:' + sk + '|' + sit, wp('sk:' + sk) ?? 0); },
+    sitEv(sk, ev, sit) { return shr('evsit:' + sk + '|' + ev + '|' + sit, wp('ev:' + sk + '|' + ev) ?? 0); },
+    atkSit(sit) { const ph = sit.split('/')[0]; return shr('sit:A|' + sit, wp('ph:' + ph) ?? wp('sk:A') ?? 0); },
+    atkPhase(ph) { return shr('ph:' + ph, wp('sk:A') ?? 0); },
+  };
+}
+function paValue(T, key, n, out) {
+  const [sk, ev, sit] = paNorm(key).split('|');
+  if (F.paMode === 'basic') { if (sk !== 'X') out[PA_SKILL[sk]] += n * T.basic(sk, ev); return; }
+  if (sk === 'A') out.Attack += n * (1 - PA_SHARE) * (T.sitEv('A', ev, sit) - T.atkSit(sit));
+  else if (sk === 'X') out.Set += n * ((T.atkSit(sit) - T.atkPhase(sit.split('/')[0])) + PA_SHARE * (T.sitEv('A', ev, sit) - T.atkSit(sit)));
+  else if (sk === 'E') out.Set += n * T.basic('E', ev);
+  else out[PA_SKILL[sk]] += n * (T.sitEv(sk, ev, sit) - T.sitBase(sk, sit));
+}
+function cardPA() {
+  const seasons = F.season === 'all' ? Object.keys(PD.pool) : [F.season];
+  const v = Object.fromEntries(PA_COLS.map(c => [c, 0])); let touches = 0;
+  for (const [type, keys] of Object.entries(AG.pa)) {
+    const pool = {}; seasons.forEach(se => addInto(pool, (PD.pool[se] || {})[type]));
+    if (!Object.keys(pool).length) continue;
+    const T = paTables(pool);
+    for (const [k, rec] of Object.entries(keys)) { paValue(T, k, rec[0], v); if (k[0] !== 'X') touches += rec[0]; }
+  }
+  const total = PA_COLS.reduce((a, c) => a + v[c], 0), per = total / Math.max(1, AG.sets);
+  const f = x => (x >= 0 ? '+' : '') + x.toFixed(1), clr = x => Math.abs(x) < 0.05 ? 'm' : x > 0 ? 'g' : 'r';
+  const tg = `<span class="tg" style="margin-left:auto">${[['basic', 'Basic'], ['adj', 'Situation-adjusted']].map(([m, l]) => `<button class="${F.paMode === m ? 'on' : ''}" onclick="F.paMode='${m}';render()">${l}</button>`).join('')}</span>`;
+  const help = `<div class="help" id="h-pa"><b>Points Added</b> measures how much your touches raised or lowered our chance of winning the rally compared with an average touch of the same kind (+1.0 ≈ one extra point for the team). Values come from how often our team wins the rally after each kind of touch, across every session of the same type this season. <b>Situation-adjusted</b> compares each touch with the average touch in the same situation (serve type faced, pass before the attack + set type, attack faced on blocks/digs). Small samples swing a lot.</div>`;
+  if (!touches) return card('Points Added' + helpBtn('h-pa') + tg, help + '<div class="empty">No touches in these sessions.</div>');
+  return card('Points Added' + helpBtn('h-pa') + tg, help + `<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px">
+      <div><div class="m">Total</div><div style="font-size:26px;font-weight:800" class="${clr(total)}">${f(total)}</div></div>
+      <div><div class="m">Per set</div><div style="font-size:26px;font-weight:800" class="${clr(per)}">${(per >= 0 ? '+' : '') + per.toFixed(2)}</div></div>
+      <div><div class="m">Sets · touches</div><div style="font-size:26px;font-weight:800">${AG.sets} · ${touches}</div></div></div>` +
+    tbl(PA_COLS.map(c => `<th class="n">${c}</th>`).join(''), `<tr>${PA_COLS.map(c => `<td class="n ${clr(v[c])}"><b>${Math.abs(v[c]) < 0.05 ? '—' : f(v[c])}</b></td>`).join('')}</tr>`));
+}
+function cardEOE() {
+  const me = hitterCells(); const n = Object.values(me.cells).reduce((s, r) => s + r.a, 0);
+  const help = `<div class="help" id="h-eoe"><b>Expected</b> is what an average Loyola hitter would hit on exactly your mix of balls (the pass before the attack + the set type), using the whole team's results on each kind of ball. <b>EOE</b> = your actual efficiency − expected. Positive means you did better than the balls you got would predict. Efficiency is (K − E − BLK) / Att.</div>`;
+  if (!n) return '';
+  const norm = ph => (F.scale === '3' && ph === '!') ? '+' : ph; const z = () => ({ k: 0, e: 0, b: 0, a: 0 });
+  const team = {}, phaseT = {}, tot = z();
+  for (const [sit0, c] of Object.entries(AG.hc)) { const [p0, g] = sit0.split('/'); const sit = norm(p0) + '/' + g; const r = { k: c[0], e: c[1], b: c[2], a: c[3] };
+    for (const t of [team[sit] || (team[sit] = z()), phaseT[norm(p0)] || (phaseT[norm(p0)] = z()), tot]) { t.k += r.k; t.e += r.e; t.b += r.b; t.a += r.a; } }
+  const eff = r => r && r.a ? (r.k - r.e - r.b) / r.a : null;
+  const teamEff = s => { const r = team[s] || z(); const prior = eff(phaseT[s.split('/')[0]]) ?? eff(tot) ?? 0; return ((r.k - r.e - r.b) + 5 * prior) / (r.a + 5); };
+  const all = Object.values(me.cells).reduce((a, r) => ({ k: a.k + r.k, e: a.e + r.e, b: a.b + r.b, a: a.a + r.a }), z());
+  const raw = eff(all), exp = Object.entries(me.cells).reduce((s, [sit, c]) => s + c.a * teamEff(sit), 0) / n, eoe = raw - exp;
+  const PH = ['#', '+', '!', '-', 'o', 'T'].filter(p => me.ph[p]);
+  const lbl = { '#': bucketLbl('perf'), '+': bucketLbl('good'), '!': bucketLbl('med'), '-': bucketLbl('oos'), o: 'Other first ball', T: 'Transition' };
+  const GL = { pin: 'In-system pin', high: 'High ball', quick: 'Quick', bic: 'BIC', dball: 'D-ball', oth: 'Other' };
+  const expOf = filt => { let s = 0, m = 0; for (const [sit, c] of Object.entries(me.cells)) if (filt(sit)) { s += c.a * teamEff(sit); m += c.a; } return m ? s / m : null; };
+  const row = (l, r, ex) => { const e = eff(r); return `<tr><td>${l}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n m">${fE(ex)}</td><td class="n ${e - ex >= 0 ? 'g' : 'r'}"><b>${(e - ex >= 0 ? '+' : '') + ((e - ex) * 100).toFixed(1)}</b></td></tr>`; };
+  const H = '<th></th><th class="n">Att</th><th class="n">Your Eff</th><th class="n">Expected</th><th class="n">EOE</th>';
+  return card('Expected vs Actual Efficiency' + helpBtn('h-eoe'), help + `<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px">
+      <div><div class="m">Actual</div><div style="font-size:26px;font-weight:800">${fE(raw)}</div></div>
+      <div><div class="m">Expected</div><div style="font-size:26px;font-weight:800" class="m">${fE(exp)}</div></div>
+      <div><div class="m">EOE</div><div style="font-size:26px;font-weight:800" class="${eoe >= 0 ? 'g' : 'r'}">${(eoe >= 0 ? '+' : '') + (eoe * 100).toFixed(1)}</div></div>
+      <div><div class="m">Attempts</div><div style="font-size:26px;font-weight:800">${n}${n < 100 ? '<span class="m" style="font-size:12px"> · small sample</span>' : ''}</div></div></div>
+    <div class="g2"><div>${tbl(H.replace('<th></th>', '<th>By pass</th>'), PH.map(p => row(lbl[p], me.ph[p], expOf(s => s.split('/')[0] === p))).join(''))}</div>
+    <div>${tbl(H.replace('<th></th>', '<th>By set type</th>'), Object.keys(GL).filter(g => me.grp[g]).map(g => row(GL[g], me.grp[g], expOf(s => s.split('/')[1] === g))).join(''))}</div></div>`);
+}
+function cardPassHit() {
+  const ph = AG.ph; if (!ph || !(ph.ph && Object.keys(ph.ph).length)) return '';
+  const z = () => ({ n: 0, k: 0, e: 0, b: 0, w: 0 });
+  const sum = g => { const r = z(); for (const [ev, rec] of Object.entries(ph[g] || {})) { r.n += rec[0]; r.w += rec[1]; if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0]; } return r; };
+  const a = sum('ph'), b = sum('np'); const pgN = Object.values(ph.pg || {}).reduce((s, x) => s + x, 0);
+  const eff = r => r.n ? (r.k - r.e - r.b) / r.n : null;
+  const row = (l, r) => `<tr><td>${l}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.b}</td><td class="n">${r.n}</td><td class="n ${ec(eff(r))}"><b>${fE(eff(r))}</b></td><td class="n">${pct(r.k, r.n)}</td><td class="n">${pct(r.w, r.n)}</td><td class="n r">${pct(r.e + r.b, r.n)}</td></tr>`;
+  const d = eff(a) !== null && eff(b) !== null ? eff(a) - eff(b) : null;
+  const help = `<div class="help" id="h-ph">Serve-receive possessions only. <b>Passed &amp; hit</b> = you passed and then attacked the first set. <b>Didn't pass</b> = your first-ball attacks when someone else passed. FBSO% = kill on that first attack; SO% = we won the rally; Err% = (errors + blocked) / attempts.</div>`;
+  return card('Pass &amp; Hit' + helpBtn('h-ph'), help + tbl('<th></th><th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF</th><th class="n">FBSO%</th><th class="n">SO%</th><th class="n">Err%</th>',
+    row('Passed &amp; hit', a) + (b.n ? row("Didn't pass", b) : '')) +
+    `<div style="margin-top:8px">${pgN ? `Pass avg on those possessions: <b class="gold">${passAvg(ph.pg, pgN).toFixed(2)}</b> · ` : ''}${d === null ? '' : `Δ Eff after passing: <b class="${d >= 0 ? 'g' : 'r'}">${(d >= 0 ? '+' : '') + (d * 100).toFixed(1)}</b>`}</div>`);
+}
+function cardSetterAdj() {
+  if (!PD.player.setter || !AG.sbo || !Object.keys(AG.sbo).length) return '';
+  const m3 = F.scale === '3', M = 30;
+  const BK = m3 ? ['perf', 'good', 'oos', 'fboth', 'transition'] : ['perf', 'good', 'med', 'oos', 'fboth', 'transition'];
+  const z = () => ({ k: 0, e: 0, b: 0, a: 0 });
+  const conv = src => { const g = k => { const v = (src || {})[k] || [0, 0, 0, 0]; return { k: v[0], e: v[1], b: v[2], a: v[3] }; };
+    const o = Object.fromEntries(BK.map(k => [k, z()])); const add = (t, r) => { t.k += r.k; t.e += r.e; t.b += r.b; t.a += r.a; };
+    const perf = g('perf'), good = g('good'), med = g('med'), oos = g('oos'), fb = g('fbso'), tr = g('transition');
+    add(o.perf, perf); add(o.oos, oos); add(o.transition, tr); add(o.good, good); if (m3) add(o.good, med); else add(o.med, med);
+    add(o.fboth, { k: fb.k - perf.k - good.k - med.k - oos.k, e: fb.e - perf.e - good.e - med.e - oos.e, b: fb.b - perf.b - good.b - med.b - oos.b, a: fb.a - perf.a - good.a - med.a - oos.a });
+    return o; };
+  const me = conv(AG.sbo), tm = conv(AG.sbt);
+  const eff = r => r.a ? (r.k - r.e - r.b) / r.a : null;
+  const used = BK.filter(k => tm[k].a > 0); const tTot = used.reduce((s, k) => s + tm[k].a, 0); const n = used.reduce((s, k) => s + me[k].a, 0);
+  if (!n) return '';
+  const tEff = Object.fromEntries(used.map(k => [k, eff(tm[k])])), share = Object.fromEntries(used.map(k => [k, tm[k].a / tTot]));
+  const all = used.reduce((a, k) => ({ k: a.k + me[k].k, e: a.e + me[k].e, b: a.b + me[k].b, a: a.a + me[k].a }), z());
+  const raw = eff(all), exp = used.reduce((s, k) => s + me[k].a * tEff[k], 0) / n, eoe = raw - exp;
+  const std = used.reduce((s, k) => s + share[k] * (me[k].a ? eff(me[k]) : tEff[k]), 0);
+  const adj = used.reduce((s, k) => s + share[k] * (((me[k].k - me[k].e - me[k].b) + M * tEff[k]) / (me[k].a + M)), 0);
+  const help = `<div class="help" id="h-sa">Every attack is credited to the setter whose set came right before it. <b>Expected</b> = what an average Loyola setter would produce from your exact mix of passes (team baseline per situation). <b>EOE</b> = Raw − Expected. <b>Standardized</b> re-weights your efficiency to the team's average pass mix; <b>Adjusted</b> also blends small samples toward the team baseline (≈${M} sets).</div>`;
+  const big = (l, v, c = '') => `<div><div class="m">${l}</div><div style="font-size:24px;font-weight:800" class="${c}">${v}</div></div>`;
+  return card('Setter Efficiency — Adjusted for Pass Quality' + helpBtn('h-sa'), help + `<div style="display:flex;gap:26px;flex-wrap:wrap;margin-bottom:12px">${big('Raw', fE(raw))}${big('Expected', fE(exp), 'm')}${big('EOE', (eoe >= 0 ? '+' : '') + (eoe * 100).toFixed(1), eoe >= 0 ? 'g' : 'r')}${big('Standardized', fE(std))}${big('Adjusted', fE(adj), 'gold')}${big('Sets', n)}</div>` +
+    tbl('<th>Situation</th><th class="n">Your sets</th><th class="n">Your Eff</th><th class="n">Team Eff</th><th class="n">Your mix</th><th class="n">Team mix</th>',
+      used.map(k => `<tr><td>${bucketLbl(k)}</td><td class="n">${me[k].a}</td><td class="n ${ec(eff(me[k]))}"><b>${fE(eff(me[k]))}</b></td><td class="n m">${fE(tEff[k])}</td><td class="n">${pct(me[k].a, n)}</td><td class="n m">${pct(tm[k].a, tTot)}</td></tr>`).join('')));
+}
+function cardTrend() {
+  const ms = Object.keys(AG.months).sort(); if (!ms.length) return '';
+  const MN = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const rows = ms.map(m => { const x = AG.months[m], A = x.A || {}, R = x.R || {}, S = x.S || {}; const a = evA(A.ev, A.n), e = effv(a.k, a.e, a.b, a.a); const pv = passAvg(R.ev, R.n);
+    return `<tr><td>${MN[+m.slice(5)]} ${m.slice(0, 4)}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${A.n || '—'}</td><td class="n ${pac(pv)}">${pv === null ? '—' : pv.toFixed(2)}</td><td class="n">${R.n || '—'}</td><td class="n">${S.n ? pct(S.ev['#'] || 0, S.n) : '—'}</td><td class="n r">${S.n ? pct(S.ev['='] || 0, S.n) : '—'}</td><td class="n">${S.n || '—'}</td></tr>`; }).join('');
+  return card('Trend by Month', tbl('<th>Month</th><th class="n">Atk Eff</th><th class="n">Att</th><th class="n">Pass Avg</th><th class="n">Passes</th><th class="n">Ace%</th><th class="n">Srv Err%</th><th class="n">Serves</th>', rows));
+}
+function tabAdv() { return cardPA() + cardEOE() + cardSetterAdj() + cardPassHit() + cardTrend(); }
+
+loadRoster();
+</script>
+</body></html>

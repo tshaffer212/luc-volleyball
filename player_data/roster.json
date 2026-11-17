@@ -1,0 +1,95 @@
+{
+ "season": "Fall 2027",
+ "players": [
+  {
+   "id": "0a6550e11fc278ab",
+   "num": "2",
+   "name": "Ben Winokur"
+  },
+  {
+   "id": "c6e7cbd38845eb9c",
+   "num": "3",
+   "name": "Matt Kelly"
+  },
+  {
+   "id": "be2d119de5255571",
+   "num": "7",
+   "name": "Jake Read"
+  },
+  {
+   "id": "188aa8912ddff479",
+   "num": "8",
+   "name": "Aleksandar Sosa"
+  },
+  {
+   "id": "cf62492fcbdbe792",
+   "num": "9",
+   "name": "Stainslaw Chacinski"
+  },
+  {
+   "id": "d4a656807547b7d8",
+   "num": "10",
+   "name": "Luka Lojic"
+  },
+  {
+   "id": "b78721a3d7757427",
+   "num": "12",
+   "name": "Caden Van Buren"
+  },
+  {
+   "id": "db46d8aca693dd3e",
+   "num": "13",
+   "name": "Thomas Vesty"
+  },
+  {
+   "id": "d6ae562e38f276e6",
+   "num": "15",
+   "name": "Will Hatch"
+  },
+  {
+   "id": "08fbc681fd33c3a6",
+   "num": "16",
+   "name": "Alex Smits Van Oyen"
+  },
+  {
+   "id": "4d7fadd5445758b5",
+   "num": "17",
+   "name": "Nicola Konstantinov"
+  },
+  {
+   "id": "670b15ce02ebae89",
+   "num": "19",
+   "name": "Owen Smith"
+  },
+  {
+   "id": "141cbcf408930145",
+   "num": "20",
+   "name": "Serguei Jokanovic"
+  },
+  {
+   "id": "354b4e058c00e123",
+   "num": "22",
+   "name": "Lukas Anderson"
+  },
+  {
+   "id": "1940694665d0e57a",
+   "num": "24",
+   "name": "Ayden DesLauriers"
+  },
+  {
+   "id": "9ef4d0673efe90b6",
+   "num": "27",
+   "name": "Aidan Klein"
+  },
+  {
+   "id": "00789c91e3c38129",
+   "num": "29",
+   "name": "Tyler Howard"
+  },
+  {
+   "id": "741c6cacc68970bf",
+   "num": "31",
+   "name": "Gavin O'Brien"
+  }
+ ]
+}

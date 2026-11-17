@@ -153,6 +153,14 @@ def main():
             print(f"\n🌐  Rebuilding dashboard.html")
             inject_data(TEMPLATE, DASH_DATA, DASHBOARD)
 
+        # ── Step 3b: Player portal (locked per-player files for players.html) ─
+        portal = HERE / 'build_player_portal.py'
+        if portal.exists():
+            print(f"\n🔒  Building player portal files")
+            r = subprocess.run([sys.executable, str(portal)], cwd=HERE)
+            if r.returncode != 0:
+                print("  ⚠   Player portal build failed — dashboard is still updated")
+
     elapsed = time.time() - t0
     print(f"\n✅  Done in {elapsed:.1f}s\n")
     if not args.dry_run and not args.no_html:
@@ -175,6 +183,10 @@ def main():
                     'rebuild.py',
                     'watch.py',
                     '.gitignore',
+                    'dashboard_sets.json',
+                    'players.html',
+                    'player_data',
+                    'build_player_portal.py',
                 ]
                 subprocess.run(['git', 'add'] + files_to_commit, cwd=HERE, check=True)
                 # Only commit if there are staged changes

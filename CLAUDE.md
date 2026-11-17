@@ -59,6 +59,18 @@ open('dashboard.html','w').write(t.replace('__DASHBOARD_DATA__', data))
 "
 ```
 
+### Player portal (players.html)
+`build_player_portal.py` (run automatically by `rebuild.py`, or by hand after the rebuild above) writes one
+locked file per current-roster player to `player_data/<id>.json` plus `player_data/roster.json`.
+`players.html` contains NO stats; a player picks their name, enters their password, and only their own file is
+unlocked in the browser. Hitters see only their own numbers (attack-by-setter shows setter names only);
+setters additionally get their full distribution by hitter.
+- Passwords: `private/player_passwords.json` + `private/Player Passwords.csv`. `private/` is git-ignored —
+  **never commit or push it, never paste passwords into code or the repo.**
+- New roster players get a password automatically; existing ones never change.
+  Reset one: `python3 build_player_portal.py --reset "Player Name"`.
+- Push `players.html` and `player_data/` alongside `dashboard.html`.
+
 To push to GitHub (must be done from terminal, not sandbox — git lock issues):
 ```bash
 cd "/Users/thomasshaffer/Desktop/Volleystation Files/DVW Project/LUC Volleyball"

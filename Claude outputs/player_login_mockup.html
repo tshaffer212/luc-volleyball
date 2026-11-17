@@ -1,0 +1,116 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Player login + report — mockup</title>
+<style>
+:root{--bg:#0f0f0f;--surface:#1a1a1a;--surface2:#242424;--border:#333;--text:#f0f0f0;--muted:#999;--maroon:#8D0034;--maroon-dark:#5c0023;--maroon-light:#b5004a;--gold:#FEBC18;--green:#4caf50;--red:#f44336}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,'Segoe UI',system-ui,sans-serif;font-size:13px;padding:20px}
+.wrap{max-width:1250px;margin:0 auto}
+.banner{color:var(--muted);font-size:12px;margin-bottom:14px}
+.step{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin:22px 0 8px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+h3{font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.m{color:var(--muted);font-size:11px}.g{color:var(--green)}.r{color:#ef5350}.n{text-align:right;font-variant-numeric:tabular-nums}.c{text-align:center}
+/* login */
+.loginwrap{display:flex;justify-content:center;padding:30px 0;background:radial-gradient(circle at 50% 0,#2a0012,#0f0f0f 70%);border-radius:12px;border:1px solid var(--border)}
+.login{width:340px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--gold);border-radius:12px;padding:26px}
+.login .logo{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:1px}
+.login label{display:block;font-size:11px;color:var(--muted);margin:14px 0 4px;text-transform:uppercase;letter-spacing:.6px}
+.login .inp{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:9px 10px;color:var(--text)}
+.login .btn{margin-top:18px;background:var(--maroon);border-radius:6px;padding:10px;text-align:center;font-weight:700}
+/* header */
+header{background:linear-gradient(135deg,var(--maroon-dark),var(--maroon) 55%,var(--maroon-light));border-bottom:3px solid var(--gold);border-radius:10px 10px 0 0;padding:14px 18px;display:flex;align-items:center;gap:16px}
+header .num{font-size:34px;font-weight:800;color:var(--gold)} header h2{font-size:20px}
+header .out{margin-left:auto;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:5px 12px;font-size:12px}
+.filters{background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:12px 18px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+.filters label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
+.sel{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 10px;font-size:12px;display:inline-block}
+.tg{display:inline-flex;gap:4px}.tg span{padding:5px 11px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface2)}.tg span.on{background:var(--maroon);border-color:var(--maroon)}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px}.kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}.kpi .v{font-size:24px;font-weight:800;margin-top:2px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}.tabs span{padding:7px 13px;border-radius:6px;border:1px solid var(--border);font-size:12px;background:var(--surface2)}.tabs span.on{background:var(--maroon);border-color:var(--maroon)}
+table{width:100%;border-collapse:collapse}th{font-size:10px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px;border-bottom:1px solid var(--border)}td{padding:6px;border-bottom:1px solid #232323}
+tr.tot td{border-top:2px solid var(--gold);font-weight:700;color:var(--gold)} tr.dim td{color:#aaa;font-style:italic}
+.g2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}.g2e{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.brow{display:grid;grid-template-columns:44px 1fr 56px 56px;gap:8px;align-items:center;margin:7px 0}.btrack{height:14px;background:#262626;border-radius:3px;overflow:hidden}.bfill{height:100%;background:linear-gradient(90deg,var(--maroon),var(--gold))}.bv{font-weight:700;text-align:right}.bl{font-size:12px}
+.rots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.rot{background:var(--surface2);border-radius:8px;padding:10px;text-align:center}.rl{font-size:11px;font-weight:700;color:var(--muted)}.rv{font-size:22px;font-weight:800}
+.svbar{display:flex;height:16px;border-radius:4px;overflow:hidden;margin:8px 0}.seg{height:100%}
+.leg{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted)}.leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.note{background:#141b24;border:1px solid #23344a;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5;color:#c8d6e5;margin-bottom:12px}.note b{color:#fff}
+.ph{border:1px dashed #444;border-radius:8px;padding:14px;color:var(--muted);font-size:12px;line-height:1.5}
+.lock{display:inline-block;font-size:10px;padding:2px 7px;border-radius:8px;background:#2b2b2b;color:var(--muted);margin-left:6px;text-transform:none;letter-spacing:0}
+</style></head><body><div class="wrap">
+
+<div class="banner">MOCKUP: player-only Reports page, filled with real Fall 2027 match data for #10 Luka Lojic. Blue boxes are notes for you and the coach; they won't appear on the real page.</div>
+
+<div class="step">Step 1: Login page (players.html)</div>
+<div class="loginwrap"><div class="login">
+  <div class="logo">LOYOLA VOLLEYBALL</div><div class="m">Player Reports</div>
+  <label>Player</label><div class="inp">#10 Luka Lojic ▾</div>
+  <label>Password</label><div class="inp">••••••••••</div>
+  <div class="btn">Sign in</div>
+  <div class="m" style="margin-top:12px;text-align:center">Forgot your password? Ask Coach.</div>
+</div></div>
+<div class="note" style="margin-top:10px"><b>How it's protected:</b> each player's stats are stored as a separate locked file that only their password can unlock. The page holds no other player's numbers, so viewing the page source shows nothing readable. A wrong password unlocks nothing.</div>
+
+<div class="step">Step 2: What #10 sees after signing in</div>
+<header><div class="num">#10</div><div><h2>Luka Lojic</h2><div style="font-size:12px;opacity:.85">Opposite · Fall 2027</div></div><div class="out">Sign out</div></header>
+<div class="filters">
+  <div><label>Season</label><span class="sel">Fall 2027 ▾</span></div>
+  <div><label>Session Type</label><span class="tg"><span class="on">Matches</span><span>Practices</span><span>Both</span></span></div>
+  <div><label>Sessions</label><span class="sel">All 14 matches ▾</span></div>
+  <div><label>Set</label><span class="sel">All ▾</span></div>
+  <div><label>Pass Scale</label><span class="tg"><span class="on">4-pt</span><span>3-pt</span></span></div>
+  <div class="m" style="margin-left:auto">No player filter or Loyola/Opponent toggle: this page only has #10's data</div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="l">Attack Eff</div><div class="v">27.6%</div><div class="m">98 attempts · K% 46.9%</div></div>
+  <div class="kpi"><div class="l">Serve Ace %</div><div class="v">15.4%</div><div class="m">12 aces / 78 serves</div></div>
+  <div class="kpi"><div class="l">Serve Error %</div><div class="v r">39.7%</div><div class="m">31 errors</div></div>
+  <div class="kpi"><div class="l">Block Kills</div><div class="v">7</div><div class="m">20 block touches</div></div>
+  <div class="kpi"><div class="l">Digs</div><div class="v">18</div><div class="m">23 dig attempts</div></div>
+</div>
+
+<div class="tabs"><span>Serve &amp; Receive</span><span>Attack by Set Type</span><span class="on">Attack by Setter</span><span>Attack by Rotation</span><span>Block &amp; Defense</span><span>Advanced</span><span style="margin-left:auto">⤓ Export PDF</span></div>
+
+<div class="note"><b>Attack by Setter</b> is the comparison players are allowed: their own attacks split by who set them. It never shows other hitters.</div>
+<div class="g2">
+  <div class="card"><h3>Attack by Setter</h3>
+    <table><tr><th>Setter</th><th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th><th class="n">K%</th></tr><tr class=''><td>#16 Alex Smits Van Oyen</td><td class=n>25</td><td class=n>6</td><td class=n>1</td><td class=n>45</td><td class='n g'><b>40.0%</b></td><td class=n>55.6%</td></tr><tr class=''><td>#20 Serguei Jokanovic</td><td class=n>10</td><td class=n>3</td><td class=n>3</td><td class=n>24</td><td class='n '><b>16.7%</b></td><td class=n>41.7%</td></tr><tr class=''><td>#13 Thomas Vesty</td><td class=n>9</td><td class=n>0</td><td class=n>2</td><td class=n>17</td><td class='n g'><b>41.2%</b></td><td class=n>52.9%</td></tr><tr class='dim'><td>Other (non-setter sets)</td><td class=n>2</td><td class=n>1</td><td class=n>1</td><td class=n>7</td><td class='n r'><b>0.0%</b></td><td class=n>28.6%</td></tr><tr class='dim'><td>MISC (setter not identified)</td><td class=n>0</td><td class=n>2</td><td class=n>0</td><td class=n>5</td><td class='n r'><b>-40.0%</b></td><td class=n>0.0%</td></tr><tr class='tot'><td>TOTAL</td><td class=n>46</td><td class=n>12</td><td class=n>7</td><td class=n>98</td><td class='n '><b>27.6%</b></td><td class=n>46.9%</td></tr></table>
+    <div class="m" style="margin-top:8px">Other = sets from non-setters (second-ball / out-of-system). MISC = attacks where the setter couldn't be identified in the code.</div>
+  </div>
+  <div class="card"><h3>Efficiency by Setter</h3><div class=brow><div class=bl>#16</div><div class=btrack><div class=bfill style='width:67%'></div></div><div class=bv>40.0%</div><div class='bl m'>45 att</div></div><div class=brow><div class=bl>#20</div><div class=btrack><div class=bfill style='width:28%'></div></div><div class=bv>16.7%</div><div class='bl m'>24 att</div></div><div class=brow><div class=bl>#13</div><div class=btrack><div class=bfill style='width:69%'></div></div><div class=bv>41.2%</div><div class='bl m'>17 att</div></div></div>
+</div>
+<div class="card"><h3>Set Type × Setter</h3>
+  <table><tr><th></th><th colspan=5 class=c>#16 Oyen</th><th colspan=5 class=c>#20 Jokanovic</th><th colspan=5 class=c>#13 Vesty</th></tr><tr><th>Set type</th><th class=n>K</th><th class=n>E</th><th class=n>BLK</th><th class=n>ATT</th><th class=n>EFF%</th><th class=n>K</th><th class=n>E</th><th class=n>BLK</th><th class=n>ATT</th><th class=n>EFF%</th><th class=n>K</th><th class=n>E</th><th class=n>BLK</th><th class=n>ATT</th><th class=n>EFF%</th></tr><tr><td>X8 <span class=m>D (Shoot in 1)</span></td><td class=n>11</td><td class=n>2</td><td class=n>0</td><td class=n>19</td><td class='n g'>47%</td><td class=n>3</td><td class=n>1</td><td class=n>2</td><td class=n>7</td><td class='n r'>0%</td><td class=n>2</td><td class=n>0</td><td class=n>0</td><td class=n>4</td><td class='n g'>50%</td></tr><tr><td>X6 <span class=m>X (Shoot in 2)</span></td><td class=n>9</td><td class=n>2</td><td class=n>1</td><td class=n>13</td><td class='n g'>46%</td><td class=n>4</td><td class=n>0</td><td class=n>0</td><td class=n>8</td><td class='n g'>50%</td><td class=n>5</td><td class=n>0</td><td class=n>1</td><td class=n>9</td><td class='n g'>44%</td></tr><tr><td>X5 <span class=m>Go (Shoot in 4)</span></td><td class=n>3</td><td class=n>1</td><td class=n>0</td><td class=n>8</td><td class='n '>25%</td><td class=n>3</td><td class=n>1</td><td class=n>1</td><td class=n>5</td><td class='n '>20%</td><td class=n>2</td><td class=n>0</td><td class=n>1</td><td class=n>3</td><td class='n g'>33%</td></tr><tr><td>V6 <span class=m>Red (High set in 2)</span></td><td class=n>1</td><td class=n>0</td><td class=n>0</td><td class=n>1</td><td class='n g'>100%</td><td class=n>0</td><td class=n>1</td><td class=n>0</td><td class=n>3</td><td class='n r'>-33%</td><td class=n>0</td><td class=n>0</td><td class=n>0</td><td class=n>1</td><td class='n r'>0%</td></tr><tr><td>V5 <span class=m>Hut (High set in 4)</span></td><td class=n>1</td><td class=n>1</td><td class=n>0</td><td class=n>4</td><td class='n r'>0%</td><td class=n>0</td><td class=n>0</td><td class=n>0</td><td class=n>1</td><td class='n r'>0%</td><td class='n m' colspan=5>—</td></tr></table>
+</div>
+
+<div class="step" style="color:var(--muted)">The other tabs, shown below so you can see all of them</div>
+<div class="g2e">
+  <div class="card"><h3>Attack by Set Type</h3>
+    <table><tr><th>Set type</th><th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th><th class="n">K%</th></tr><tr><td><b>X8</b> <span class=m>D (Shoot in 1)</span></td><td class=n>17</td><td class=n>5</td><td class=n>2</td><td class=n>33</td><td class='n g'><b>30.3%</b></td><td class=n>51.5%</td></tr><tr><td><b>X6</b> <span class=m>X (Shoot in 2)</span></td><td class=n>18</td><td class=n>2</td><td class=n>2</td><td class=n>31</td><td class='n g'><b>45.2%</b></td><td class=n>58.1%</td></tr><tr><td><b>X5</b> <span class=m>Go (Shoot in 4)</span></td><td class=n>8</td><td class=n>2</td><td class=n>2</td><td class=n>16</td><td class='n '><b>25.0%</b></td><td class=n>50.0%</td></tr><tr><td><b>V6</b> <span class=m>Red (High set in 2)</span></td><td class=n>2</td><td class=n>2</td><td class=n>1</td><td class=n>10</td><td class='n r'><b>-10.0%</b></td><td class=n>20.0%</td></tr><tr><td><b>V5</b> <span class=m>Hut (High set in 4)</span></td><td class=n>1</td><td class=n>1</td><td class=n>0</td><td class=n>6</td><td class='n r'><b>0.0%</b></td><td class=n>16.7%</td></tr><tr><td><b>PP</b> <span class=m>Setter dump</span></td><td class=n>0</td><td class=n>0</td><td class=n>0</td><td class=n>2</td><td class='n r'><b>0.0%</b></td><td class=n>0.0%</td></tr><tr class=tot><td>TOTAL</td><td class=n>46</td><td class=n>12</td><td class=n>7</td><td class=n>98</td><td class=n><b>27.6%</b></td><td class=n>46.9%</td></tr></table></div>
+  <div class="card"><h3>Attack by Rotation</h3><div class="rots"><div class=rot><div class=rl>R4</div><div class='rv g'>44%</div><div class=m>6K · 1E · 1BLK · 9 att</div></div><div class=rot><div class=rl>R3</div><div class='rv '>24%</div><div class=m>8K · 2E · 2BLK · 17 att</div></div><div class=rot><div class=rl>R2</div><div class='rv g'>53%</div><div class=m>12K · 1E · 1BLK · 19 att</div></div><div class=rot><div class=rl>R5</div><div class='rv '>24%</div><div class=m>7K · 2E · 1BLK · 17 att</div></div><div class=rot><div class=rl>R6</div><div class='rv g'>50%</div><div class=m>4K · 1E · 0BLK · 6 att</div></div><div class=rot><div class=rl>R1</div><div class='rv '>16%</div><div class=m>9K · 3E · 2BLK · 25 att</div></div></div><div class="m" style="margin-top:8px">Laid out like the court: front row R4 · R3 · R2, back row R5 · R6 · R1.</div></div>
+  <div class="card"><h3>Serve &amp; Receive</h3>
+    <div class="m">Serve outcomes · 78 serves</div>
+    <div class="svbar"><div class=seg style='flex:12;background:#4caf50' title='Ace'></div><div class=seg style='flex:5;background:#8bc34a' title='Overpass'></div><div class=seg style='flex:9;background:#cddc39' title='Positive'></div><div class=seg style='flex:21;background:#777' title='Negative'></div><div class=seg style='flex:31;background:#ef5350' title='Error'></div></div>
+    <div class="leg"><span><i style="background:#4caf50"></i>Ace 12</span><span><i style="background:#cddc39"></i>Positive / overpass 14</span><span><i style="background:#777"></i>Negative 21</span><span><i style="background:#ef5350"></i>Error 31</span></div>
+    <div class="ph" style="margin-top:12px">Reception (passes by 1/2/3/4-point, pass average, and pass zone breakdown) appears here for players who pass. #10 has no receptions in these matches, so this block is hidden for him.</div></div>
+  <div class="card"><h3>Block &amp; Defense</h3>
+    <table><tr><th></th><th class="n">Total</th><th class="n">Kill / Good</th><th class="n">Touch / +</th><th class="n">Error</th></tr>
+    <tr><td>Block</td><td class="n">20</td><td class="n g">7</td><td class="n">3</td><td class="n r">10</td></tr>
+    <tr><td>Dig</td><td class="n">23</td><td class="n g">18</td><td class="n">1</td><td class="n r">4</td></tr></table></div>
+  <div class="card"><h3>Advanced</h3>
+    <div class="ph"><b style="color:#ddd">Same cards as the coach dashboard, with only his row:</b><br>
+    • Points Added: his total and per-set, split by skill<br>
+    • Expected vs Actual Eff: his actual efficiency vs what's expected from the pass quality he hit off<br>
+    • Pass &amp; Hit: his Eff / FBSO% / SO% / Error% in rallies where he passed (passers only)<br>
+    <span class="r">Removed for players:</span> rankings ("#2 of 6 outsides"), team or position averages, and other players' rows.</div></div>
+  <div class="card"><h3>Trend: Attack Eff by Month</h3><div class=brow><div class=bl>Oct</div><div class=btrack><div class=bfill style='width:42%'></div></div><div class=bv>25.0%</div><div class='bl m'>44 att</div></div><div class=brow><div class=bl>Nov</div><div class=btrack><div class=bfill style='width:49%'></div></div><div class=bv>29.6%</div><div class='bl m'>54 att</div></div></div>
+</div>
+
+<div class="step">Setter version: what #16 Alex Smits Van Oyen would see</div>
+<div class="note">Setters get everything above for their own touches, <b>plus</b> their full distribution: every hitter they set, with K / E / BLK / ATT / EFF%. This is the one place another player's name appears, and only in a setter's file.</div>
+<div class="card"><h3>Setter Breakdown <span class="lock">setter files only</span></h3>
+  <table><tr><th>Hitter</th><th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th><th class="n">K%</th></tr><tr class=''><td>#24 Ayden DesLauriers</td><td class=n>33</td><td class=n>8</td><td class=n>2</td><td class=n>60</td><td class='n g'><b>38.3%</b></td><td class=n>55.0%</td></tr><tr class=''><td>#22 Lukas Anderson</td><td class=n>34</td><td class=n>3</td><td class=n>3</td><td class=n>54</td><td class='n g'><b>51.9%</b></td><td class=n>63.0%</td></tr><tr class=''><td>#10 Luka Lojic</td><td class=n>25</td><td class=n>6</td><td class=n>1</td><td class=n>45</td><td class='n g'><b>40.0%</b></td><td class=n>55.6%</td></tr><tr class=''><td>#9 Stainslaw Chacinski</td><td class=n>20</td><td class=n>4</td><td class=n>1</td><td class=n>33</td><td class='n g'><b>45.5%</b></td><td class=n>60.6%</td></tr><tr class=''><td>#12 Caden Van Buren</td><td class=n>22</td><td class=n>3</td><td class=n>0</td><td class=n>32</td><td class='n g'><b>59.4%</b></td><td class=n>68.8%</td></tr><tr class=''><td>#2 Ben Winokur</td><td class=n>15</td><td class=n>2</td><td class=n>2</td><td class=n>27</td><td class='n g'><b>40.7%</b></td><td class=n>55.6%</td></tr><tr class=''><td>#17 Nicola Konstantinov</td><td class=n>13</td><td class=n>3</td><td class=n>3</td><td class=n>26</td><td class='n '><b>26.9%</b></td><td class=n>50.0%</td></tr><tr class=''><td>#15 Will Hatch</td><td class=n>14</td><td class=n>2</td><td class=n>0</td><td class=n>23</td><td class='n g'><b>52.2%</b></td><td class=n>60.9%</td></tr></table>
+  <div class="m" style="margin-top:6px">Top 8 shown in this mockup. Also includes set type × hitter, the per-rotation breakdown, and the pass-adjusted setter cards.</div></div>
+
+</div></body></html>
