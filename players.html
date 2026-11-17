@@ -205,7 +205,47 @@ const passAvg = (ev, n) => n ? passPts(ev) / n : null;
 function catPts(c) { return F.scale === '4' ? 4 * (c.perf || 0) + 3 * (c.good || 0) + 2 * (c.med || 0) + (c.oos || 0) + 0.5 * (c.over || 0)
   : 3 * (c.perf || 0) + 2 * (c.good || 0) + 2 * (c.med || 0) + (c.oos || 0) + 0.5 * (c.over || 0); }
 const pac = v => v === null ? '' : v >= (F.scale === '4' ? 3 : 2) ? 'g' : v < (F.scale === '4' ? 2 : 1.5) ? 'r' : '';
-const cname = c => (PD.cn || {})[c] || '';
+// Set / play types: short name + plain-language description for players
+const SET_INFO = {
+  X5: ['Go', 'Fast, low set out to the outside hitter (zone 4), in system.'],
+  X6: ['X', 'Fast set to the right side / opposite (zone 2), in system.'],
+  X8: ['D', 'Back-row attack from the right side (zone 1).'],
+  X0: ['Shoot in 5', 'Fast back-row set to the left side (zone 5).'],
+  XP: ['Pipe', 'Back-row attack from the middle of the court (zone 6).'],
+  XB: ['Pipe Blue', 'Back-row pipe hit between zones 6 and 1.'],
+  XR: ['Pipe Red', 'Back-row pipe hit between zones 6 and 5.'],
+  X1: ['Quick', 'First-tempo quick for the middle, right in front of the setter.'],
+  X2: ['Back Quick', 'First-tempo quick for the middle, just behind the setter.'],
+  XF: ['Low Back Quick', 'Lower, faster quick behind the setter.'],
+  XM: ['Quick in 3', 'Quick hit in zone 3 (middle of the net).'],
+  XG: ['7-1 Gun', 'Quick set pushed slightly away from the setter.'],
+  XC: ['Hook', 'Front quick moved out / hooked toward the antenna.'],
+  XD: ['Slide', 'Middle runs behind the setter and hits off one foot.'],
+  CF: ['Slide A', 'Slide close to the setter.'], CB: ['Slide B', 'Slide one step away from the setter.'], CD: ['Slide C', 'Slide far from the setter.'],
+  X7: ['Gap', 'Quick-tempo set in the gap between the outside and the middle (a "shoot"/31).'],
+  X9: ['Rip from 4', 'Outside hitter swings line/rip from zone 4.'], XT: ['Cross from 4', 'Outside hitter crosses in from zone 4.'],
+  X3: ['Cross from 2', 'Right side crosses in from zone 2.'], X4: ['Rip from 2', 'Right side rips from zone 2.'],
+  V5: ['Hut', 'High set to the outside (zone 4), usually out of system.'],
+  V6: ['Red', 'High set to the right side (zone 2), usually out of system.'],
+  V8: ['High D', 'High back-row set to the right side (zone 1).'],
+  V0: ['High 5', 'High back-row set to the left side (zone 5).'],
+  VP: ['High Pipe', 'High back-row set to the middle (zone 6).'], VB: ['High Pipe Blue', 'High pipe between zones 6 and 1.'], VR: ['High Pipe Red', 'High pipe between zones 6 and 5.'],
+  V3: ['High 3', 'High set to the middle (zone 3).'],
+  PP: ['Setter Dump', 'Setter attacks the second ball instead of setting.'],
+  P2: ['Emergency 2nd', 'Second contact attacked in an emergency.'], PR: ['Setover', 'Second ball set/pushed straight over the net.'],
+  K1: ['Front Quick call', 'Setter call: middle runs a front quick (X1).'], K2: ['Back Quick call', 'Setter call: middle runs a back quick (X2).'],
+  K7: ['Gap call', 'Setter call: middle runs the gap/shoot (X7).'], KD: ['Slide call', 'Setter call: middle runs a slide.'],
+};
+const cname = c => (SET_INFO[c] || [])[0] || (PD.cn || {})[c] || '';
+const cdesc = c => (SET_INFO[c] || [])[1] || (PD.cn || {})[c] || '';
+const setCell = c => `<b title="${esc(cdesc(c))}">${c}</b> <span class="m">${esc(cname(c))}</span>`;          // row label
+const setHead = c => `<th class="n" title="${esc(cdesc(c))}">${c}<br><span style="text-transform:none;letter-spacing:0;color:#bbb">${esc(cname(c))}</span></th>`;  // column header
+function setKey(codes) {                       // legend card so phones (no hover) still see what each code means
+  const list = [...new Set(codes)].filter(c => c && c !== 'OVR' && cdesc(c));
+  if (!list.length) return '';
+  return card('Set Type Key', `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px 18px">${list.map(c =>
+    `<div style="font-size:12px;line-height:1.4"><b class="gold">${c}</b> <b>${esc(cname(c))}</b> <span class="m" style="font-size:12px">— ${esc(cdesc(c))}</span></div>`).join('')}</div>`);
+}
 function atkRow(label, r, cls = '') {
   const e = effv(r.k, r.e, r.b ?? r.bk ?? 0, r.a);
   return `<tr class="${cls}"><td>${label}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.b ?? r.bk ?? 0}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${pct(r.k, r.a)}</td></tr>`;
@@ -311,8 +351,8 @@ function tabServe() {
 function tabAttack() {
   const A = AG.sk.A;
   if (!A || !A.n) return card('Attack by Set Type', '<div class="empty">No attacks in these sessions.</div>');
-  const rows = Object.entries(A.c || {}).sort((a, b) => b[1].n - a[1].n).map(([c, v]) => atkRow(`<b>${c}</b> <span class="m">${esc(cname(c))}</span>`, evA(v.ev, v.n))).join('');
-  let html = card('Attack by Set Type', tbl('<th>Set type</th>' + ATK_H, rows + atkRow('TOTAL', evA(A.ev, A.n), 'tot')));
+  const rows = Object.entries(A.c || {}).sort((a, b) => b[1].n - a[1].n).map(([c, v]) => atkRow(setCell(c), evA(v.ev, v.n))).join('');
+  let html = card('Attack by Set Type', tbl('<th>Set type</th>' + ATK_H, rows + atkRow('TOTAL', evA(A.ev, A.n), 'tot'))) + setKey(Object.entries(A.c || {}).sort((a, b) => b[1].n - a[1].n).map(x => x[0]));
   // by pass quality before the attack (from the Points Added touch log)
   const cells = hitterCells();
   if (Object.keys(cells.ph).length) {
@@ -348,9 +388,9 @@ function tabSetter() {
   const combos = [...new Set(real.flatMap(k => Object.keys(bs[k]).filter(c => c !== 'OVR')))].sort((a, b) => real.reduce((s, k) => s + (bs[k][b]?.a || 0), 0) - real.reduce((s, k) => s + (bs[k][a]?.a || 0), 0));
   const mx = `<div class="tw"><table><tr><th></th>${real.map(k => `<th colspan="5" class="c" style="border-left:2px solid #333">${lab(k)}</th>`).join('')}</tr>
     <tr><th>Set type</th>${real.map(() => '<th class="n" style="border-left:2px solid #333">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th>').join('')}</tr>
-    ${combos.map(c => `<tr><td><b>${c}</b> <span class="m">${esc(cname(c))}</span></td>${real.map(k => { const v = bs[k][c]; if (!v || !v.a) return '<td class="n m" colspan="5" style="border-left:2px solid #333">—</td>'; const e = effv(v.k, v.e, v.bk, v.a);
+    ${combos.map(c => `<tr><td>${setCell(c)}</td>${real.map(k => { const v = bs[k][c]; if (!v || !v.a) return '<td class="n m" colspan="5" style="border-left:2px solid #333">—</td>'; const e = effv(v.k, v.e, v.bk, v.a);
       return `<td class="n" style="border-left:2px solid #333">${v.k}</td><td class="n">${v.e}</td><td class="n">${v.bk}</td><td class="n">${v.a}</td><td class="n ${ec(e)}">${fE(e)}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
-  return `<div class="g2">${card('Attack by Setter', tbl('<th>Setter</th>' + ATK_H, rows) + '<div class="m" style="margin-top:8px">Other = second-ball / out-of-system sets by non-setters. MISC = the setter couldn\'t be identified in the code.</div>')}${card('Efficiency by Setter', bars)}</div>` + card('Set Type × Setter', mx);
+  return `<div class="g2">${card('Attack by Setter', tbl('<th>Setter</th>' + ATK_H, rows) + '<div class="m" style="margin-top:8px">Other = second-ball / out-of-system sets by non-setters. MISC = the setter couldn\'t be identified in the code.</div>')}${card('Efficiency by Setter', bars)}</div>` + card('Set Type × Setter', mx) + setKey(combos);
 }
 
 // ── Setter breakdown (setters only: full distribution) ───────────────────────
@@ -367,11 +407,11 @@ function tabDist() {
     return `<tr><td>${esc(h)}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.bk}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${pct(r.k, r.a)}</td><td class="n gold">${pct(r.a, tot.a)}</td></tr>`; }).join('') +
     `<tr class="tot"><td>TOTAL</td><td class="n">${tot.k}</td><td class="n">${tot.e}</td><td class="n">${tot.bk}</td><td class="n">${tot.a}</td><td class="n">${fE(effv(tot.k, tot.e, tot.bk, tot.a))}</td><td class="n">${pct(tot.k, tot.a)}</td><td class="n">100%</td></tr>`;
   const combos = {}; hit.forEach(h => Object.entries(sd[h][ph]).forEach(([c, v]) => { if (c !== 'OVR') addInto(combos[c] || (combos[c] = {}), v); }));
-  const crow = Object.entries(combos).sort((a, b) => b[1].a - a[1].a).map(([c, v]) => atkRow(`<b>${c}</b> <span class="m">${esc(cname(c))}</span>`, v) .replace('</tr>', `<td class="n gold">${pct(v.a, tot.a)}</td></tr>`)).join('');
+  const crow = Object.entries(combos).sort((a, b) => b[1].a - a[1].a).map(([c, v]) => atkRow(setCell(c), v) .replace('</tr>', `<td class="n gold">${pct(v.a, tot.a)}</td></tr>`)).join('');
   const cl = Object.keys(combos).sort((a, b) => combos[b].a - combos[a].a);
-  const mx = `<div class="tw"><table><tr><th>Hitter</th>${cl.map(c => `<th class="n">${c}</th>`).join('')}</tr>${hit.map(h => `<tr><td>${esc(h)}</td>${cl.map(c => { const v = sd[h][ph][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  const mx = `<div class="tw"><table><tr><th>Hitter</th>${cl.map(setHead).join('')}</tr>${hit.map(h => `<tr><td>${esc(h)}</td>${cl.map(c => { const v = sd[h][ph][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
   return btns + `<div class="g2">${card('Distribution by Hitter', tbl('<th>Hitter</th>' + ATK_H + '<th class="n">Share</th>', rows))}${card('Distribution by Set Type', tbl('<th>Set type</th>' + ATK_H + '<th class="n">Share</th>', crow))}</div>` +
-    card('Hitter × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx);
+    card('Hitter × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx) + setKey(cl);
 }
 
 // ── Rotation ─────────────────────────────────────────────────────────────────
@@ -384,9 +424,9 @@ function tabRot() {
     const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">R${r}</div><div class="rv ${ec(e)}">${fE(e)}</div><div class="m">${v.k}K · ${v.e}E · ${v.bk}BLK · ${v.a} att</div></div>`; }).join('');
   const rows = rk.map(r => atkRow('R' + r, ra[r].OVR)).join('');
   const cl = [...new Set(rk.flatMap(r => Object.keys(ra[r]).filter(c => c !== 'OVR')))].sort();
-  const mx = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(c => `<th class="n">${c}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => { const v = ra[r][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  const mx = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(setHead).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => { const v = ra[r][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
   return `<div class="g2">${card('Attack by Rotation', `<div class="rots">${grid}</div><div class="m" style="margin-top:8px">Laid out like the court: R4 · R3 · R2 front, R5 · R6 · R1 back.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
-    card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx);
+    card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx) + setKey(cl);
 }
 
 // Setters: the team's attack by rotation on balls HE set
@@ -404,11 +444,11 @@ function tabRotSetter() {
   const hl = [...new Set(rk.flatMap(r => Object.keys(sr[r].h || {})))]
     .sort((a, b) => rk.reduce((s, r) => s + (sr[r].h[b]?.a || 0), 0) - rk.reduce((s, r) => s + (sr[r].h[a]?.a || 0), 0));
   const cell = v => { if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; };
-  const mxC = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(c => `<th class="n">${c}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => cell(sr[r].c[c])).join('')}</tr>`).join('')}</table></div>`;
+  const mxC = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(setHead).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => cell(sr[r].c[c])).join('')}</tr>`).join('')}</table></div>`;
   const mxH = `<div class="tw"><table><tr><th>Rotation</th>${hl.map(h => `<th class="n">${esc(h)}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${hl.map(h => cell((sr[r].h || {})[h])).join('')}</tr>`).join('')}</table></div>`;
   return `<div class="g2">${card('Attack by Rotation — balls you set', `<div class="rots">${grid}</div><div class="m" style="margin-top:8px">Team attacks off your sets, by rotation. Laid out like the court: R4 · R3 · R2 front, R5 · R6 · R1 back. Matches only.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
     card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mxC) +
-    card('Rotation × Hitter <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mxH);
+    card('Rotation × Hitter <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mxH) + setKey(cl);
 }
 
 // ── Block & defense ──────────────────────────────────────────────────────────
@@ -503,7 +543,8 @@ function cardEOE() {
       <div><div class="m">EOE</div><div style="font-size:26px;font-weight:800" class="${eoe >= 0 ? 'g' : 'r'}">${(eoe >= 0 ? '+' : '') + (eoe * 100).toFixed(1)}</div></div>
       <div><div class="m">Attempts</div><div style="font-size:26px;font-weight:800">${n}${n < 100 ? '<span class="m" style="font-size:12px"> · small sample</span>' : ''}</div></div></div>
     <div class="g2"><div>${tbl(H.replace('<th></th>', '<th>By pass</th>'), PH.map(p => row(lbl[p], me.ph[p], expOf(s => s.split('/')[0] === p))).join(''))}</div>
-    <div>${tbl(H.replace('<th></th>', '<th>By set type</th>'), Object.keys(GL).filter(g => me.grp[g]).map(g => row(GL[g], me.grp[g], expOf(s => s.split('/')[1] === g))).join(''))}</div></div>`);
+    <div>${tbl(H.replace('<th></th>', '<th>By set type</th>'), Object.keys(GL).filter(g => me.grp[g]).map(g => row(GL[g], me.grp[g], expOf(s => s.split('/')[1] === g))).join(''))}
+      <div class="m" style="margin-top:6px;line-height:1.5">In-system pin = X5 Go, X6 X · High ball = V5 Hut, V6 Red (and other V sets) · Quick = X1 Quick, X2 Back Quick, X7 Gap · BIC = XP Pipe · D-ball = X8 D</div></div></div>`);
 }
 function cardPassHit() {
   const ph = AG.ph; if (!ph || !(ph.ph && Object.keys(ph.ph).length)) return '';
