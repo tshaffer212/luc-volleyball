@@ -64,7 +64,8 @@ open('dashboard.html','w').write(t.replace('__DASHBOARD_DATA__', data))
 locked file per current-roster player to `player_data/<id>.json` plus `player_data/roster.json`.
 `players.html` contains NO stats; a player picks their name, enters their password, and only their own file is
 unlocked in the browser. Hitters see only their own numbers (attack-by-setter shows setter names only);
-setters additionally get their full distribution by hitter.
+setters additionally get their full distribution by hitter, and their Rotation tab shows the team's attack by
+rotation on balls they set (`match_rot_stats.setter_rot` from `aggregate.py`) instead of their own attacks.
 - Passwords: `private/player_passwords.json` + `private/Player Passwords.csv`. `private/` is git-ignored —
   **never commit or push it, never paste passwords into code or the repo.**
 - New roster players get a password automatically; existing ones never change.

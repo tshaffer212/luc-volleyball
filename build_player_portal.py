@@ -179,6 +179,10 @@ def build_slice(P, is_setter, setters, *, ps, mrs, fbso_bp, setter_atk, prac_sa,
             rec['sd'] = {h: {ph_: trim_atk(c) for ph_, c in phases.items()} for h, phases in setter_atk[P].items()}
         elif prac_sa and P in prac_sa:
             rec['sd'] = {h: {'all': sa_from_practice(c)} for h, c in prac_sa[P].items()}
+        # team attack by rotation on balls this setter set (matches only)
+        sr = ((mrs or {}).get('setter_rot') or {}).get(P)
+        if sr:
+            rec['sr'] = {r: {'c': trim_atk(x.get('c')), 'h': trim_atk(x.get('h'))} for r, x in sr.items()}
         # setter-adjusted: own buckets + team buckets (sum over all setters)
         if setter_tab:
             BK = ['perf', 'good', 'med', 'oos', 'fbso', 'transition']

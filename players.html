@@ -172,7 +172,7 @@ function keyed(obj, se) {   // re-key setter/hitter numbers by name so seasons w
   const o = {}; for (const [k, v] of Object.entries(obj || {})) o[(k === 'OTHER' || k === 'MISC' || k === 'OVR') ? k : nameOf(se, k)] = v; return o;
 }
 function aggregate() {
-  const A = { sk: {}, rz: {}, dk: [0, 0], rot: {}, bs: {}, fb: [0, 0], pa: {}, ph: {}, hc: {}, sd: {}, sbt: {}, sbo: {}, sets: 0, n: 0, months: {} };
+  const A = { sk: {}, rz: {}, dk: [0, 0], rot: {}, bs: {}, fb: [0, 0], pa: {}, ph: {}, hc: {}, sd: {}, sr: {}, sbt: {}, sbo: {}, sets: 0, n: 0, months: {} };
   for (const s of selected()) {
     const slices = (F.set !== 'all' && s.t === 'match') ? (s.s && s.s[F.set] ? [s.s[F.set]] : []) : [s.a];
     for (const x of slices) {
@@ -181,6 +181,7 @@ function aggregate() {
       addInto(A.rot, x.rot); addInto(A.bs, keyed(x.bs, s.se));
       addInto(A.pa[s.t] || (A.pa[s.t] = {}), x.pa); addInto(A.ph, x.ph); addInto(A.hc, x.hc);
       if (x.sd) { const sd = {}; for (const [h, ph] of Object.entries(keyed(x.sd, s.se))) sd[h] = ph; addInto(A.sd, sd); }
+      if (x.sr) { const o = {}; for (const [r, v] of Object.entries(x.sr)) o[r] = { c: v.c, h: keyed(v.h, s.se) }; addInto(A.sr, o); }
       addInto(A.sbt, x.sbt); addInto(A.sbo, x.sbo);
       const mk = s.d.slice(0, 7); addInto(A.months[mk] || (A.months[mk] = {}), { A: x.sk?.A, R: x.sk?.R, S: x.sk?.S });
     }
@@ -375,6 +376,7 @@ function tabDist() {
 
 // ── Rotation ─────────────────────────────────────────────────────────────────
 function tabRot() {
+  if (PD.player.setter) return tabRotSetter();
   const ra = AG.rot.a || {};
   const rk = ['1', '2', '3', '4', '5', '6'].filter(r => ra[r] && ra[r].OVR && ra[r].OVR.a);
   if (!rk.length) return card('Attack by Rotation', '<div class="empty">No rotation data (matches only).</div>');
@@ -385,6 +387,28 @@ function tabRot() {
   const mx = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(c => `<th class="n">${c}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => { const v = ra[r][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
   return `<div class="g2">${card('Attack by Rotation', `<div class="rots">${grid}</div><div class="m" style="margin-top:8px">Laid out like the court: R4 · R3 · R2 front, R5 · R6 · R1 back.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
     card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx);
+}
+
+// Setters: the team's attack by rotation on balls HE set
+function tabRotSetter() {
+  const sr = AG.sr || {};
+  const rk = ['1', '2', '3', '4', '5', '6'].filter(r => sr[r] && sr[r].c && sr[r].c.OVR && sr[r].c.OVR.a);
+  if (!rk.length) return card('Attack by Rotation — balls you set', '<div class="empty">No sets in matches for these filters (rotations are only coded in matches).</div>');
+  const ov = r => sr[r].c.OVR;
+  const grid = ['4', '3', '2', '5', '6', '1'].map(r => { const v = sr[r] && sr[r].c.OVR; if (!v || !v.a) return `<div class="rot"><div class="rl">R${r}</div><div class="rv m">—</div></div>`;
+    const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">R${r}</div><div class="rv ${ec(e)}">${fE(e)}</div><div class="m">${v.k}K · ${v.e}E · ${v.bk}BLK · ${v.a} att</div></div>`; }).join('');
+  const tot = { k: 0, e: 0, bk: 0, a: 0 }; rk.forEach(r => ['k', 'e', 'bk', 'a'].forEach(f => tot[f] += ov(r)[f] || 0));
+  const rows = rk.map(r => atkRow('R' + r, ov(r))).join('') + atkRow('TOTAL', tot, 'tot');
+  const cl = [...new Set(rk.flatMap(r => Object.keys(sr[r].c).filter(c => c !== 'OVR')))]
+    .sort((a, b) => rk.reduce((s, r) => s + (sr[r].c[b]?.a || 0), 0) - rk.reduce((s, r) => s + (sr[r].c[a]?.a || 0), 0));
+  const hl = [...new Set(rk.flatMap(r => Object.keys(sr[r].h || {})))]
+    .sort((a, b) => rk.reduce((s, r) => s + (sr[r].h[b]?.a || 0), 0) - rk.reduce((s, r) => s + (sr[r].h[a]?.a || 0), 0));
+  const cell = v => { if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; };
+  const mxC = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(c => `<th class="n">${c}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => cell(sr[r].c[c])).join('')}</tr>`).join('')}</table></div>`;
+  const mxH = `<div class="tw"><table><tr><th>Rotation</th>${hl.map(h => `<th class="n">${esc(h)}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${hl.map(h => cell((sr[r].h || {})[h])).join('')}</tr>`).join('')}</table></div>`;
+  return `<div class="g2">${card('Attack by Rotation — balls you set', `<div class="rots">${grid}</div><div class="m" style="margin-top:8px">Team attacks off your sets, by rotation. Laid out like the court: R4 · R3 · R2 front, R5 · R6 · R1 back. Matches only.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
+    card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mxC) +
+    card('Rotation × Hitter <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mxH);
 }
 
 // ── Block & defense ──────────────────────────────────────────────────────────

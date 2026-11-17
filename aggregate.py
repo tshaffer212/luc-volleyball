@@ -794,6 +794,9 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
     # {setter_num: {atk_num: {bucket: {combo_code: {k,e,b,a}}}}}
     # buckets: 'all' | 'fbso' | 'perf'(#) | 'good'(+) | 'med'(!) | 'oos'(-) | 'transition'
     setter_atk = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(ea))))
+    # {setter_num: {rot: {'c': {combo: {k,e,b,bk,a}}, 'h': {atk_num: {...}}}}} — team attack by
+    # rotation on balls this setter set (player portal: setters' rotation tab)
+    setter_rot = defaultdict(lambda: defaultdict(lambda: {'c': defaultdict(ea), 'h': defaultdict(ea)}))
 
     for rs, rally in sorted(by_rally.items()):
         rot = None
@@ -935,6 +938,13 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
             if not setter_num or not atk_num:
                 continue
 
+            if rot:
+                sr = setter_rot[setter_num][rot]
+                add_atk(sr['c'][cc], ev)
+                if cc != 'OVR':
+                    add_atk(sr['c']['OVR'], ev)
+                add_atk(sr['h'][atk_num], ev)
+
             # ── Attack by Setter — bucketed by reception quality ──────────────
             for bkt in quality_buckets:
                 add_atk(setter_atk[setter_num][atk_num][bkt][cc], ev)
@@ -985,6 +995,10 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
             for p in set(rot_atk) | set(rot_atk_close) | set(rot_atk_gap) | set(rot_srv) | set(rot_rcv) | set(rot_so)
         },
         'setter_atk':         ser_setter_v2(setter_atk),
+        'setter_rot':         {sp: {r: {'c': {cc: dict(v) for cc, v in x['c'].items()},
+                                        'h': {h: dict(v) for h, v in x['h'].items()}}
+                                    for r, x in rots.items()}
+                               for sp, rots in setter_rot.items()},
     }
 
 
