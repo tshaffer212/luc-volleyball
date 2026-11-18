@@ -104,6 +104,9 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   by serve/receive, next set after losing vs winning, in-set subs). file_idx matches `setting.files`.
   A "true rotation switch" between sets = the first server changed (receiving first in Rk = serving first in
   R(k+1), 6 wraps to 1) AND the starting rotation changed; serve R1 -> receive R6 is not a switch.
+  `starts.pos` = `{jersey: OH/MB/OPP/S/L/DS/Serve}` from `compute_scout_positions()`: scout files carry no
+  positions, so it's a best guess (libero flag, main setter, attack codes/start zones via `POS_CODES`,
+  DS = passes/digs but rarely attacks, Serve = mostly comes in to serve). Shown as tags in the subs table.
 - Scouting set types use the same list as the Loyola reports (`VALID_COMBOS`: X5 V5 X6 V6 XP X8 X1 X2 X7);
   every other code (PP, V8, XM, XR, ...) counts as "Other" via `scCombo()`. The "where the ball was set"
   bars (Left/Quick/Right/D-ball/BIC/Dump) are location-based and still include those codes.

@@ -2046,6 +2046,63 @@ def main(raw_path, out_path):
 
         return {'team': team, 'rotations': rotations, 'setters': setters}
 
+    # Attack codes that tell us a player's position (VM code names: "O" = opposite, "OH" = outside)
+    POS_CODES = {
+        'MB':  {'X1', 'X2', 'X7', 'XM', 'CB', 'CF', 'CS'},
+        'OPP': {'X6', 'V6', 'X8', 'V8', 'XS', 'XO', 'XQ', 'X3', 'X4', 'XD'},
+        'OH':  {'X5', 'V5', 'XP', 'VP', 'X9', 'XT', 'XC', 'X0', 'V0', 'XB', 'VB', 'XR', 'VR'},
+    }
+    POS_ZONE = {'4': 'OH', '5': 'OH', '6': 'OH', '7': 'OH', '8': 'OH', '3': 'MB', '2': 'OPP', '1': 'OPP', '9': 'OPP'}
+
+    def compute_scout_positions(sessions_for_opp):
+        """Best guess at each scouted player's position from what he does (scout files don't carry
+        positions): L = libero flag, S = main setter, OH / MB / OPP = where his attacks come from
+        (set codes first, start zone if uncoded), DS = passes/digs but rarely attacks,
+        Serve = mostly comes in to serve. Returns {jersey: position}."""
+        votes = defaultdict(Counter)
+        touches = defaultdict(Counter)
+        lib, setter_files, seen = Counter(), Counter(), set()
+        for session in sessions_for_opp:
+            key = (session.get('file'), session.get('date'))
+            if key in seen:
+                continue
+            seen.add(key)
+            side = opp_side_for_session(session)
+            for num, pl in (session.get(f'{side}_players') or {}).items():
+                if pl.get('is_libero') or pl.get('position_code') == '1':
+                    lib[str(num)] += 1
+            for pnum in file_setters(session, side):
+                setter_files[str(pnum)] += 1
+            for a in session.get('actions', []):
+                if a.get('team_side') != side or not a.get('player_num'):
+                    continue
+                pn, sk = str(a['player_num']), a.get('skill_code')
+                touches[pn][sk] += 1
+                if sk != 'A':
+                    continue
+                cc = a.get('combo_code') or ''
+                pos = next((k for k, v in POS_CODES.items() if cc in v), None)
+                if not pos and cc not in ('PP', 'P2', 'PR', 'XL', 'XG'):
+                    pos = POS_ZONE.get(str(a.get('start_zone') or ''))
+                if pos:
+                    votes[pn][pos] += 1
+        out = {}
+        for pn in set(touches) | set(lib):
+            t = touches[pn]
+            if lib[pn]:
+                out[pn] = 'L'
+            elif setter_files[pn] or (t['E'] >= 10 and t['E'] > t['A']):
+                out[pn] = 'S'
+            elif sum(votes[pn].values()) >= 3:
+                out[pn] = votes[pn].most_common(1)[0][0]
+            elif t['R'] + t['D'] > 0 and t['R'] + t['D'] >= t['S']:
+                out[pn] = 'DS'
+            elif t['S']:
+                out[pn] = 'Serve'
+            elif votes[pn]:
+                out[pn] = votes[pn].most_common(1)[0][0]
+        return out
+
     def compute_scout_starts(sessions_for_opp):
         """
         Scouting: how the opponent starts each set and what they change.
@@ -2247,6 +2304,7 @@ def main(raw_path, out_path):
         opp_rotation_stats[opp] = compute_scout_rotation_stats(sess_list)
         opp_rotation_stats[opp]['setting'] = compute_scout_setting(sess_list)
         opp_rotation_stats[opp]['starts'] = compute_scout_starts(sess_list)
+        opp_rotation_stats[opp]['starts']['pos'] = compute_scout_positions(sess_list)
 
     # ── Output ────────────────────────────────────────────────────────────────
     total_loyola_actions = sum(v['actions'] for v in season_stats.values())

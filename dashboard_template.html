@@ -7078,6 +7078,11 @@ function buildScoutStarts(name) {
   const fileOk = fi => season === 'all' || setting?.files?.[fi]?.season === season;
   const names = setting?.names || {};
   const nm = n => names[n] ? `#${n} ${names[n]}` : `#${n}`;
+  // Position = best guess from what each player does (aggregate.py compute_scout_positions)
+  const pos = st.pos || {};
+  const POS_TAG = { OH: 'OH', MB: 'MB', OPP: 'OPP', S: 'S', L: 'L', DS: 'DS', Serve: 'Serve sub' };
+  const POS_WORD = { OH: 'outside', MB: 'middle', OPP: 'opposite', S: 'setter', L: 'libero', DS: 'DS', Serve: 'serving sub' };
+  const nmP = n => `${nm(n)}${pos[n] ? ` <span style="font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-left:4px">${POS_TAG[pos[n]] || pos[n]}</span>` : ''}`;
   const sets = st.sets.filter(r => fileOk(r[0]));
   const subs = (st.subs || []).filter(r => fileOk(r[0]));
   if (!sets.length) return '<div class="empty">No set start data for this season.</div>';
@@ -7127,7 +7132,7 @@ function buildScoutStarts(name) {
       if (o.length || i.length) lineupChanged++;
       o.forEach(p => { outs[p] = (outs[p] || 0) + 1; }); i.forEach(p => { ins[p] = (ins[p] || 0) + 1; });
     });
-    const top3 = obj => Object.entries(obj).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([p, c]) => `${nm(p)} (${c} of ${n})`).join('<br>') || '-';
+    const top3 = obj => Object.entries(obj).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([p, c]) => `${nmP(p)} (${c} of ${n})`).join('<br>') || '-';
     return { n, knownN: known.length, same, topMove, lineupChanged, ins: top3(ins), outs: top3(outs) };
   };
   const L = after(0), W = after(1);
@@ -7158,10 +7163,18 @@ function buildScoutStarts(name) {
   const subRows = Object.entries(g).sort((x, y) => y[1].n - x[1].n).slice(0, 12).map(([k, o]) => {
     const avgPt = o.score.length ? Math.round(o.score.reduce((a, b) => a + b, 0) / o.score.length) : 0;
     const when = o.trail > o.lead && o.trail > o.tie ? 'Mostly when trailing' : o.lead > o.trail && o.lead > o.tie ? 'Mostly when leading' : o.tie > o.trail && o.tie > o.lead ? 'Mostly when tied' : 'Mixed';
-    const pattern = back(k) && back(k).n >= Math.max(2, o.n * 0.5) ? 'Swaps back later (likely a serving or defensive sub)' : 'Usually stays in';
-    return `<tr><td style="white-space:nowrap">${nm(o.out)}</td><td style="white-space:nowrap">${nm(o.in)}</td><td class="num">${o.n}</td><td>${when} <span style="color:var(--text-muted)">(${o.trail} trailing, ${o.tie} tied, ${o.lead} leading)</span></td><td class="num">${avgPt}</td><td>${pattern}</td></tr>`;
+    const po = pos[o.out], pi = pos[o.in], W = x => POS_WORD[x] || 'player';
+    const swapsBack = back(k) && back(k).n >= Math.max(2, o.n * 0.5);
+    const pattern = pi === 'Serve' ? `Serving sub for the ${W(po)}`
+      : pi === 'DS' ? `Defensive sub for the ${W(po)}`
+      : (po === 'Serve' || po === 'DS') ? `${W(pi)[0].toUpperCase() + W(pi).slice(1)} back in after the ${po === 'Serve' ? 'serving' : 'defensive'} sub`
+      : ((po === 'OPP' && pi === 'S') || (po === 'S' && pi === 'OPP')) ? 'Double sub (setter and opposite)'
+      : swapsBack ? 'Swaps back later'
+      : (po && po === pi) ? `Replaces him at ${W(po)}`
+      : 'Usually stays in';
+    return `<tr><td style="white-space:nowrap">${nmP(o.out)}</td><td style="white-space:nowrap">${nmP(o.in)}</td><td class="num">${o.n}</td><td>${when} <span style="color:var(--text-muted)">(${o.trail} trailing, ${o.tie} tied, ${o.lead} leading)</span></td><td class="num">${avgPt}</td><td>${pattern}</td></tr>`;
   }).join('');
-  const subCard = card('Substitutions During a Set', `${subs.length} substitutions in ${sets.length} sets. "Around point" = average total points played when the sub was made.`,
+  const subCard = card('Substitutions During a Set', `${subs.length} substitutions in ${sets.length} sets. "Around point" = average total points played when the sub was made. Positions are a best guess from what each player does in these files: OH outside, MB middle, OPP opposite, S setter, L libero, DS defensive specialist, Serve sub = mostly comes in to serve.`,
     subRows ? T(`<tr><th ${H}>Player out</th><th ${H}>Player in</th><th class="num" ${H}>Times</th><th ${H}>Score at the time</th><th class="num" ${H}>Around point</th><th ${H}>Pattern</th></tr>`, subRows) : '<div class="empty">No substitutions found.</div>');
 
   return startCard + changeCard + subCard;
