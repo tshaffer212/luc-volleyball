@@ -7268,7 +7268,7 @@ function spFilter(B, pn, skip) {
   const fileLbl = fi => { const f = B.files[fi] || {}; return `${f.file || ''}${f.date ? ' (' + f.date + ')' : ''}`; };
   const atk = B.atk.filter(r => r[1] === pn && rotOk(r) && (skip === 'set' || F.set === 'all' || scCombo(r[3]) === F.set) && (skip === 'ph' || F.ph === 'all' || (F.ph === 'T' ? r[5] === 'T' : r[5] !== 'T')))
     .map(r => { const res = SP_ATK_RES(r[4]);
-      return { rot: r[2], combo: r[3], ev: r[4], pg: r[5], res, s: spXY(r[6]), m: spXY(r[7]), e: spXY(r[8]),
+      return { rot: r[2], combo: r[3], ev: r[4], pg: r[5], passer: r[11] || '', won: r[12] || 0, res, s: spXY(r[6]), m: spXY(r[7]), e: spXY(r[8]),
         label: `${r[3] || 'No code'}${COMBO_NAMES?.[r[3]] ? ' ' + COMBO_NAMES[r[3]] : ''} - Rotation ${r[2] || '?'} - ${SP_RES_LBL[res]} - coded landing zone ${r[9] || '?'} - ${fileLbl(r[0])}, set ${r[10]}` }; });
   const srv = B.srv.filter(r => r[1] === pn && rotOk(r) && (F.st === 'all' || r[3] === F.st))
     .map(r => { const res = SP_SRV_RES(r[4]);
@@ -7362,7 +7362,8 @@ function spStats(B, pn) {
     aces: cnt(S, '#'), serr: cnt(S, '='), tough: S.filter(r => r.res === 'tough').length,
     srvRows: ['Q', 'M', 'H'].map(t => [t, S.filter(r => r.typ === t)]).filter(([, a]) => a.length),
     passRows, recRows,
-    pass: R_.length, passPos: R_.filter(r => r[4] === '#' || r[4] === '+').length, passPerf: R_.filter(r => r[4] === '#').length, passErr: R_.filter(r => r[4] === '=').length,
+    ph: byPassA.filter(r => r.passer && r.passer === pn), np: byPassA.filter(r => r.passer && r.passer !== pn),
+    pass: R_.length, passRating: spPassRating(R_), passErr: R_.filter(r => r[4] === '=').length,
     digs: D_.length, blocks: BL.filter(r => r[4] === '#').length, sets: E_.length,
   };
 }
@@ -7380,27 +7381,45 @@ function spAtkTable(rows, base, lbl, small) {
   return `<table class="sp-table" style="width:100%">${head}${body || `<tr><td colspan="7" style="color:var(--text-dim)">No attacks</td></tr>`}</table>`;
 }
 
-// Passing: by zone where he took the serve, split by the serve he passed (jump spin / float) and total,
-// plus the team's first attack right after his pass
+// Passing: by zone where he took the serve - attempts, pass rating (the dashboard's pass scale) and error %,
+// for all serves / vs jump spin / vs float
+function spPassRating(rows) {
+  if (!rows.length) return null;
+  const ev = {}; rows.forEach(r => { ev[r[4]] = (ev[r[4]] || 0) + 1; });
+  return passAvgFromEvals(ev, rows.length);
+}
 function spRecTable(st, small) {
   const td = small ? 'style="padding:2px 3px"' : '';
-  const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
-  const pos = a => a.filter(r => r[4] === '#' || r[4] === '+').length;
-  const fbEff = a => { const f = a.filter(r => r[6]); if (!f.length) return '-';
-    const v = (f.filter(r => r[6] === '#').length - f.filter(r => r[6] === '=').length - f.filter(r => r[6] === '/').length) / f.length;
-    const tone = effTone(v, f.length, null); return `<span style="font-weight:700;${tone ? 'color:' + tone : ''}">${fmtEff3(v)}</span>`; };
+  const errP = a => a.length ? Math.round(a.filter(r => r[4] === '=').length / a.length * 100) + '%' : '-';
+  const rt = a => { const v = spPassRating(a); if (v === null) return '-';
+    const c = a.length >= 5 ? passAvgColor(v) : 'var(--text)'; return `<span style="font-weight:700;color:${c}">${v.toFixed(2)}</span>`; };
   const g = 'style="text-align:center;border-bottom:1px solid var(--border)' + (small ? ';padding:1px 3px' : '') + '"';
-  const head = `<tr><th ${td}></th><th colspan="4" ${g}>All serves</th><th colspan="2" ${g}>vs Jump spin</th><th colspan="2" ${g}>vs Float</th><th colspan="2" ${g}>First attack after</th></tr>
-    <tr><th ${td}>${small ? 'Zone' : 'Where he passed'}</th><th class="num" ${td}>Pass</th><th class="num" ${td}>Perf%</th><th class="num" ${td}>Pos%</th><th class="num" ${td}>Err</th><th class="num" ${td}>Pass</th><th class="num" ${td}>Pos%</th><th class="num" ${td}>Pass</th><th class="num" ${td}>Pos%</th><th class="num" ${td}>ATT</th><th class="num" ${td}>EFF</th></tr>`;
+  const sub = `<th class="num" ${td}>Att</th><th class="num" ${td}>Rating</th><th class="num" ${td}>Err%</th>`;
+  const head = `<tr><th ${td}></th><th colspan="3" ${g}>All serves</th><th colspan="3" ${g}>vs Jump spin</th><th colspan="3" ${g}>vs Float</th></tr>
+    <tr><th ${td}>${small ? 'Zone' : 'Where he passed'}</th>${sub}${sub}${sub}</tr>`;
+  const cells = a => `<td class="num" ${td}>${a.length || '-'}</td><td class="num" ${td}>${rt(a)}</td><td class="num" ${td}>${errP(a)}</td>`;
   const body = st.recRows.map(([z, a]) => {
     const Q = a.filter(r => r[7] === 'Q'), F = a.filter(r => r[7] === 'M' || r[7] === 'H');
     const tot = z === 'Total';
     const lbl = tot ? '<b>Total</b>' : (small ? 'Zone ' + z : `Zone ${z} <span style="color:var(--text-muted);font-size:11px">${SP_RZONE[z] || ''}</span>`);
-    return `<tr${tot ? ' style="border-top:1px solid var(--text)"' : ''}><td ${td}>${lbl}</td><td class="num" ${td}>${a.length}</td><td class="num" ${td}>${pc(a.filter(r => r[4] === '#').length, a.length)}</td><td class="num" ${td}>${pc(pos(a), a.length)}</td><td class="num" ${td}>${a.filter(r => r[4] === '=').length || '-'}</td>`
-      + `<td class="num" ${td}>${Q.length || '-'}</td><td class="num" ${td}>${pc(pos(Q), Q.length)}</td><td class="num" ${td}>${F.length || '-'}</td><td class="num" ${td}>${pc(pos(F), F.length)}</td>`
-      + `<td class="num" ${td}>${a.filter(r => r[6]).length || '-'}</td><td class="num" ${td}>${fbEff(a)}</td></tr>`;
+    return `<tr${tot ? ' style="border-top:1px solid var(--text)"' : ''}><td ${td}>${lbl}</td>${cells(a)}${cells(Q)}${cells(F)}</tr>`;
   }).join('');
   return `<table class="sp-table" style="width:100%">${head}${body}</table>`;
+}
+
+// Pass & Hit (same rules as the Reports card): his first-ball attacks off a set right after his OWN pass
+// vs his first-ball attacks when someone else passed
+function spPassHitTable(st, small) {
+  const td = small ? 'style="padding:2px 4px"' : '';
+  const row = (lbl, a) => {
+    const K = a.filter(r => r.ev === '#').length, E = a.filter(r => r.ev === '=').length, Bk = a.filter(r => r.ev === '/').length, W = a.filter(r => r.won).length;
+    const v = a.length ? (K - E - Bk) / a.length : null, tone = effTone(v, a.length, st.eff);
+    const pc = n => a.length ? Math.round(n / a.length * 100) + '%' : '-';
+    return `<tr><td ${td}>${lbl}</td><td class="num" ${td}>${K}</td><td class="num" ${td}>${E}</td><td class="num" ${td}>${Bk || '-'}</td><td class="num" ${td}>${a.length}</td>`
+      + `<td class="num" ${td}><span style="font-weight:700;${tone ? 'color:' + tone : ''}">${a.length ? fmtEff3(v) : '-'}</span></td><td class="num" ${td}>${pc(K)}</td><td class="num" ${td}>${pc(W)}</td></tr>`;
+  };
+  return `<table class="sp-table" style="width:100%"><tr><th ${td}></th><th class="num" ${td}>K</th><th class="num" ${td}>E</th><th class="num" ${td}>BLK</th><th class="num" ${td}>ATT</th><th class="num" ${td}>EFF</th><th class="num" ${td}>FBSO%</th><th class="num" ${td}>SO%</th></tr>`
+    + row(small ? 'Passed &amp; hit' : 'Passed &amp; hit (after his own pass)', st.ph) + row(small ? "Didn't pass" : "Didn't pass (someone else passed)", st.np) + `</table>`;
 }
 
 function spSrvTable(st, small) {
@@ -7430,7 +7449,7 @@ function spCard(name, B, pn) {
       <div style="display:flex;gap:18px;flex-wrap:wrap">
         ${stat('Att', st.A.length)}${stat('K', st.k)}${stat('E', st.e)}${stat('BLK', st.b)}${stat('Eff', st.A.length ? `<span${sTone ? ` style="color:${sTone}"` : ''}>${fmtEff3(st.eff)}</span>` : '-')}${stat('K%', pc(st.k, st.A.length))}
         ${stat('Serves', st.S.length)}${stat('Aces', st.aces)}${stat('Srv err', st.serr)}
-        ${st.pass ? stat('Passes', st.pass) + stat('Pos %', pc(st.passPos, st.pass)) : ''}${st.digs ? stat('Digs', st.digs) : ''}${st.blocks ? stat('Blocks', st.blocks) : ''}${pos === 'S' && st.sets ? stat('Sets', st.sets) : ''}
+        ${st.pass ? stat('Passes', st.pass) + stat('Pass rtg', st.passRating === null ? '-' : st.passRating.toFixed(2)) : ''}${st.digs ? stat('Digs', st.digs) : ''}${st.blocks ? stat('Blocks', st.blocks) : ''}${pos === 'S' && st.sets ? stat('Sets', st.sets) : ''}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:16px">
@@ -7442,7 +7461,9 @@ function spCard(name, B, pn) {
         <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Tough = Loyola passed it poorly or overpassed it.</div></div>
     </div>
     ${st.pass ? `<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Passing - ${st.pass} serves received</div><div style="overflow-x:auto">${spRecTable(st)}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Zones are on his side of the court. Positive = perfect or good pass. First attack after = his team's first swing right after his pass (kills minus errors minus blocked, over attempts).</div></div>` : ''}
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Zones are on his side of the court. Rating = average pass on the ${rcvPassScale}-point scale (${rcvPassScale === '4' ? '# 4, + 3, ! 2' : '# 3, + and ! 2'}, - 1, / 0.5, error 0). Err% = passing errors (aces against him).</div></div>` : ''}
+    ${st.ph.length ? `<div style="margin-bottom:16px;max-width:720px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Pass &amp; Hit - attacking right after his own pass</div>${spPassHitTable(st)}
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Serve-receive only: his first-ball attacks off a set when he took the pass himself vs when someone else passed. FBSO% = kills on that swing, SO% = his team won the rally.</div></div>` : ''}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
       <div style="border:1px solid var(--border);border-radius:6px;padding:12px 14px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Attacking - ${st.A.length} attacks</div>
         ${st.A.length ? `<div style="display:flex;justify-content:center">${spCourt(st.A, 330, 470, 22)}</div>` : '<div class="empty">No attacks with these filters.</div>'}${spLegend('A')}</div>
@@ -7517,11 +7538,11 @@ function _spPdfBlock(name, B, pn) {
   const setLbl = c => `<span style="display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:4px;background:${SC_CAT_CLR[SC_CODE_CAT[c] || 'Other']}"></span>${c}`;
   return `<div class="pb">
     <div class="ph"><div><b>#${pn} ${B.names[pn] || ''}</b>${pos ? `<span class="tag">${POS_TAG_SC[pos] || pos}</span>` : ''}</div>
-      <span>${st.A.length} att, ${st.k} K, ${st.e} E, ${st.b} BLK, Eff ${st.A.length ? fmtEff3(st.eff) : '-'}, K% ${pc(st.k, st.A.length)} - ${st.S.length} serves, ${st.aces} aces, ${st.serr} err${st.pass ? ` - ${st.pass} passes, ${pc(st.passPos, st.pass)} pos` : ''}</span></div>
+      <span>${st.A.length} att, ${st.k} K, ${st.e} E, ${st.b} BLK, Eff ${st.A.length ? fmtEff3(st.eff) : '-'}, K% ${pc(st.k, st.A.length)} - ${st.S.length} serves, ${st.aces} aces, ${st.serr} err${st.pass ? ` - ${st.pass} passes, ${st.passRating === null ? '-' : st.passRating.toFixed(2)} rating` : ''}</span></div>
     <div class="pc">
       <div class="pt"><div class="tc"><div>${spAtkTable(st.rotRows, st.eff, r => 'Rot ' + r, 1)}<div style="height:5px"></div>${st.A.length ? spAtkTable(st.passRows, st.eff, k => SP_PASS_ROWS.find(x => x[0] === k)[2], 1) : ''}</div>
         <div>${spAtkTable(st.setRows.slice(0, 8), st.eff, setLbl, 1)}<div style="height:5px"></div>${spSrvTable(st, 1)}</div></div>
-        ${st.pass ? `<div style="height:5px"></div>${spRecTable(st, 1)}` : ''}</div>
+        ${st.pass ? `<div style="height:5px"></div>${spRecTable(st, 1)}` : ''}${st.ph.length ? `<div style="height:5px"></div>${spPassHitTable(st, 1)}` : ''}</div>
       <div class="pg2"><div>${st.A.length ? spCourt(st.A, 168, 252, 22) : '<div class="none">No attacks</div>'}<div class="cap">Attacking (${st.A.length})</div></div>
         <div>${st.S.length ? spCourt(st.S, 120, 252, 0) : '<div class="none">No serves</div>'}<div class="cap">Serving (${st.S.length})</div></div></div>
     </div></div>`;

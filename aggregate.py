@@ -2159,8 +2159,10 @@ def main(raw_path, out_path):
         """Scouting player tab: every attack / serve by the scouted team with the exact court spots
         VolleyMetrics clicked (xy_* from parse_dvw), plus their other touches for the general stats.
           atk: [file_idx, player, rot, combo, eval, pass ('#','+','!','-','/' = grade of their serve-receive
-                pass before this first-ball attack, 'T' = transition), start, mid, end, coded_end, set]
-                coords = raw DVW int 'yyxx' (-1 = missing)
+                pass before this first-ball attack, 'T' = transition), start, mid, end, coded_end, set,
+                passer (first-ball attacks off a set only, else ''), won (1 = his team won the rally)]
+                coords = raw DVW int 'yyxx' (-1 = missing). Passer + won feed Pass & Hit (same rules as the
+                Reports card: his first-ball attack off a set after his own pass vs after someone else's).
           srv: [file_idx, player, rot, serve_type (Q jump spin / M jump float / H float), eval,
                 start, end, coded_end, set]
           oth: [file_idx, player, rot, skill (R pass / D dig / B block / E set), eval]
@@ -2188,7 +2190,14 @@ def main(raw_path, out_path):
             for a in session.get('actions', []):
                 groups[a.get('rally_seq', 0)].append(a)
             for rs in sorted(groups):
-                fb_open, rcv_row, grade = False, None, 'T'
+                fb_open, rcv_row, grade, set_seen = False, None, 'T', False
+                winner = None
+                for a in reversed(groups[rs]):
+                    tm = _pa_terminal(a)
+                    if tm and a.get('team_side') in ('home', 'away'):
+                        winner = a['team_side'] if tm > 0 else ('away' if a['team_side'] == 'home' else 'home')
+                        break
+                won = 1 if winner == side else 0
                 for a in groups[rs]:
                     sd, sk = a.get('team_side'), a.get('skill_code')
                     if sd != side:
@@ -2201,8 +2210,10 @@ def main(raw_path, out_path):
                     rot = get_opp_rotation(a, side, sl, setters_f)
                     rot = rot if rot and 1 <= rot <= 6 else 0
                     ev = a.get('evaluation') or ''
+                    if sk == 'E' and fb_open:
+                        set_seen = True
                     if sk == 'R':
-                        fb_open, grade = True, (ev or '?')
+                        fb_open, grade, set_seen = True, (ev or '?'), False
                         ve = a.get('vm_end') or ''
                         rcv_row = [fi, pn, rot, 'R', ev, ve[:1] if ve[:1].isdigit() else '', '', a.get('technique') or '']
                         oth.append(rcv_row)
@@ -2211,7 +2222,8 @@ def main(raw_path, out_path):
                             rcv_row[6] = ev or '?'
                         atk.append([fi, pn, rot, a.get('combo_code') or '', ev, grade if fb_open else 'T',
                                     c_(a.get('xy_s')), c_(a.get('xy_m')), c_(a.get('xy_e')),
-                                    a.get('vm_end') or '', a.get('set_number') or 0])
+                                    a.get('vm_end') or '', a.get('set_number') or 0,
+                                    rcv_row[1] if (fb_open and set_seen and rcv_row is not None) else '', won])
                         fb_open = False
                     elif sk == 'S':
                         srv.append([fi, pn, rot, a.get('technique') or '', ev,

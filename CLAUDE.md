@@ -123,8 +123,10 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
 The scouting detail has a "Team report | Player scouting" switch (`scoutView`, `setScoutView()`). Player
 scouting = a checklist of the opponent's players (`scoutPF.checked`), filters (rotation, set type, first ball /
 transition, serve type, plus the page's Season filter) and one card per checked player (`spCard()`): attack
-stats, attack by rotation / set type / pass before the set, serving by type, passing by zone split vs jump
-spin / vs float / total with the team's first attack after his pass, and two charts (`spCourt()`).
+stats, attack by rotation / set type / pass before the set, serving by type, passing by zone (attempts, pass
+rating on the dashboard's `rcvPassScale`, error %) split all serves / vs jump spin / vs float, Pass & Hit
+(`spPassHitTable()`: his first-ball attacks off a set after his own pass vs when someone else passed, same
+rules as the Reports card; atk rows carry passer + rally won), and two charts (`spCourt()`).
 "Export checked to PDF (2 per page)" = `exportScoutPlayersPDF()`.
 - Data: `opp_rotation_stats[opp].players` from `compute_scout_players()` (see its docstring for row layouts).
 - Lines are drawn from the exact court spots VolleyMetrics clicked: `parse_dvw.py` stores DVW fields 4/5/6 as
