@@ -118,6 +118,11 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   bars (Left/Quick/Right/D-ball/BIC/Dump) are location-based and still include those codes.
   `scColorKey()` = the plain-English color key (colors -> play calls via `SC_CAT_CODES`, descriptions in
   `SC_CAT_DESC`), shown above the rotation boxes and in the setting breakdown; set-type rows carry the swatch.
+- Serve type everywhere serving / passing shows up in the Team report: vs jump spin / vs float / total
+  (`serve_group()` in aggregate.py: technique Q = spin, M / H = float). Team strip SO% / FBSO% / In-Sys
+  (`team.by.spin|float`), rotation cards' Receiving table (`rotations[r].rcv.by`), setting breakdown pass tables
+  (setting rows add r[12] = serve group, '' = transition), the pass-zone matrix (three side by side) and
+  opponent Pass & Hit (`buildScoutPassHit()`, now built from `players.atk` rows; atk rows add r[13] = serve group).
 
 ### Scouting player tab ("Player scouting" view)
 The scouting detail has a "Team report | Player scouting" switch (`scoutView`, `setScoutView()`). Player

@@ -1861,6 +1861,11 @@ def main(raw_path, out_path):
         if sz == '2':   return 'Right'
         return 'Other'
 
+    def serve_group(a):
+        """Serve type of a serve / reception action: 'spin' (Q = jump spin) or 'float' (M jump float, H float)."""
+        t = (a or {}).get('technique') or ''
+        return 'spin' if t == 'Q' else ('float' if t in ('M', 'H') else '')
+
     def compute_scout_rotation_stats(sessions_for_opp):
         """
         Compute per-rotation and team-level stats for a scouted opponent
@@ -1870,7 +1875,7 @@ def main(raw_path, out_path):
         def new_rot():
             return {
                 'atk':  {'att':0,'k':0,'e':0,'bk':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'Dball':0,'BIC':0,'Dump':0}},
-                'rcv':  {'att':0,'in_sys':0,'fbso_rallies':0,'fbso_kills':0,'zones':{}},
+                'rcv':  {'att':0,'in_sys':0,'fbso_rallies':0,'fbso_kills':0,'zones':{},'by':{}},
                 'dig':  {'att':0,'err':0},
                 'set':  {'att':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'Dball':0,'BIC':0}},
             }
@@ -1879,6 +1884,8 @@ def main(raw_path, out_path):
         setters   = {}  # jersey_str → {name, sets, rot_counts, rcv_in_sys, rcv_att, rotations_set}
         team = {'att':0,'k':0,'e':0,'bk':0,'so_rallies':0,'so_kills':0,
                 'fbso_rallies':0,'fbso_kills':0,'rcv_att':0,'rcv_in_sys':0}
+        # same receive numbers split by the serve they passed: 'spin' (jump spin) / 'float' (jump float + float)
+        team_by = {g: {'rcv_att':0,'rcv_in_sys':0,'fbso_rallies':0,'fbso_kills':0,'so_rallies':0,'so_kills':0} for g in ('spin', 'float')}
 
         for session in sessions_for_opp:
             opp_side   = opp_side_for_session(session)
@@ -1913,12 +1920,19 @@ def main(raw_path, out_path):
 
                 # ── Reception ──────────────────────────────────────────────────
                 has_rcv = bool(first_rcv)
+                sg = serve_group(first_rcv) if has_rcv else ''
+                tb = team_by[sg] if sg else None
+                rbb = rotations[rot_key]['rcv']['by'].setdefault(sg, {'att': 0, 'in_sys': 0, 'fbso_kills': 0}) if (sg and rot_key) else None
                 if has_rcv:
                     ev  = first_rcv.get('evaluation','')
                     in_sys = 1 if ev in ('#','+') else 0
                     zone   = str(first_rcv.get('end_zone') or '')
                     team['rcv_att']    += 1
                     team['rcv_in_sys'] += in_sys
+                    if tb is not None:
+                        tb['rcv_att'] += 1; tb['rcv_in_sys'] += in_sys; tb['fbso_rallies'] += 1; tb['so_rallies'] += 1
+                    if rbb is not None:
+                        rbb['att'] += 1; rbb['in_sys'] += in_sys
                     if rot_key:
                         rb = rotations[rot_key]['rcv']
                         rb['att']    += 1
@@ -1938,6 +1952,8 @@ def main(raw_path, out_path):
                     team['fbso_rallies'] += 1
                     if is_fbso:
                         team['fbso_kills'] += 1
+                        if tb is not None: tb['fbso_kills'] += 1
+                        if rbb is not None: rbb['fbso_kills'] += 1
                     if rot_key:
                         rotations[rot_key]['rcv']['fbso_kills'] += (1 if is_fbso else 0)
                         if zone in ('1','5','6'):
@@ -1955,10 +1971,12 @@ def main(raw_path, out_path):
                         if ev == '#':
                             # Kill: opp scored if opp killed
                             team['so_kills'] += (1 if side == opp_side else 0)
+                            if tb is not None: tb['so_kills'] += (1 if side == opp_side else 0)
                             break
                         elif ev == '=':
                             # Error: opp scored if server (non-opp) errored
                             team['so_kills'] += (1 if side == srv_side else 0)
+                            if tb is not None: tb['so_kills'] += (1 if side == srv_side else 0)
                             break
 
                 # ── Attacks ───────────────────────────────────────────────────
@@ -2023,6 +2041,11 @@ def main(raw_path, out_path):
         t['fbso_pct']  = round(t['fbso_kills']/t['fbso_rallies']*100,1) if t['fbso_rallies'] else 0
         t['so_pct']    = round(t['so_kills']/t['so_rallies']*100,1)     if t['so_rallies'] else 0
         t['in_sys_pct']= round(t['rcv_in_sys']/t['rcv_att']*100,1)     if t['rcv_att'] else 0
+        for g, b in team_by.items():
+            b['fbso_pct']   = round(b['fbso_kills']/b['fbso_rallies']*100,1) if b['fbso_rallies'] else None
+            b['so_pct']     = round(b['so_kills']/b['so_rallies']*100,1)     if b['so_rallies'] else None
+            b['in_sys_pct'] = round(b['rcv_in_sys']/b['rcv_att']*100,1)     if b['rcv_att'] else None
+        t['by'] = team_by
 
         for rk, rv in rotations.items():
             a = rv['atk']
@@ -2031,6 +2054,9 @@ def main(raw_path, out_path):
             r = rv['rcv']
             r['in_sys_pct']  = round(r['in_sys']/r['att']*100,1)              if r['att'] else 0
             r['fbso_pct']    = round(r['fbso_kills']/r['fbso_rallies']*100,1) if r['fbso_rallies'] else 0
+            for g, b in r['by'].items():
+                b['in_sys_pct'] = round(b['in_sys']/b['att']*100,1)     if b['att'] else None
+                b['fbso_pct']   = round(b['fbso_kills']/b['att']*100,1) if b['att'] else None
             for zk, zv in r['zones'].items():
                 zv['in_sys_pct'] = round(zv['in_sys']/zv['att']*100,1) if zv['att'] else 0
                 zv['fbso_pct']   = round(zv['fbso']/zv['att']*100,1)   if zv['att'] else 0
@@ -2160,7 +2186,8 @@ def main(raw_path, out_path):
         VolleyMetrics clicked (xy_* from parse_dvw), plus their other touches for the general stats.
           atk: [file_idx, player, rot, combo, eval, pass ('#','+','!','-','/' = grade of their serve-receive
                 pass before this first-ball attack, 'T' = transition), start, mid, end, coded_end, set,
-                passer (first-ball attacks off a set only, else ''), won (1 = his team won the rally)]
+                passer (first-ball attacks off a set only, else ''), won (1 = his team won the rally),
+                serve group of the pass before a first-ball attack ('spin' / 'float', '' = transition)]
                 coords = raw DVW int 'yyxx' (-1 = missing). Passer + won feed Pass & Hit (same rules as the
                 Reports card: his first-ball attack off a set after his own pass vs after someone else's).
           srv: [file_idx, player, rot, serve_type (Q jump spin / M jump float / H float), eval,
@@ -2190,7 +2217,7 @@ def main(raw_path, out_path):
             for a in session.get('actions', []):
                 groups[a.get('rally_seq', 0)].append(a)
             for rs in sorted(groups):
-                fb_open, rcv_row, grade, set_seen = False, None, 'T', False
+                fb_open, rcv_row, grade, set_seen, rcv_sg = False, None, 'T', False, ''
                 winner = None
                 for a in reversed(groups[rs]):
                     tm = _pa_terminal(a)
@@ -2214,6 +2241,7 @@ def main(raw_path, out_path):
                         set_seen = True
                     if sk == 'R':
                         fb_open, grade, set_seen = True, (ev or '?'), False
+                        rcv_sg = serve_group(a)
                         ve = a.get('vm_end') or ''
                         rcv_row = [fi, pn, rot, 'R', ev, ve[:1] if ve[:1].isdigit() else '', '', a.get('technique') or '']
                         oth.append(rcv_row)
@@ -2223,7 +2251,8 @@ def main(raw_path, out_path):
                         atk.append([fi, pn, rot, a.get('combo_code') or '', ev, grade if fb_open else 'T',
                                     c_(a.get('xy_s')), c_(a.get('xy_m')), c_(a.get('xy_e')),
                                     a.get('vm_end') or '', a.get('set_number') or 0,
-                                    rcv_row[1] if (fb_open and set_seen and rcv_row is not None) else '', won])
+                                    rcv_row[1] if (fb_open and set_seen and rcv_row is not None) else '', won,
+                                    rcv_sg if fb_open else ''])
                         fb_open = False
                     elif sk == 'S':
                         srv.append([fi, pn, rot, a.get('technique') or '', ev,
@@ -2332,7 +2361,8 @@ def main(raw_path, out_path):
         where the set was made, set type) — plus Pass & Hit per opponent player.
 
         set rows: [file_idx, rot, setter, hitter, phase, pass_zone, passer, set_zone,
-                   combo, cat, attack_eval, opp_won_rally]
+                   combo, cat, attack_eval, opp_won_rally, serve_group]
+          serve_group = serve they passed before a first-ball set: 'spin' / 'float' ('' = transition)
           phase     = grade of the serve-receive pass for first-ball sets (# + ! - /),
                       'T' = transition (any later possession)
           pass_zone = zone where the serve was passed (reception end zone) — first ball only
@@ -2391,7 +2421,7 @@ def main(raw_path, out_path):
                                  (rcv.get('evaluation') or '?') if first_ball else 'T',
                                  str(rcv.get('end_zone') or '') if first_ball else '',
                                  (rcv.get('player_num') or '') if first_ball else '',
-                                 szone, combo, cat, ev, won])
+                                 szone, combo, cat, ev, won, serve_group(rcv) if first_ball else ''])
             # Pass & Hit for the opponent's players (same rules as Loyola's card)
             for sn, pl in compute_pass_hit(session.get('actions', []), opp_side).items():
                 for pn, v in pl.items():

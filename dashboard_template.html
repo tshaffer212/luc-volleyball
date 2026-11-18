@@ -7850,20 +7850,30 @@ function buildScoutSetting(name) {
   const fbRows = rows.filter(r => r[4] !== 'T');
   const byPZ = group(fbRows, r => r[5]);
   const pzOrder = ['5', '6', '1', '7', '8', '9', '4', '3', '2'].filter(k => byPZ[k]);
-  const pzRows = pzOrder.map(k => { const o = byPZ[k];
-    return `<tr><td style="font-weight:600;white-space:nowrap">${SC_PASS_ZONE[k] || 'Zone ' + k}</td><td class="num">${o.a}</td><td>${distBar(o)}</td><td style="font-size:12px">${topSets(o)}</td><td class="num" style="font-weight:700;color:${eClr(eff(o), o.a)}">${fE(eff(o))}</td></tr>`; }).join('');
+  // serve they passed: side by side vs jump spin / vs float, then the total
+  const SGS = [['spin', 'vs Jump spin'], ['float', 'vs Float'], ['all', 'Total']];
+  const distBarS = o => distBar(o).replace('min-width:200px', 'min-width:110px');
+  const sgCells = list => SGS.map(([g], i) => { const o = z(); (g === 'all' ? list : list.filter(r => r[12] === g)).forEach(r => add(o, r));
+    return `<td class="num" style="${i ? '' : 'border-left:1px solid var(--border)'}${g === 'all' ? ';border-left:1px solid var(--border);font-weight:700' : ''}">${o.a || '-'}</td><td>${o.a ? distBarS(o) : ''}</td><td class="num" style="font-weight:700;color:${eClr(eff(o), o.a)}">${o.a ? fE(eff(o)) : '-'}</td>`; }).join('');
+  const sgHead = (first, extra = '') => `<tr><th ${H}></th>${SGS.map(([g, l]) => `<th colspan="3" ${Hs('text-align:center;border-left:1px solid var(--border)')}>${l}</th>`).join('')}${extra ? `<th ${H}></th>` : ''}</tr>
+    <tr><th ${H}>${first}</th>${SGS.map(() => `<th class="num" ${Hs('border-left:1px solid var(--border)')}>Sets</th><th ${H}>Set distribution</th><th class="num" ${H}>EFF</th>`).join('')}${extra}</tr>`;
+  const pzRows = pzOrder.map(k => { const list = fbRows.filter(r => r[5] === k);
+    return `<tr><td style="font-weight:600;white-space:nowrap">${SC_PASS_ZONE[k] || 'Zone ' + k}</td>${sgCells(list)}</tr>`; }).join('')
+    + (fbRows.length ? `<tr style="border-top:1px solid var(--text)"><td style="font-weight:700">All zones</td>${sgCells(fbRows)}</tr>` : '');
 
   // -- Set distribution by where the pass went (setter's location) --
   const bySZ = group(rows, r => r[7]);
-  const szRows = SC_SET_ZONE_ORDER.filter(k => bySZ[k]).map(k => { const o = bySZ[k];
-    return `<tr><td style="font-weight:600;white-space:nowrap">${SC_SET_ZONE[k]}</td><td class="num">${o.a}</td><td class="num" style="color:var(--gold)">${pc(o.a, all.a)}</td><td>${distBar(o)}</td><td style="font-size:12px">${topSets(o)}</td><td class="num" style="font-weight:700;color:${eClr(eff(o), o.a)}">${fE(eff(o))}</td></tr>`; }).join('');
+  const szRows = SC_SET_ZONE_ORDER.filter(k => bySZ[k]).map(k => { const list = rows.filter(r => r[7] === k);
+    return `<tr><td style="font-weight:600;white-space:nowrap">${SC_SET_ZONE[k]}</td>${sgCells(list)}<td class="num">${pc(list.length, all.a)}</td></tr>`; }).join('');
 
   // -- Where the pass went from each passing zone (first ball) --
   const szUsed = SC_SET_ZONE_ORDER.filter(k => fbRows.some(r => r[7] === k));
-  const cross = pzOrder.length && szUsed.length ? T(`<tr><th ${H}>Passed from (rows) / set from (columns)</th>${szUsed.map(k => `<th class="num" ${H} title="${SC_SET_ZONE[k]}">Z${k}</th>`).join('')}<th class="num" ${H}>n</th></tr>`,
-    pzOrder.map(pz => { const list = fbRows.filter(r => r[5] === pz); const n = list.length;
-      return `<tr><td style="font-weight:600;white-space:nowrap">${SC_PASS_ZONE[pz] || 'Zone ' + pz}</td>${szUsed.map(k => { const c = list.filter(r => r[7] === k).length; const p = n ? c / n : 0;
-        return `<td class="num" style="background:rgba(254,188,24,${(p * 0.6).toFixed(2)});${p ? '' : 'color:var(--text-dim)'}">${c ? Math.round(p * 100) + '%' : '-'}</td>`; }).join('')}<td class="num">${n}</td></tr>`; }).join('')) : '';
+  const crossT = (src, title) => `<div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${title} <span style="font-weight:400;color:var(--text-muted)">(${src.length} passes)</span></div>`
+    + T(`<tr><th ${H}>Passed from</th>${szUsed.map(k => `<th class="num" ${H} title="${SC_SET_ZONE[k]}">Z${k}</th>`).join('')}<th class="num" ${H}>n</th></tr>`,
+    pzOrder.map(pz => { const list = src.filter(r => r[5] === pz); const n = list.length;
+      return `<tr><td style="font-weight:600;white-space:nowrap">Zone ${pz}</td>${szUsed.map(k => { const c = list.filter(r => r[7] === k).length; const p = n ? c / n : 0;
+        return `<td class="num" style="background:rgba(122,0,38,${(p * 0.35).toFixed(2)});${p ? '' : 'color:var(--text-dim)'}">${c ? Math.round(p * 100) + '%' : '-'}</td>`; }).join('')}<td class="num">${n || '-'}</td></tr>`; }).join('')) + `</div>`;
+  const cross = pzOrder.length && szUsed.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">${crossT(fbRows.filter(r => r[12] === 'spin'), 'vs Jump spin')}${crossT(fbRows.filter(r => r[12] === 'float'), 'vs Float')}${crossT(fbRows, 'Total')}</div>` : '';
 
   const passLbl = (SC_PASS.find(p => p[0] === scoutF.pass) || [])[1];
   const filtLbl = `${scoutF.setter === 'all' ? 'All setters' : nm(scoutF.setter)}, ${scoutF.rot === 'all' ? 'all rotations' : 'Rotation ' + scoutF.rot}, ${passLbl}`;
@@ -7875,52 +7885,59 @@ function buildScoutSetting(name) {
     </div>` +
     card('By Rotation', `${scoutF.setter === 'all' ? 'All setters' : nm(scoutF.setter)}, ${passLbl}, where they set the ball in each rotation`,
       T(`<tr><th ${H}>Rot</th><th class="num" ${H}>Sets</th><th ${H}>Set distribution</th>${ATK_HEAD}<th ${H}>Top sets</th></tr>`, rotRows)) +
-    card('Set Distribution by Where the Pass Was Taken', `First-ball sets only, ${filtLbl}${scoutF.pass === 'T' ? ' - pick a pass type (transition has no serve-receive pass)' : ''}`,
-      pzRows ? T(`<tr><th ${H}>Pass taken in</th><th class="num" ${H}>Sets</th><th ${H}>Set distribution</th><th ${H}>Top sets</th><th class="num" ${H}>EFF</th></tr>`, pzRows) : '<div class="empty">No first-ball sets for these filters.</div>') +
-    card('Set Distribution by Where the Pass Went', `Zone the setter set from (a good pass usually lands in zone 2-3; 7/8/9 = off the net; 1/6/5 = deep), ${filtLbl}`,
-      szRows ? T(`<tr><th ${H}>Setter set from</th><th class="num" ${H}>Sets</th><th class="num" ${H}>Share</th><th ${H}>Set distribution</th><th ${H}>Top sets</th><th class="num" ${H}>EFF</th></tr>`, szRows) : '<div class="empty">No set locations coded.</div>') +
-    (cross ? card('Where the Pass Went From Each Passing Zone', `First-ball passes, % of passes from that zone that the setter played from each zone, ${filtLbl}`, cross) : '') +
-    buildScoutPassHit(st, fileOk, nm);
+    card('Set Distribution by Where the Pass Was Taken', `First-ball sets only, split by the serve they passed, ${filtLbl}${scoutF.pass === 'T' ? ' - pick a pass type (transition has no serve-receive pass)' : ''}`,
+      pzRows ? T(sgHead('Pass taken in'), pzRows) : '<div class="empty">No first-ball sets for these filters.</div>') +
+    card('Set Distribution by Where the Pass Went', `Zone the setter set from (a good pass usually lands in zone 2-3; 7/8/9 = off the net; 1/6/5 = deep), ${filtLbl}. vs Jump spin / vs Float count first-ball sets only; Total = every set in these filters (incl. transition).`,
+      szRows ? T(sgHead('Setter set from', `<th class="num" ${H}>Share</th>`), szRows) : '<div class="empty">No set locations coded.</div>') +
+    (cross ? card('Where the Pass Went From Each Passing Zone', `First-ball passes, % of passes from that zone that the setter played from each zone (Z = zone he set from), vs jump spin / vs float / total, ${filtLbl}`, cross) : '') +
+    buildScoutPassHit(st, fileOk, nm, name);
 }
 
-// Opponent Pass & Hit (same rules as Loyola's card)
-function buildScoutPassHit(st, fileOk, nm) {
-  const z = () => ({ n: 0, k: 0, e: 0, b: 0, w: 0 });
+// Opponent Pass & Hit (same rules as Loyola's card), split by the serve they passed:
+// vs jump spin / vs float / total. Data = players.atk rows (passer, won, serve group) so it follows the
+// Season filter; 'Passed & hit' = he passed the serve and hit the first set, 'Didn't pass' = his first-ball
+// swings off a set when someone else passed.
+function buildScoutPassHit(st, fileOk, nm, name) {
+  const P = DATA.opp_rotation_stats?.[name]?.players;
+  if (!P) return '';
+  const z = () => ({ n: 0, k: 0, e: 0, b: 0, w: 0, pg: {} });
   const pl = {};
-  for (const [fi, players] of Object.entries(st.ph || {})) {
-    if (!fileOk(+fi)) continue;
-    for (const [pn, v] of Object.entries(players)) {
-      const o = pl[pn] || (pl[pn] = { ph: z(), np: z(), pg: {} });
-      for (const g of ['ph', 'np']) for (const [ev, rec] of Object.entries(v[g] || {})) {
-        const r = o[g]; r.n += rec[0]; r.w += rec[1];
-        if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0];
-      }
-      for (const [ev, n] of Object.entries(v.pg || {})) o.pg[ev] = (o.pg[ev] || 0) + n;
-    }
-  }
-  const rows = Object.entries(pl).filter(([, o]) => o.ph.n >= 2).sort((a, b) => b[1].ph.n - a[1].ph.n);
-  if (!rows.length) return '';
+  P.atk.forEach(r => {
+    if (!fileOk(r[0]) || !r[11]) return;
+    const pn = r[1], g = r[11] === pn ? 'ph' : 'np', sg = r[13] || '';
+    const o = pl[pn] || (pl[pn] = { ph: { all: z(), spin: z(), float: z() }, np: { all: z(), spin: z(), float: z() } });
+    [o[g].all, sg && o[g][sg]].filter(Boolean).forEach(t => {
+      t.n++; if (r[12]) t.w++;
+      if (r[4] === '#') t.k++; else if (r[4] === '=') t.e++; else if (r[4] === '/') t.b++;
+      if (g === 'ph') t.pg[r[5]] = (t.pg[r[5]] || 0) + 1;
+    });
+  });
+  const players = Object.entries(pl).filter(([, o]) => o.ph.all.n >= 2).sort((a, b) => b[1].ph.all.n - a[1].ph.all.n);
+  if (!players.length) return '';
   const eff = r => r.n ? (r.k - r.e - r.b) / r.n : null;
-  const fE = v => fmtEff3(v);
   const pct = (a, n) => n ? (a / n * 100).toFixed(1) + '%' : '-';
   const H = 'style="font-size:12px;color:var(--text-muted);text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap"';
   const Hs = extra => H.slice(0, -1) + ';' + extra + '"';
-  const body = rows.map(([pn, o]) => {
-    const pgN = Object.values(o.pg).reduce((a, b) => a + b, 0);
-    const d = eff(o.ph) !== null && eff(o.np) !== null ? eff(o.ph) - eff(o.np) : null;
-    return `<tr><td style="font-weight:600;white-space:nowrap">${nm(pn)}</td>
-      <td class="num" style="color:var(--green)">${o.ph.k}</td><td class="num" style="color:var(--red)">${o.ph.e}</td><td class="num">${o.ph.b || '-'}</td><td class="num">${o.ph.n}</td>
-      <td class="num" style="font-weight:700">${fE(eff(o.ph))}</td><td class="num">${pct(o.ph.k, o.ph.n)}</td><td class="num">${pct(o.ph.w, o.ph.n)}</td><td class="num" style="color:var(--red)">${pct(o.ph.e + o.ph.b, o.ph.n)}</td>
-      <td class="num" style="color:var(--gold)">${pgN ? passAvgFromEvals(o.pg, pgN).toFixed(2) : '-'}</td>
-      <td class="num" style="border-left:1px solid #cfcac0">${o.np.n || '-'}</td><td class="num">${fE(eff(o.np))}</td><td class="num">${pct(o.np.k, o.np.n)}</td><td class="num">${pct(o.np.w, o.np.n)}</td><td class="num" style="color:var(--red)">${pct(o.np.e + o.np.b, o.np.n)}</td>
-      <td class="num" style="font-weight:700;border-left:1px solid #cfcac0;color:${d === null ? 'var(--text-muted)' : d >= 0 ? 'var(--red)' : 'var(--green)'}">${fmtEff3(d, true)}</td></tr>`; }).join('');
+  const BL = 'border-left:1px solid #cfcac0';
+  const body = players.map(([pn, o]) => [['spin', 'vs Jump spin'], ['float', 'vs Float'], ['all', 'Total']].map(([g, lbl], i) => {
+    const ph = o.ph[g], np = o.np[g];
+    const pgN = Object.values(ph.pg).reduce((a, b) => a + b, 0);
+    const d = eff(ph) !== null && eff(np) !== null ? eff(ph) - eff(np) : null;
+    const tot = g === 'all';
+    return `<tr style="${tot ? 'font-weight:700;border-bottom:1px solid var(--text)' : ''}"><td style="font-weight:600;white-space:nowrap">${i === 0 ? nm(pn) : ''}</td>
+      <td style="color:var(--text-muted);white-space:nowrap">${lbl}</td>
+      <td class="num">${ph.k}</td><td class="num">${ph.e}</td><td class="num">${ph.b || '-'}</td><td class="num">${ph.n || '-'}</td>
+      <td class="num" style="font-weight:700;color:${effTone(eff(ph), ph.n, null)}">${ph.n ? fmtEff3(eff(ph)) : '-'}</td><td class="num">${pct(ph.k, ph.n)}</td><td class="num">${pct(ph.w, ph.n)}</td><td class="num">${pct(ph.e + ph.b, ph.n)}</td>
+      <td class="num">${pgN ? passAvgFromEvals(ph.pg, pgN).toFixed(2) : '-'}</td>
+      <td class="num" style="${BL}">${np.n || '-'}</td><td class="num">${np.n ? fmtEff3(eff(np)) : '-'}</td><td class="num">${pct(np.k, np.n)}</td><td class="num">${pct(np.w, np.n)}</td><td class="num">${pct(np.e + np.b, np.n)}</td>
+      <td class="num" style="font-weight:700;${BL}">${fmtEff3(d, true)}</td></tr>`; }).join('')).join('');
   return `<div class="card-sm" style="padding:18px 20px;margin-bottom:18px">
     <div style="font-size:15px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Pass &amp; Hit - attacking right after their own pass</div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Serve-receive possessions only. <b>Passed &amp; hit</b> = the player passed the serve and then attacked the first set. <b>Didn't pass</b> = his first-ball attacks when someone else passed. FBSO% = kill on that attack, SO% = they won the rally, Err% = (errors + blocked) / attempts. Eff change in <span style="color:var(--green)">green</span> = his swing gets worse after passing (target him with serve). Players with 2+ pass-and-hit swings.</div>
-    <div style="overflow-x:auto"><table class="data-table" style="width:100%">
-      <tr><th ${H}></th><th colspan="9" class="num" ${Hs('text-align:center;color:var(--gold)')}>Passed &amp; hit</th><th colspan="5" ${Hs('text-align:center;border-left:1px solid #cfcac0')}>First ball - didn't pass</th><th ${H}></th></tr>
-      <tr><th ${H}>Player</th><th class="num" ${H}>K</th><th class="num" ${H}>E</th><th class="num" ${H}>BLK</th><th class="num" ${H}>ATT</th><th class="num" ${H}>EFF</th><th class="num" ${H}>FBSO%</th><th class="num" ${H}>SO%</th><th class="num" ${H}>Err%</th><th class="num" ${H}>Pass avg</th>
-        <th class="num" ${Hs('border-left:1px solid #cfcac0')}>ATT</th><th class="num" ${H}>EFF</th><th class="num" ${H}>FBSO%</th><th class="num" ${H}>SO%</th><th class="num" ${H}>Err%</th><th class="num" ${Hs('border-left:1px solid #cfcac0')}>Eff change</th></tr>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Serve-receive possessions only, split by the serve they passed (vs jump spin, vs float, total). <b>Passed &amp; hit</b> = the player passed the serve and then attacked the first set. <b>Didn't pass</b> = his first-ball attacks off a set when someone else passed. FBSO% = kill on that attack, SO% = they won the rally, Err% = (errors + blocked) / attempts, Pass avg = his pass on the ${rcvPassScale}-point scale. Players with 2+ passed &amp; hit swings.</div>
+    <div style="overflow-x:auto"><table class="sp-table" style="width:100%">
+      <tr><th ${H}></th><th ${H}></th><th colspan="9" ${Hs('text-align:center')}>Passed &amp; hit</th><th colspan="5" ${Hs('text-align:center;' + BL)}>First ball - didn't pass</th><th ${H}></th></tr>
+      <tr><th ${H}>Player</th><th ${H}>Serve</th><th class="num" ${H}>K</th><th class="num" ${H}>E</th><th class="num" ${H}>BLK</th><th class="num" ${H}>ATT</th><th class="num" ${H}>EFF</th><th class="num" ${H}>FBSO%</th><th class="num" ${H}>SO%</th><th class="num" ${H}>Err%</th><th class="num" ${H}>Pass avg</th>
+        <th class="num" ${Hs(BL)}>ATT</th><th class="num" ${H}>EFF</th><th class="num" ${H}>FBSO%</th><th class="num" ${H}>SO%</th><th class="num" ${H}>Err%</th><th class="num" ${Hs(BL)}>Eff change</th></tr>
       ${body}</table></div></div>`;
 }
 
@@ -8054,10 +8071,13 @@ function renderScoutDetail(name) {
       ${distBar(set.by_zone)}
 
       <!-- Reception -->
-      ${rcv.att > 0 ? `<div style="display:flex;gap:22px;margin-top:12px;padding:10px 14px;background:rgba(254,188,24,0.06);border:1px solid rgba(254,188,24,0.12);border-radius:6px;font-size:16px">
-        <div><div style="color:var(--text-dim)">In-Sys%</div><div style="font-weight:600">${rcv.in_sys_pct}%</div></div>
-        <div><div style="color:var(--text-dim)">FBSO%</div><div style="font-weight:600;color:var(--gold)">${rcv.fbso_pct}%</div></div>
-        <div><div style="color:var(--text-dim)">Rcv</div><div>${rcv.att}</div></div>
+      ${rcv.att > 0 ? `<div style="margin-top:12px;padding:8px 12px;background:rgba(254,188,24,0.06);border:1px solid rgba(254,188,24,0.12);border-radius:6px">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums">
+          <tr style="color:var(--text-dim);font-size:12px;text-transform:uppercase;letter-spacing:.4px"><td>Receiving</td><td style="text-align:right">Rcv</td><td style="text-align:right">In-Sys%</td><td style="text-align:right">FBSO%</td></tr>
+          ${[['spin', 'vs Spin'], ['float', 'vs Float']].map(([g, l]) => { const b = (rcv.by || {})[g];
+            return `<tr><td style="color:var(--text-muted)">${l}</td><td style="text-align:right">${b ? b.att : '-'}</td><td style="text-align:right">${b && b.in_sys_pct !== null ? b.in_sys_pct + '%' : '-'}</td><td style="text-align:right">${b && b.fbso_pct !== null ? b.fbso_pct + '%' : '-'}</td></tr>`; }).join('')}
+          <tr style="font-weight:700;border-top:1px solid var(--border)"><td>Total</td><td style="text-align:right">${rcv.att}</td><td style="text-align:right">${rcv.in_sys_pct}%</td><td style="text-align:right">${rcv.fbso_pct}%</td></tr>
+        </table>
       </div>` : ''}
     </div>`;
   }
@@ -8104,15 +8124,16 @@ function renderScoutDetail(name) {
       <!-- Team Metrics Strip -->
       ${team ? `<div style="display:flex;gap:0;margin-bottom:20px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
         ${[
-          ['SO%',        team.so_pct+'%',    'Sideout rate (receive to win rally)', 'var(--text)'],
-          ['FBSO%',      team.fbso_pct+'%',  'First ball sideout (1st attack kill)', 'var(--text)'],
+          ['SO%',        team.so_pct+'%',    'Sideout rate (receive to win rally)', 'var(--text)', 'so_pct'],
+          ['FBSO%',      team.fbso_pct+'%',  'First ball sideout (1st attack kill)', 'var(--text)', 'fbso_pct'],
           ['Kill%',      team.k_pct+'%',     'Attack kill rate (K/ATT)', 'var(--text)'],
           ['Efficiency', fmtEff3(team.eff),'(K-E-BLK)/ATT', effColor(team.eff)],
-          ['In-Sys Rcv', team.in_sys_pct+'%','Reception in-system (# or +)', 'var(--text)'],
-        ].map(([lbl,val,tip,col],i) => `
+          ['In-Sys Rcv', team.in_sys_pct+'%','Reception in-system (# or +)', 'var(--text)', 'in_sys_pct'],
+        ].map(([lbl,val,tip,col,byKey],i) => `
           <div style="flex:1;padding:18px 14px;background:var(--surface2);${i?'border-left:1px solid var(--border)':''};text-align:center" title="${tip}">
             <div style="font-size:32px;font-weight:800;color:${col}">${val}</div>
-            <div style="font-size:13px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:0.5px">${lbl}</div>
+            <div style="font-size:13px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:0.5px">${lbl}${byKey ? ' - total' : ''}</div>
+            ${byKey && team.by ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:13px;color:var(--text-muted)">${[['spin','vs Spin'],['float','vs Float']].map(([g,l]) => `<span style="white-space:nowrap">${l} <b style="color:var(--text)">${team.by[g] && team.by[g][byKey] !== null && team.by[g][byKey] !== undefined ? team.by[g][byKey] + '%' : '-'}</b></span>`).join('')}</div>` : ''}
           </div>`).join('')}
       </div>` : ''}
 
