@@ -107,6 +107,9 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   `starts.pos` = `{jersey: OH/MB/OPP/S/L/DS/Serve}` from `compute_scout_positions()`: scout files carry no
   positions, so it's a best guess (libero flag, main setter, attack codes/start zones via `POS_CODES`,
   DS = passes/digs but rarely attacks, Serve = mostly comes in to serve). Shown as tags in the subs table.
+  Subs table: a sub that just reverses an earlier one in the same set (same player straight back in) is
+  folded into the original row ("Comes back" column: back in X of N, after about N points); a different
+  player coming back in, or a sub that stays in, still gets its own row.
 - Scouting set types use the same list as the Loyola reports (`VALID_COMBOS`: X5 V5 X6 V6 XP X8 X1 X2 X7);
   every other code (PP, V8, XM, XR, ...) counts as "Other" via `scCombo()`. The "where the ball was set"
   bars (Left/Quick/Right/D-ball/BIC/Dump) are location-based and still include those codes.

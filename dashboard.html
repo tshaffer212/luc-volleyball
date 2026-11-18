@@ -7150,32 +7150,43 @@ function buildScoutStarts(name) {
     T(`<tr><th ${H}></th><th ${H}>After losing a set</th><th ${H}>After winning a set</th></tr>`, changeRows));
 
   // 3) In-set substitutions
-  const setWon = {}; sets.forEach(r => { setWon[r[0] + '|' + r[1]] = r[4]; });
-  const g = {};
-  subs.forEach(r => {
-    const k = r[2] + '>' + r[3];
-    const o = g[k] || (g[k] = { out: r[2], in: r[3], n: 0, trail: 0, tie: 0, lead: 0, lostSet: 0, diffs: [], score: [] });
-    o.n++; const d = r[4] - r[5]; if (d < 0) o.trail++; else if (d === 0) o.tie++; else o.lead++;
-    o.score.push(r[4] + r[5]);
-    if (setWon[r[0] + '|' + r[1]] === 0) o.lostSet++;
+  // A sub that just undoes an earlier one in the same set (the same player coming back for the sub)
+  // is folded into the original row instead of getting its own row. If a DIFFERENT player comes back
+  // in, or the sub stays in, it still shows.
+  const g = {}; let folded = 0;
+  const bySet = {};
+  subs.forEach(r => { (bySet[r[0] + '|' + r[1]] = bySet[r[0] + '|' + r[1]] || []).push(r); });
+  Object.values(bySet).forEach(list => {
+    const open = [];
+    list.forEach(r => {
+      const pt = r[4] + r[5];
+      const j = open.map(o => o.out === r[3] && o.in === r[2]).lastIndexOf(true);
+      if (j >= 0) { const o = open.splice(j, 1)[0]; o.grp.ret++; o.grp.retPts.push(pt - o.pt); folded++; return; }
+      const k = r[2] + '>' + r[3];
+      const grp = g[k] || (g[k] = { out: r[2], in: r[3], n: 0, trail: 0, tie: 0, lead: 0, score: [], ret: 0, retPts: [] });
+      grp.n++; const d = r[4] - r[5]; if (d < 0) grp.trail++; else if (d === 0) grp.tie++; else grp.lead++;
+      grp.score.push(pt);
+      open.push({ out: r[2], in: r[3], pt, grp });
+    });
   });
-  const back = k => { const [a, b] = k.split('>'); return g[b + '>' + a]; };
-  const subRows = Object.entries(g).sort((x, y) => y[1].n - x[1].n).slice(0, 12).map(([k, o]) => {
-    const avgPt = o.score.length ? Math.round(o.score.reduce((a, b) => a + b, 0) / o.score.length) : 0;
+  const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
+  const subRows = Object.values(g).sort((x, y) => y.n - x.n).slice(0, 12).map(o => {
     const when = o.trail > o.lead && o.trail > o.tie ? 'Mostly when trailing' : o.lead > o.trail && o.lead > o.tie ? 'Mostly when leading' : o.tie > o.trail && o.tie > o.lead ? 'Mostly when tied' : 'Mixed';
     const po = pos[o.out], pi = pos[o.in], W = x => POS_WORD[x] || 'player';
-    const swapsBack = back(k) && back(k).n >= Math.max(2, o.n * 0.5);
-    const pattern = pi === 'Serve' ? `Serving sub for the ${W(po)}`
+    const type = pi === 'Serve' ? `Serving sub for the ${W(po)}`
       : pi === 'DS' ? `Defensive sub for the ${W(po)}`
-      : (po === 'Serve' || po === 'DS') ? `${W(pi)[0].toUpperCase() + W(pi).slice(1)} back in after the ${po === 'Serve' ? 'serving' : 'defensive'} sub`
+      : (po === 'Serve' || po === 'DS') ? `${W(pi)[0].toUpperCase() + W(pi).slice(1)} in for the ${po === 'Serve' ? 'serving' : 'defensive'} sub`
       : ((po === 'OPP' && pi === 'S') || (po === 'S' && pi === 'OPP')) ? 'Double sub (setter and opposite)'
-      : swapsBack ? 'Swaps back later'
       : (po && po === pi) ? `Replaces him at ${W(po)}`
-      : 'Usually stays in';
-    return `<tr><td style="white-space:nowrap">${nmP(o.out)}</td><td style="white-space:nowrap">${nmP(o.in)}</td><td class="num">${o.n}</td><td>${when} <span style="color:var(--text-muted)">(${o.trail} trailing, ${o.tie} tied, ${o.lead} leading)</span></td><td class="num">${avgPt}</td><td>${pattern}</td></tr>`;
+      : 'Lineup change';
+    const stay = o.n - o.ret;
+    const backTxt = o.ret
+      ? `${nm(o.out)} back in ${o.ret} of ${o.n}, after about ${avg(o.retPts)} point${avg(o.retPts) === 1 ? '' : 's'}${stay ? `; stayed in ${stay}x` : ''}`
+      : 'Stays in';
+    return `<tr><td style="white-space:nowrap">${nmP(o.out)}</td><td style="white-space:nowrap">${nmP(o.in)}</td><td class="num">${o.n}</td><td>${when} <span style="color:var(--text-muted)">(${o.trail} trailing, ${o.tie} tied, ${o.lead} leading)</span></td><td class="num">${avg(o.score)}</td><td>${type}</td><td>${backTxt}</td></tr>`;
   }).join('');
-  const subCard = card('Substitutions During a Set', `${subs.length} substitutions in ${sets.length} sets. "Around point" = average total points played when the sub was made. Positions are a best guess from what each player does in these files: OH outside, MB middle, OPP opposite, S setter, L libero, DS defensive specialist, Serve sub = mostly comes in to serve.`,
-    subRows ? T(`<tr><th ${H}>Player out</th><th ${H}>Player in</th><th class="num" ${H}>Times</th><th ${H}>Score at the time</th><th class="num" ${H}>Around point</th><th ${H}>Pattern</th></tr>`, subRows) : '<div class="empty">No substitutions found.</div>');
+  const subCard = card('Substitutions During a Set', `${subs.length - folded} substitutions in ${sets.length} sets${folded ? ` (plus ${folded} times the same player came straight back in, shown in the last column)` : ''}. "Around point" = average total points played when the sub was made. Positions are a best guess from what each player does in these files: OH outside, MB middle, OPP opposite, S setter, L libero, DS defensive specialist, Serve sub = mostly comes in to serve.`,
+    subRows ? T(`<tr><th ${H}>Player out</th><th ${H}>Player in</th><th class="num" ${H}>Times</th><th ${H}>Score at the time</th><th class="num" ${H}>Around point</th><th ${H}>Type</th><th ${H}>Comes back</th></tr>`, subRows) : '<div class="empty">No substitutions found.</div>');
 
   return startCard + changeCard + subCard;
 }
