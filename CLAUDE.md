@@ -105,8 +105,11 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   A "true rotation switch" between sets = the first server changed (receiving first in Rk = serving first in
   R(k+1), 6 wraps to 1) AND the starting rotation changed; serve R1 -> receive R6 is not a switch.
   `starts.pos` = `{jersey: OH/MB/OPP/S/L/DS/Serve}` from `compute_scout_positions()`: scout files carry no
-  positions, so it's a best guess (libero flag, main setter, attack codes/start zones via `POS_CODES`,
-  DS = passes/digs but rarely attacks, Serve = mostly comes in to serve). Shown as tags in the subs table.
+  positions, so it's a best guess: libero flag, main setter, then attack codes/start zones (`POS_CODES`)
+  combined 50/50 with lineup slot relative to the setter on every rally (opposite = 3 spots away; the
+  middle pair vs outside pair is picked by that team's hitting, else Loyola's order S, OH, MB, OPP, OH, MB =
+  middle one rotation ahead of the setter, outside one behind). DS = passes/digs but rarely attacks,
+  Serve = mostly comes in to serve. Shown as tags in the subs table.
   Subs table: a sub that just reverses an earlier one in the same set (same player straight back in) is
   folded into the original row ("Comes back" column: back in X of N, after about N points); a different
   player coming back in, or a sub that stays in, still gets its own row.

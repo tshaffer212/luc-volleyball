@@ -2054,26 +2054,43 @@ def main(raw_path, out_path):
     }
     POS_ZONE = {'4': 'OH', '5': 'OH', '6': 'OH', '7': 'OH', '8': 'OH', '3': 'MB', '2': 'OPP', '1': 'OPP', '9': 'OPP'}
 
+    # Lineup order around the setter (lineup slot i = zone i+1, so +1 = the player after the setter in the
+    # serving order). Learned from Loyola's match files, where positions are listed:
+    # S, +1 OH, +2 MB, +3 OPP, +4 OH, +5 MB  (the middle is one rotation ahead of the setter, the outside
+    # one behind). The opposite is always +3; the two other pairs are {+1,+4} and {+2,+5}.
+    PAIR_A, PAIR_B = (1, 4), (2, 5)
+    LOYOLA_MB_PAIR = PAIR_B
+
     def compute_scout_positions(sessions_for_opp):
-        """Best guess at each scouted player's position from what he does (scout files don't carry
-        positions): L = libero flag, S = main setter, OH / MB / OPP = where his attacks come from
-        (set codes first, start zone if uncoded), DS = passes/digs but rarely attacks,
-        Serve = mostly comes in to serve. Returns {jersey: position}."""
-        votes = defaultdict(Counter)
+        """Best guess at each scouted player's position (scout files don't list positions):
+          L = libero flag, S = main setter,
+          OH / MB / OPP = where his attacks come from (set codes first, start zone if uncoded) COMBINED with
+            where he stands in the lineup relative to the setter (opposite = 3 spots from the setter; which of
+            the other two pairs is the middle pair is decided by that team's own hitting, and falls back to
+            Loyola's order S-OH-MB-OPP-OH-MB when the hitting doesn't say),
+          DS = passes/digs but rarely attacks, Serve = mostly comes in to serve.
+        Returns {jersey: position}."""
+        votes = defaultdict(Counter)                 # attack-code votes
         touches = defaultdict(Counter)
+        struct = defaultdict(Counter)                # lineup-slot votes (rallies on court)
         lib, setter_files, seen = Counter(), Counter(), set()
+        file_slots = []                              # per file: {player: Counter(offset)}
         for session in sessions_for_opp:
             key = (session.get('file'), session.get('date'))
             if key in seen:
                 continue
             seen.add(key)
             side = opp_side_for_session(session)
+            parse_side = session.get('luc_side') or 'home'
             for num, pl in (session.get(f'{side}_players') or {}).items():
                 if pl.get('is_libero') or pl.get('position_code') == '1':
                     lib[str(num)] += 1
-            for pnum in file_setters(session, side):
-                setter_files[str(pnum)] += 1
+            setters_f = [str(x) for x in file_setters(session, side)]
+            for pnum in setters_f:
+                setter_files[pnum] += 1
+            rallies = defaultdict(list)
             for a in session.get('actions', []):
+                rallies[a.get('rally_seq', 0)].append(a)
                 if a.get('team_side') != side or not a.get('player_num'):
                     continue
                 pn, sk = str(a['player_num']), a.get('skill_code')
@@ -2086,19 +2103,54 @@ def main(raw_path, out_path):
                     pos = POS_ZONE.get(str(a.get('start_zone') or ''))
                 if pos:
                     votes[pn][pos] += 1
+            slots = defaultdict(Counter)
+            for rs, rally in rallies.items():
+                lu = None
+                for a in rally:
+                    lu = a.get('luc_lineup') if side == parse_side else a.get('opp_lineup')
+                    if lu:
+                        break
+                if not lu or len(lu) != 6 or not setters_f:
+                    continue
+                lu = [str(x) for x in lu]
+                idx = [i for i, p_ in enumerate(lu) if p_ in setters_f]
+                if not idx:
+                    continue                          # backup setter in (double sub): skip
+                i0 = idx[0]
+                for k in range(1, 6):
+                    slots[lu[(i0 + k) % 6]][k] += 1
+            file_slots.append(slots)
+
+        def lean(pn):                                 # +1 = hits like a middle, -1 = like an outside
+            mb, oh = votes[pn]['MB'], votes[pn]['OH']
+            return (mb - oh) / (mb + oh) if mb + oh >= 3 else 0.0
+
+        for slots in file_slots:
+            la = sum((c[1] + c[4]) * lean(p_) for p_, c in slots.items())
+            lb = sum((c[2] + c[5]) * lean(p_) for p_, c in slots.items())
+            mb_pair = PAIR_A if la > lb else PAIR_B if lb > la else LOYOLA_MB_PAIR
+            oh_pair = PAIR_B if mb_pair == PAIR_A else PAIR_A
+            for p_, c in slots.items():
+                struct[p_]['OPP'] += c[3]
+                struct[p_]['MB'] += sum(c[k] for k in mb_pair)
+                struct[p_]['OH'] += sum(c[k] for k in oh_pair)
+
         out = {}
         for pn in set(touches) | set(lib):
-            t = touches[pn]
+            t, V, R = touches[pn], sum(votes[pn].values()), sum(struct[pn].values())
             if lib[pn]:
                 out[pn] = 'L'
             elif setter_files[pn] or (t['E'] >= 10 and t['E'] > t['A']):
                 out[pn] = 'S'
-            elif sum(votes[pn].values()) >= 3:
-                out[pn] = votes[pn].most_common(1)[0][0]
+            elif V >= 3:
+                score = {k: votes[pn][k] / V + (struct[pn][k] / R if R else 0) for k in ('OH', 'MB', 'OPP')}
+                out[pn] = max(score, key=score.get)
             elif t['R'] + t['D'] > 0 and t['R'] + t['D'] >= t['S']:
                 out[pn] = 'DS'
             elif t['S']:
                 out[pn] = 'Serve'
+            elif R >= 10:
+                out[pn] = struct[pn].most_common(1)[0][0]
             elif votes[pn]:
                 out[pn] = votes[pn].most_common(1)[0][0]
         return out
