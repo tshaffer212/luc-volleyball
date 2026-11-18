@@ -185,6 +185,7 @@ def main():
                     '.gitignore',
                     'dashboard_sets.json',
                     'players.html',
+                    'scout_app.html',
                     'player_data',
                     'build_player_portal.py',
                 ]

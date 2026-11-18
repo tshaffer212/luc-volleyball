@@ -195,6 +195,15 @@ rotation on balls they set (`match_rot_stats.setter_rot` from `aggregate.py`) in
 - New roster players get a password automatically; existing ones never change.
   Reset one: `python3 build_player_portal.py --reset "Player Name"`.
 - Push `players.html` and `player_data/` alongside `dashboard.html`.
+- Opponent scouting in the portal ("My stats | Opponent scouting" switch): the coach dashboard's whole scouting
+  section (Team report, Player scouting, Setter locations, Red zone, PDFs) runs in an iframe.
+  `build_player_portal.py` writes `player_data/scouting.json` (scouting-only copy of dashboard_data via
+  `build_scouting()`: opponent_stats, opp_rotation_stats, scout_index + `eff_base`; every other key empty),
+  locked with a random shared key in `private/scout_key.txt` (never commit); that key is put in every player's
+  own locked file (`payload.scout_key`). It also copies `dashboard_template.html` -> `scout_app.html` (code
+  only, no data). players.html `openScouting()` unlocks the data, fills `__DASHBOARD_DATA__` and sets
+  `window.SCOUT_APP` -> the template's `scoutAppInit()` (instead of `init()`) shows only the scout tab and the
+  `html.scout-app` CSS hides the coach gate, header and nav. Push `scout_app.html` too.
 
 To push to GitHub (must be done from terminal, not sandbox — git lock issues):
 ```bash

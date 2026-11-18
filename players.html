@@ -48,6 +48,13 @@ button,select,input{font-family:inherit}
 .txtbtn:hover{color:#63001f}
 
 /* -- Nav (report tabs) -- */
+.viewsw{display:flex;margin:16px 0 4px;border:1px solid var(--ink);border-radius:4px;overflow:hidden;width:max-content}
+.viewsw button{background:none;border:0;padding:8px 18px;font-size:14px;font-weight:600;cursor:pointer;color:var(--ink)}
+.viewsw button.on{background:var(--accent);color:#fff}
+#scout-wrap{display:none;padding:0 10px 16px}
+#scout-wrap iframe{width:100%;height:calc(100vh - 30px);min-height:720px;border:0;display:block}
+#scout-status{max-width:1180px;margin:0 auto;padding:0 32px;color:var(--muted);font-size:14px}
+#scout-status:not(:empty){padding:12px 32px}
 .tabs{display:flex;align-items:flex-end;gap:24px;border-bottom:1px solid var(--rule);margin:0 0 4px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tabs button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:12px 0 10px;font-size:14px;color:var(--muted);cursor:pointer;white-space:nowrap}
@@ -158,8 +165,9 @@ tr.dim td{color:var(--dim);font-style:italic}
     <div><div class="kicker" id="h-kicker">Loyola Men's Volleyball</div><h1><span class="num" id="h-num"></span><span id="h-name"></span></h1></div>
     <div class="mast-r"><div id="h-sub"></div><div id="h-upd"></div><button class="txtbtn" onclick="signOut()">Sign out</button></div>
   </header>
+  <div class="viewsw" id="viewsw"><button class="on" onclick="setView('me')">My stats</button><button onclick="setView('scout')">Opponent scouting</button></div>
   <div class="tabs" id="tabs"></div>
-  <div class="filters">
+  <div class="filters" id="filters">
     <div><label class="h">Season</label><select id="f-season" onchange="setF('season',this.value)"></select></div>
     <div><label class="h">Session type</label><span class="tg" id="f-type"></span></div>
     <div class="dd"><label class="h">Sessions</label><button class="btn" id="f-sess-btn" onclick="toggleSess(event)"></button><div class="ddp" id="f-sess" style="display:none" onclick="event.stopPropagation()"></div></div>
@@ -169,7 +177,9 @@ tr.dim td{color:var(--dim);font-style:italic}
   <div class="kpis" id="kpis"></div>
   <div id="panel"></div>
   <div class="foot" id="foot"></div>
-</div></div>
+</div>
+<div id="scout-wrap"><div id="scout-status"></div><iframe id="scout-frame" title="Opponent scouting"></iframe></div>
+</div>
 
 <script>
 'use strict';
@@ -225,6 +235,36 @@ async function signIn(auto) {
   } finally { btn.disabled = false; btn.textContent = 'Sign in'; }
 }
 function signOut() { PD = null; ss.del('luc_pp'); location.reload(); }
+
+// -- Opponent scouting (same scouting section as the coach dashboard) ----------
+// player_data/scouting.json holds only opponent scouting data, locked with a key that sits inside every
+// player's own locked file (PD.scout_key). scout_app.html is the dashboard page without data; it runs in
+// the iframe in scouting-only mode (window.SCOUT_APP).
+let SCOUT_STATE = 0;   // 0 not loaded, 1 loading, 2 loaded
+function setView(v) {
+  const me = v === 'me';
+  document.querySelectorAll('#viewsw button').forEach((b, i) => b.classList.toggle('on', (i === 0) === me));
+  ['tabs', 'filters', 'kpis', 'panel', 'foot'].forEach(id => { document.getElementById(id).style.display = me ? '' : 'none'; });
+  document.getElementById('scout-wrap').style.display = me ? 'none' : 'block';
+  if (!me) openScouting();
+}
+async function openScouting() {
+  if (SCOUT_STATE) return;
+  const st = document.getElementById('scout-status');
+  if (!PD || !PD.scout_key) { st.textContent = 'Scouting is not available yet. Ask Coach.'; return; }
+  SCOUT_STATE = 1; st.textContent = 'Unlocking opponent scouting...';
+  try {
+    const [f, tpl] = await Promise.all([
+      fetch('player_data/scouting.json', { cache: 'no-cache' }).then(r => r.json()),
+      fetch('scout_app.html', { cache: 'no-cache' }).then(r => r.text())]);
+    const data = await unlock(f, PD.scout_key);
+    const json = JSON.stringify(data).replace(/</g, '\\u003c');
+    document.getElementById('scout-frame').srcdoc = tpl
+      .replace('<head>', () => '<head><script>window.SCOUT_APP=true;document.documentElement.classList.add("scout-app");<\/script>')
+      .replace('__DASHBOARD_DATA__', () => json);
+    SCOUT_STATE = 2; st.textContent = '';
+  } catch (e) { SCOUT_STATE = 0; st.textContent = 'Could not load scouting. Check your connection and try again.'; }
+}
 document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
 
 // -- State --------------------------------------------------------------------

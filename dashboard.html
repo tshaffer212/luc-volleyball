@@ -652,6 +652,9 @@
   .sp-table th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--text);text-align:left;white-space:nowrap}
   .sp-table th.num,.sp-table td.num{text-align:right}
   .sp-table td{padding:6px 8px;border-bottom:1px solid var(--border)}
+  /* Player portal "Scouting": this page runs inside players.html with only scouting data (window.SCOUT_APP) */
+  html.scout-app #auth-overlay, html.scout-app body > header, html.scout-app body > nav { display: none !important; }
+  html.scout-app .tab-panel { padding: 8px 4px 30px; }
 </style>
 </head>
 <body>
@@ -1482,6 +1485,7 @@ function fmtEffPct3(p, signed) {
 // .100 above/below the comparison average AND it comes from 10+ attempts.
 const EFF_SIG = 0.100, EFF_MIN_N = 10;
 const EFF_BASE = (() => {            // whole-dataset Loyola attack efficiency, the default comparison
+  if (typeof DATA.eff_base === 'number') return DATA.eff_base;   // player-portal scouting data carries it precomputed
   let k = 0, e = 0, b = 0, a = 0;
   for (const ps of Object.values(DATA.player_season || {})) {
     const A = ps.skills && ps.skills.A; if (!A) continue;
@@ -1630,7 +1634,7 @@ function destroyChart(id) { if (_charts[id]) { _charts[id].destroy(); delete _ch
 function makeChart(id, type, data, options) {
   destroyChart(id);
   const ctx = document.getElementById(id);
-  if (!ctx) return;
+  if (!ctx || typeof Chart === 'undefined') return;
   _charts[id] = new Chart(ctx, { type, data, options: mergeDeep({}, CHART_DEFAULTS, options || {}) });
   return _charts[id];
 }
@@ -10123,7 +10127,19 @@ document.addEventListener('click', function(e) {
 });
 
 // --- START --------------------------------------------------------------------
-window.addEventListener('DOMContentLoaded', init);
+// Player portal "Scouting" view: players.html loads this page into an iframe with ONLY the scouting data
+// (opponent_stats, opp_rotation_stats, scout_index) and sets window.SCOUT_APP - so just the scout tab runs.
+function scoutAppInit() {
+  document.documentElement.classList.add('scout-app');
+  const scoutSeasonEl = document.getElementById('scout-season-filter');
+  [...new Set(DATA.scout_index.map(s => s.season).filter(Boolean))].sort().forEach(s => scoutSeasonEl.add(new Option(s, s)));
+  const scoutOppEl = document.getElementById('scout-opp-filter');
+  [...new Set(DATA.scout_index.map(s => s.opponent).filter(o => o && o !== 'Unknown'))].sort().forEach(o => scoutOppEl.add(new Option(o, o)));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-scout').classList.add('active');
+  renderScout();
+}
+window.addEventListener('DOMContentLoaded', () => (window.SCOUT_APP ? scoutAppInit : init)());
 
 // -- Pinned # / Player columns ------------------------------------------------
 // For every table.rpt-sticky: the cells that cover the first two columns

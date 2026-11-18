@@ -12,6 +12,12 @@ New roster players get a new random password automatically; existing
 passwords never change unless you delete that player's entry
 (or run with --reset "Player Name").
 
+Scouting (same for every player): the coach dashboard's scouting section also runs in the portal.
+  player_data/scouting.json = the scouting data only (opponent_stats, opp_rotation_stats, scout_index),
+  locked with a random shared key kept in private/scout_key.txt. That key is inside every player's own
+  locked file, so only a signed-in player can open it. scout_app.html = a copy of dashboard_template.html
+  (code only, no data); players.html fills in the data and shows it in an iframe (window.SCOUT_APP mode).
+
 Crypto (stdlib only, matched in players.html with WebCrypto):
   key  = PBKDF2-HMAC-SHA256(password, salt, ITER) -> 64 bytes (enc 32 | mac 32)
   ks   = HMAC-SHA256(enc, nonce || counter_be32) blocks   (keystream)
@@ -33,6 +39,9 @@ OUT = HERE / 'player_data'
 PRIV = HERE / 'private'
 PWF = PRIV / 'player_passwords.json'
 PWCSV = PRIV / 'Player Passwords.csv'
+SCOUT_KEY = PRIV / 'scout_key.txt'
+TEMPLATE = HERE / 'dashboard_template.html'
+SCOUT_APP = HERE / 'scout_app.html'
 ITER = 300_000
 SKIP_SEASONS = {'Unknown Season'}
 ALPH = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'   # no 0/O/1/l/I
@@ -59,6 +68,22 @@ def encrypt(obj, password):
     tag = hmac.new(mk, nonce + ct, hashlib.sha256).digest()
     b = lambda x: base64.b64encode(x).decode()
     return {'v': 1, 'iter': ITER, 'salt': b(salt), 'nonce': b(nonce), 'ct': b(ct), 'tag': b(tag)}
+
+
+def build_scouting(d):
+    """Scouting-only copy of dashboard_data: the scouting keys in full, every other key empty (same type),
+    plus eff_base = Loyola's overall attack efficiency (the dashboard's default comparison for colors)."""
+    keep = {'meta', 'scout_index', 'opponent_stats', 'opp_rotation_stats', 'pa_weights'}
+    out = {k: (v if k in keep else type(v)()) for k, v in d.items()}
+    k = e = b = a = 0
+    for ps in (d.get('player_season') or {}).values():
+        A = (ps.get('skills') or {}).get('A')
+        if not A:
+            continue
+        ev = A.get('evals') or {}
+        k += ev.get('#', 0); e += ev.get('=', 0); b += ev.get('/', 0); a += A.get('attempts', 0)
+    out['eff_base'] = (k - e - b) / a if a else 0.28
+    return out
 
 
 # ── helpers to sum nested count dicts ─────────────────────────────────────────
@@ -238,6 +263,11 @@ def main():
             pw[p['name']] = np_; used.add(np_)
     json.dump(pw, open(PWF, 'w'), indent=2)
 
+    # shared scouting key (random, kept in private/, never pushed) + the locked scouting file + the app page
+    if not SCOUT_KEY.exists():
+        SCOUT_KEY.write_text(secrets.token_hex(32))
+    scout_key = SCOUT_KEY.read_text().strip()
+
     # value-table pools for Points Added (team aggregate, no names): season -> type -> key -> [n, won]
     pool = {}
     for s in d['sessions']:
@@ -271,6 +301,9 @@ def main():
             try: f.unlink()
             except OSError: f.write_text('{}')
     OUT.mkdir(exist_ok=True)
+    (OUT / 'scouting.json').write_text(json.dumps(encrypt(build_scouting(d), scout_key), separators=(',', ':')))
+    if TEMPLATE.exists():
+        SCOUT_APP.write_text(TEMPLATE.read_text(encoding='utf-8'), encoding='utf-8')
     roster_out = []
     for num, p in sorted(roster.items(), key=lambda x: int(x[0]) if x[0].isdigit() else 999):
         name = p['name']
@@ -352,6 +385,7 @@ def main():
         payload['pa_grp'] = grp
         payload['comp'] = {se: (d.get('competition') or {}).get(se, {}).get(n_) for se, n_ in nums.items()
                            if (d.get('competition') or {}).get(se, {}).get(n_)}
+        payload['scout_key'] = scout_key            # opens player_data/scouting.json (same for everyone)
         fid = pid(name)
         (OUT / f'{fid}.json').write_text(json.dumps(encrypt(payload, pw[name]), separators=(',', ':')))
         roster_out.append({'id': fid, 'num': num, 'name': name})
