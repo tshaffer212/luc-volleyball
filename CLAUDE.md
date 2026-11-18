@@ -97,6 +97,14 @@ Opponent rotations use the SAME numbering as Loyola (R1 = setter in zone 1, R2 =
 R4 = zone 4, R5 = zone 3, R6 = zone 2): `get_opp_rotation()` finds the setter's zone from that side's lineup
 on each action (`file_setters()` = the file's main setter(s); with two setters on court the back-row one sets),
 then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in R4-R6, X6 in R1-R3.
+- Rotation cards read 1 2 3 on top, 4 5 6 on the bottom (`ROT_ORDER = [1,2,3,4,5,6]`, Rotation 6 bottom-right).
+- `opp_rotation_stats[opp].starts` (`compute_scout_starts()`): `sets` = `[file_idx, set, 'S'/'R' (served or
+  received first), start_rot, won, starting six, pts_for, pts_against]`, `subs` = `[file_idx, set, out, in,
+  pts_for, pts_against]`. Shown by `buildScoutStarts()` as "Set Starts and Substitutions" (starting rotation
+  by serve/receive, next set after losing vs winning, in-set subs). file_idx matches `setting.files`.
+- Scouting set types use the same list as the Loyola reports (`VALID_COMBOS`: X5 V5 X6 V6 XP X8 X1 X2 X7);
+  every other code (PP, V8, XM, XR, ...) counts as "Other" via `scCombo()`. The "where the ball was set"
+  bars (Left/Quick/Right/D-ball/BIC/Dump) are location-based and still include those codes.
 
 ### X6 / X8 auto-correction (always on)
 X6 is impossible in R4-R6 and X8 in R1-R3, so `swap_right_side()` (aggregate.py) swaps every such code

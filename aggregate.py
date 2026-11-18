@@ -2041,6 +2041,80 @@ def main(raw_path, out_path):
 
         return {'team': team, 'rotations': rotations, 'setters': setters}
 
+    def compute_scout_starts(sessions_for_opp):
+        """
+        Scouting: how the opponent starts each set and what they change.
+          sets: [file_idx, set_no, first ('S' served first / 'R' received first / ''),
+                 start_rot (1-6, 0 unknown), won (1/0/None), start_lineup [6 jerseys, zone 1..6],
+                 pts_for, pts_against]
+          subs: [file_idx, set_no, out, in, pts_for, pts_against]   (in-set substitutions, score at the time)
+        Files that are exact duplicates (same file name + date) are counted once.
+        """
+        sets_out, subs_out, seen = [], [], set()
+        for fi, session in enumerate(sessions_for_opp):
+            key = (session.get('file'), session.get('date'))
+            if key in seen:
+                continue
+            seen.add(key)
+            side = opp_side_for_session(session)
+            other = 'away' if side == 'home' else 'home'
+            parse_side = session.get('luc_side') or 'home'
+            setters = file_setters(session, side)
+            starts = session.get(f'{side}_set_lineups') or {}
+            acts = session.get('actions', [])
+            by_set = defaultdict(list)
+            for a in acts:
+                if isinstance(a.get('set_number'), int):
+                    by_set[a['set_number']].append(a)
+            for sn in sorted(by_set):
+                sa = by_set[sn]
+                lu0 = starts.get(str(sn)) or starts.get(sn)
+                lineup_of = lambda a: a.get('luc_lineup') if side == parse_side else a.get('opp_lineup')
+                if not lu0:
+                    lu0 = next((lineup_of(a) for a in sa if lineup_of(a)), None)
+                rot = 0
+                if lu0 and setters:
+                    pos = [i + 1 for i, p in enumerate(lu0) if str(p) in setters]
+                    zone = pos[0] if len(pos) == 1 else (next((z for z in pos if z in (1, 6, 5)), pos[0]) if pos else None)
+                    rot = SETTER_ZONE_TO_ROT.get(zone, 0) if zone else 0
+                first_srv = next((a for a in sa if a.get('skill_code') == 'S'), None)
+                first = ('S' if first_srv.get('team_side') == side else 'R') if first_srv else ''
+                # rally by rally: score, and substitutions (lineup changes) with the score at that moment
+                rallies = defaultdict(list)
+                for a in sa:
+                    rallies[a.get('rally_seq', 0)].append(a)
+                pf = pa_ = 0
+                last_winner = None
+                prev = list(lu0) if lu0 else None
+                for rs in sorted(rallies):
+                    rally = rallies[rs]
+                    lu = next((lineup_of(a) for a in rally if lineup_of(a)), None)
+                    if prev and lu and set(lu) != set(prev):
+                        gone = [p for p in prev if p not in lu]
+                        came = [p for p in lu if p not in prev]
+                        if len(gone) == 1 and len(came) == 1:
+                            pairs = [(gone[0], came[0])]
+                        else:
+                            pairs = [(prev[i], lu[i]) for i in range(min(len(prev), len(lu)))
+                                     if prev[i] in gone and lu[i] in came]
+                        for o_, i_ in pairs:
+                            subs_out.append([fi, sn, str(o_), str(i_), pf, pa_])
+                    if lu:
+                        prev = list(lu)
+                    winner = None
+                    for a in reversed(rally):
+                        tm = _pa_terminal(a)
+                        if tm and a.get('team_side') in ('home', 'away'):
+                            winner = a['team_side'] if tm > 0 else ('away' if a['team_side'] == 'home' else 'home')
+                            break
+                    if winner == side: pf += 1
+                    elif winner == other: pa_ += 1
+                    if winner: last_winner = winner
+                # The team that wins the last rally of a set wins the set (more robust than point totals)
+                won = (1 if last_winner == side else 0) if (last_winner and pf + pa_ >= 10) else None
+                sets_out.append([fi, sn, first, rot, won, [str(p) for p in (lu0 or [])], pf, pa_])
+        return {'sets': sets_out, 'subs': subs_out}
+
     def compute_scout_setting(sessions_for_opp):
         """
         Scouting: one compact row per opponent set that was attacked, so the page can
@@ -2167,6 +2241,7 @@ def main(raw_path, out_path):
             continue
         opp_rotation_stats[opp] = compute_scout_rotation_stats(sess_list)
         opp_rotation_stats[opp]['setting'] = compute_scout_setting(sess_list)
+        opp_rotation_stats[opp]['starts'] = compute_scout_starts(sess_list)
 
     # ── Output ────────────────────────────────────────────────────────────────
     total_loyola_actions = sum(v['actions'] for v in season_stats.values())

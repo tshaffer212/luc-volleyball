@@ -7068,6 +7068,102 @@ function _scPassOk(ph) {
   return ph === p;
 }
 
+// -- Scouting: how the opponent starts sets, what changes after a lost / won set, and their subs --
+// Data: DATA.opp_rotation_stats[opp].starts = { sets: [fi, set, first('S'|'R'), rot, won, lineup[6], pf, pa], subs: [fi, set, out, in, pf, pa] }
+function buildScoutStarts(name) {
+  const rs = DATA.opp_rotation_stats?.[name];
+  const st = rs?.starts, setting = rs?.setting;
+  if (!st || !st.sets?.length) return '<div class="empty">No set start data for this opponent.</div>';
+  const season = document.getElementById('scout-season-filter')?.value || 'all';
+  const fileOk = fi => season === 'all' || setting?.files?.[fi]?.season === season;
+  const names = setting?.names || {};
+  const nm = n => names[n] ? `#${n} ${names[n]}` : `#${n}`;
+  const sets = st.sets.filter(r => fileOk(r[0]));
+  const subs = (st.subs || []).filter(r => fileOk(r[0]));
+  if (!sets.length) return '<div class="empty">No set start data for this season.</div>';
+  const H = 'style="font-size:12px;color:var(--text-muted);text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--text);white-space:nowrap"';
+  const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
+  const card = (title, sub, body) => `<div class="card-sm" style="padding:18px 20px;margin-bottom:18px"><div style="font-size:15px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">${title}</div>${sub ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${sub}</div>` : ''}${body}</div>`;
+  const T = (head, body) => `<div style="overflow-x:auto"><table class="data-table" style="width:100%">${head}${body}</table></div>`;
+
+  // 1) Starting rotation by serve / receive
+  const rowsDef = [['Serving first', r => r[2] === 'S'], ['Receiving first', r => r[2] === 'R'], ['Set 1 only', r => r[1] === 1], ['All sets', () => true]];
+  const startRows = rowsDef.map(([lbl, f]) => {
+    const list = sets.filter(f).filter(r => r[3]); const n = list.length;
+    const c = {}; list.forEach(r => { c[r[3]] = (c[r[3]] || 0) + 1; });
+    const top = Math.max(0, ...Object.values(c));
+    return `<tr><td style="font-weight:600;white-space:nowrap">${lbl}</td><td class="num">${n}</td>${[1, 2, 3, 4, 5, 6].map(k => {
+      const v = c[k] || 0; const isTop = v && v === top;
+      return `<td class="num" style="${isTop ? 'font-weight:700;background:var(--surface2)' : v ? '' : 'color:var(--text-dim)'}">${v ? `${pc(v, n)} <span style="color:var(--text-muted);font-weight:400">(${v})</span>` : '-'}</td>`; }).join('')}</tr>`;
+  }).join('');
+  const startCard = card('Starting Rotation', 'Which rotation they start each set in. Most common start is shaded. Serving first / receiving first = who served the first point of the set.',
+    T(`<tr><th ${H}></th><th class="num" ${H}>Sets</th>${[1, 2, 3, 4, 5, 6].map(k => `<th class="num" ${H}>Rotation ${k}</th>`).join('')}</tr>`, startRows));
+
+  // 2) Next set after a lost / won set
+  const byFile = {};
+  sets.forEach(r => { (byFile[r[0]] = byFile[r[0]] || []).push(r); });
+  const pairs = [];
+  Object.values(byFile).forEach(list => {
+    list.sort((a, b) => a[1] - b[1]);
+    for (let i = 1; i < list.length; i++) if (list[i][1] === list[i - 1][1] + 1 && list[i - 1][4] !== null) pairs.push([list[i - 1], list[i]]);
+  });
+  const after = won => {
+    const P = pairs.filter(([a]) => a[4] === won); const n = P.length;
+    if (!n) return null;
+    const known = P.filter(([a, b]) => a[3] && b[3]);
+    const same = known.filter(([a, b]) => a[3] === b[3]).length;
+    const moves = {}; known.filter(([a, b]) => a[3] !== b[3]).forEach(([a, b]) => { const k = `Rotation ${a[3]} to Rotation ${b[3]}`; moves[k] = (moves[k] || 0) + 1; });
+    const topMove = Object.entries(moves).sort((x, y) => y[1] - x[1]).slice(0, 3);
+    const ins = {}, outs = {}; let lineupChanged = 0;
+    P.forEach(([a, b]) => {
+      const A = new Set(a[5]), B = new Set(b[5]); if (!a[5].length || !b[5].length) return;
+      const o = a[5].filter(p => !B.has(p)), i = b[5].filter(p => !A.has(p));
+      if (o.length || i.length) lineupChanged++;
+      o.forEach(p => { outs[p] = (outs[p] || 0) + 1; }); i.forEach(p => { ins[p] = (ins[p] || 0) + 1; });
+    });
+    const top3 = obj => Object.entries(obj).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([p, c]) => `${nm(p)} (${c} of ${n})`).join('<br>') || '-';
+    return { n, knownN: known.length, same, topMove, lineupChanged, ins: top3(ins), outs: top3(outs) };
+  };
+  const L = after(0), W = after(1);
+  const cell = (o, f) => `<td style="vertical-align:top">${o ? f(o) : '<span style="color:var(--text-dim)">No sets</span>'}</td>`;
+  const changeRows = [
+    ['Next sets', o => `${o.n}`],
+    ['Kept the same starting rotation', o => `<b>${pc(o.same, o.knownN)}</b> <span style="color:var(--text-muted)">(${o.same} of ${o.knownN})</span>`],
+    ['Changed starting rotation', o => `<b>${pc(o.knownN - o.same, o.knownN)}</b> <span style="color:var(--text-muted)">(${o.knownN - o.same} of ${o.knownN})</span>`],
+    ['Most common changes', o => o.topMove.length ? o.topMove.map(([m, c]) => `${m} <span style="color:var(--text-muted)">(${c}x)</span>`).join('<br>') : '-'],
+    ['Changed the starting six', o => `<b>${pc(o.lineupChanged, o.n)}</b> <span style="color:var(--text-muted)">(${o.lineupChanged} of ${o.n})</span>`],
+    ['Most often brought in', o => o.ins],
+    ['Most often taken out', o => o.outs],
+  ].map(([lbl, f]) => `<tr><td style="font-weight:600;white-space:nowrap;vertical-align:top">${lbl}</td>${cell(L, f)}${cell(W, f)}</tr>`).join('');
+  const changeCard = card('Next Set: After Losing vs After Winning a Set', 'Compares each set with the one before it in the same match. Starting six = the six players on court for the first serve (libero not included).',
+    T(`<tr><th ${H}></th><th ${H}>After losing a set</th><th ${H}>After winning a set</th></tr>`, changeRows));
+
+  // 3) In-set substitutions
+  const setWon = {}; sets.forEach(r => { setWon[r[0] + '|' + r[1]] = r[4]; });
+  const g = {};
+  subs.forEach(r => {
+    const k = r[2] + '>' + r[3];
+    const o = g[k] || (g[k] = { out: r[2], in: r[3], n: 0, trail: 0, tie: 0, lead: 0, lostSet: 0, diffs: [], score: [] });
+    o.n++; const d = r[4] - r[5]; if (d < 0) o.trail++; else if (d === 0) o.tie++; else o.lead++;
+    o.score.push(r[4] + r[5]);
+    if (setWon[r[0] + '|' + r[1]] === 0) o.lostSet++;
+  });
+  const back = k => { const [a, b] = k.split('>'); return g[b + '>' + a]; };
+  const subRows = Object.entries(g).sort((x, y) => y[1].n - x[1].n).slice(0, 12).map(([k, o]) => {
+    const avgPt = o.score.length ? Math.round(o.score.reduce((a, b) => a + b, 0) / o.score.length) : 0;
+    const when = o.trail > o.lead && o.trail > o.tie ? 'Mostly when trailing' : o.lead > o.trail && o.lead > o.tie ? 'Mostly when leading' : o.tie > o.trail && o.tie > o.lead ? 'Mostly when tied' : 'Mixed';
+    const pattern = back(k) && back(k).n >= Math.max(2, o.n * 0.5) ? 'Swaps back later (likely a serving or defensive sub)' : 'Usually stays in';
+    return `<tr><td style="white-space:nowrap">${nm(o.out)}</td><td style="white-space:nowrap">${nm(o.in)}</td><td class="num">${o.n}</td><td>${when} <span style="color:var(--text-muted)">(${o.trail} trailing, ${o.tie} tied, ${o.lead} leading)</span></td><td class="num">${avgPt}</td><td>${pattern}</td></tr>`;
+  }).join('');
+  const subCard = card('Substitutions During a Set', `${subs.length} substitutions in ${sets.length} sets. "Around point" = average total points played when the sub was made.`,
+    subRows ? T(`<tr><th ${H}>Player out</th><th ${H}>Player in</th><th class="num" ${H}>Times</th><th ${H}>Score at the time</th><th class="num" ${H}>Around point</th><th ${H}>Pattern</th></tr>`, subRows) : '<div class="empty">No substitutions found.</div>');
+
+  return startCard + changeCard + subCard;
+}
+
+// Scouting set types = the same list as the Loyola reports (VALID_COMBOS); every other code counts as Other
+const scCombo = c => (c && VALID_COMBOS.has(c)) ? c : 'Other';
+
 function buildScoutSetting(name) {
   const st = DATA.opp_rotation_stats?.[name]?.setting;
   if (!st || !st.sets?.length) return '<div class="empty">No set to attack data for this opponent.</div>';
@@ -7096,7 +7192,7 @@ function buildScoutSetting(name) {
 
   const z = () => ({ k: 0, e: 0, b: 0, a: 0, cat: {}, combo: {} });
   const add = (o, r) => { o.a++; if (r[10] === '#') o.k++; else if (r[10] === '=') o.e++; else if (r[10] === '/') o.b++;
-    o.cat[r[9]] = (o.cat[r[9]] || 0) + 1; if (r[8]) o.combo[r[8]] = (o.combo[r[8]] || 0) + 1; };
+    o.cat[r[9]] = (o.cat[r[9]] || 0) + 1; const cc = scCombo(r[8]); o.combo[cc] = (o.combo[cc] || 0) + 1; };
   const group = (list, keyFn) => { const g = {}; list.forEach(r => { const k = keyFn(r); if (k === null || k === undefined || k === '') return; add(g[k] || (g[k] = z()), r); }); return g; };
   const eff = o => o.a ? (o.k - o.e - o.b) / o.a : null;
   const fE = v => fmtEff3(v);
@@ -7111,7 +7207,7 @@ function buildScoutSetting(name) {
   const distBar = o => { const t = o.a || 1;
     return `<div style="display:flex;height:16px;min-width:200px;border-radius:3px;overflow:hidden;background:var(--surface3)">${SC_CATS.filter(c => o.cat[c]).map(c =>
       `<div title="${SC_CAT_LBL[c]}: ${o.cat[c]} (${Math.round(o.cat[c] / t * 100)}%)" style="width:${o.cat[c] / t * 100}%;background:${SC_CAT_CLR[c]};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${SC_CAT_TXT[c] || '#1c1b19'}">${o.cat[c] / t >= 0.12 ? Math.round(o.cat[c] / t * 100) + '%' : ''}</div>`).join('')}</div>`; };
-  const topSets = (o, n = 3) => Object.entries(o.combo).sort((a, b) => b[1] - a[1]).slice(0, n)
+  const topSets = (o, n = 3) => Object.entries(o.combo).filter(([c]) => c !== 'Other').sort((a, b) => b[1] - a[1]).slice(0, n)
     .map(([c, k]) => `<span title="${COMBO_NAMES?.[c] || ''}" style="white-space:nowrap"><b>${c}</b> ${Math.round(k / o.a * 100)}%</span>`).join(', ');
   const legend = `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin:4px 0 10px">${SC_CATS.map(c => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${SC_CAT_CLR[c]};margin-right:5px"></span>${SC_CAT_LBL[c]}</span>`).join('')}</div>`;
   const card = (title, sub, body) => `<div class="card-sm" style="padding:18px 20px;margin-bottom:18px"><div style="font-size:15px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${title}</div>${sub ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${sub}</div>` : ''}${body}</div>`;
@@ -7131,9 +7227,9 @@ function buildScoutSetting(name) {
   const byH = group(rows, r => r[3]);
   const hitRows = Object.entries(byH).sort((a, b) => b[1].a - a[1].a).map(([h, o]) =>
     `<tr><td style="font-weight:600;white-space:nowrap">${nm(h)}</td>${atkCells(o)}<td class="num" style="color:var(--gold)">${pc(o.a, all.a)}</td><td style="font-size:12px">${topSets(o)}</td></tr>`).join('');
-  const byC = group(rows, r => r[8] || '(no code)');
-  const comboRows = Object.entries(byC).sort((a, b) => b[1].a - a[1].a).map(([c, o]) =>
-    `<tr><td style="white-space:nowrap"><b>${c}</b> <span style="color:var(--text-muted);font-size:12px">${COMBO_NAMES?.[c] || ''}</span></td>${atkCells(o)}<td class="num" style="color:var(--gold)">${pc(o.a, all.a)}</td></tr>`).join('');
+  const byC = group(rows, r => scCombo(r[8]));
+  const comboRows = Object.entries(byC).sort((a, b) => (a[0] === 'Other') - (b[0] === 'Other') || b[1].a - a[1].a).map(([c, o]) =>
+    `<tr><td style="white-space:nowrap"><b>${c}</b> <span style="color:var(--text-muted);font-size:12px">${c === 'Other' ? 'Any other code' : (COMBO_NAMES?.[c] || '')}</span></td>${atkCells(o)}<td class="num" style="color:var(--gold)">${pc(o.a, all.a)}</td></tr>`).join('');
 
   // -- By rotation (ignores the rotation filter) --
   const rotRowsBase = base.filter(r => fSetter(r) && fPass(r));
@@ -7317,7 +7413,7 @@ function renderScoutDetail(name) {
   function effColor(e) { return effTone(e, null, team ? team.eff : null); }
 
   // -- helper: rotation card (2 rows by 3 cols grid, order matches Excel: 4,3,2 / 5,6,1)
-  const ROT_ORDER = [4,3,2,5,6,1];
+  const ROT_ORDER = [1,2,3,4,5,6];   // 1 2 3 on top, 4 5 6 on the bottom (6 bottom-right)
   function rotCard(r) {
     const rv  = rots[String(r)] || {};
     const atk = rv.atk || {att:0,k:0,e:0,bk:0,eff:0,k_pct:0,by_zone:{}};
@@ -7403,11 +7499,15 @@ function renderScoutDetail(name) {
           </div>`).join('')}
       </div>` : ''}
 
-      <!-- Rotation Grid (2x3: R4 R3 R2 / R5 R6 R1) -->
+      <!-- Rotation Grid (2x3: 1 2 3 / 4 5 6) -->
       <div class="section-title">Rotation Breakdown</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:26px">
         ${ROT_ORDER.map(r => rotCard(r)).join('')}
       </div>
+
+      <!-- How they start sets, changes after a lost / won set, substitutions -->
+      <div class="section-title">Set Starts and Substitutions</div>
+      <div id="scout-starts">${buildScoutStarts(name)}</div>
 
       <!-- Setting Breakdown (setter by rotation by pass by set type) + Pass & Hit -->
       <div class="section-title">Setting Breakdown</div>
@@ -7433,9 +7533,12 @@ function renderScoutDetail(name) {
   `;
 
   if (A?.combos && Object.keys(A.combos).length > 0) {
-    const comboEntries = Object.entries(A.combos).sort((a,b)=>b[1].attempts-a[1].attempts).slice(0,8);
+    const cm = {};
+    Object.entries(A.combos).forEach(([k, v]) => { const c = scCombo(k); const o = cm[c] || (cm[c] = { attempts: 0, evals: {} });
+      o.attempts += v.attempts || 0; Object.entries(v.evals || {}).forEach(([e, n]) => { o.evals[e] = (o.evals[e] || 0) + n; }); });
+    const comboEntries = Object.entries(cm).filter(([, v]) => v.attempts).sort((a, b) => (a[0] === 'Other') - (b[0] === 'Other') || b[1].attempts - a[1].attempts);
     makeChart('chart-scout-combos', 'bar', {
-      labels: comboEntries.map(([k,v]) => v.name||k),
+      labels: comboEntries.map(([k]) => k === 'Other' ? 'Other' : (COMBO_NAMES[k] || k)),
       datasets: [
         { label: 'Attempts', data: comboEntries.map(([,v]) => v.attempts), backgroundColor: '#822433aa', borderRadius: 3 },
         { label: 'Kills',    data: comboEntries.map(([,v]) => v.evals?.['#']||0), backgroundColor: GREEN, borderRadius: 3 },
