@@ -7734,10 +7734,10 @@ function smToggle(p, on) {
 function setSM(k, v) { scoutMap[k] = v; smRefresh(); }
 
 // =========================== SCOUTING: TEAM REPORT PDF ===========================
-// Three sections handed to _writePdf (one page each at most, short ones get merged):
-//   1) overview + rotations (as compact tables) + set starts / substitutions
-//   2) setting breakdown (summary, by hitter, by set type, by rotation)
-//   3) passing (pass zone tables, pass-to-set matrices, Pass & Hit) - all split vs spin / vs float / total
+// Sections handed to _writePdf (each fits one page; consecutive short ones get merged onto one page):
+//   overview + rotations (compact tables), set starts / substitutions, setting breakdown (summary, by hitter,
+//   by set type, by rotation), passing zone tables, pass-to-set grids + Pass & Hit (passing is split vs spin /
+//   vs float / total)
 // It prints what the Team report shows, with its current filters (Season, setting breakdown filters).
 function _stRotTables(name) {
   const rots = DATA.opp_rotation_stats?.[name]?.rotations || {};
@@ -7780,14 +7780,24 @@ function exportScoutTeamPDF() {
 
   // Setting breakdown as shown on the page (current filters), split into setting / passing parts
   const parts = buildScoutSetting(name, true);
-  const P = typeof parts === 'string' ? { set: parts, pass: '' } : parts;
+  const P = typeof parts === 'string' ? { set: parts } : parts;
+  // set starts / subs: fixed-width cards so long text wraps instead of stretching the page
+  const starts = buildScoutStarts(name)
+    .split('<div class="card-sm" style="padding:18px 20px;margin-bottom:18px">').join('<div class="card-sm" style="padding:10px 12px;margin-bottom:12px;width:980px;white-space:normal">')
+    .split('<table class="data-table" style="width:100%">').join('<table class="data-table" style="width:100%;white-space:normal">');
   const key = `<div style="font-size:9px;color:var(--text-muted);margin:2px 0 8px;white-space:normal;max-width:680px">Colors: ${SC_CATS.map(c => `<span style="white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:3px;background:${SC_CAT_CLR[c]}"></span><b>${SC_CAT_LBL[c]}</b> ${SC_CAT_CODES[c].join(', ')}</span>`).join(', ')}</div>`;
 
+  // narrower bars so the 3 serve groups fit upright; long notes wrap instead of widening the page
+  const slim = h => h.split('min-width:110px').join('min-width:72px')
+    .split('font-size:12px;color:var(--text-muted);margin-bottom:10px">').join('font-size:12px;color:var(--text-muted);margin-bottom:10px;max-width:640px;white-space:normal">');
   const sections = [
-    { title: `${name} - Overview, rotations and set starts`, html: _stRotTables(name) + buildScoutStarts(name) },
-    { title: `${name} - Setting breakdown`, html: key + P.set },
-    { title: `${name} - Passing (vs jump spin / vs float / total)`, html: P.pass || '<div class="empty">No serve-receive data.</div>' },
+    { title: `${name} - Overview and rotations`, html: _stRotTables(name) },
+    { title: `${name} - Set starts and substitutions`, html: starts },
+    { title: `${name} - Setting breakdown`, html: key + slim(P.set) },
   ];
+  if (P.pz || P.sz) sections.push({ title: `${name} - Where they passed and set from (vs jump spin / vs float / total)`, html: slim((P.pz || '') + (P.sz || '')) });
+  if (P.cross) sections.push({ title: `${name} - Where the pass went from each passing zone`, html: slim(P.cross) });
+  if (P.ph) sections.push({ title: `${name} - Pass & Hit (vs jump spin / vs float / total)`, html: slim(P.ph) });
   sections.docTitle = `${name} - Team scouting report`;
   const passLbl = (SC_PASS.find(p => p[0] === scoutF.pass) || [])[1] || 'All sets';
   const setterLbl = scoutF.setter === 'all' ? 'All setters' : `#${scoutF.setter} ${rs.setting?.names?.[scoutF.setter] || ''}`;
@@ -7887,7 +7897,7 @@ function buildScoutSetting(name, asParts) {   // asParts = return the pieces (te
   const legend = `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin:4px 0 10px">${SC_CATS.map(c => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${SC_CAT_CLR[c]};margin-right:5px"></span>${SC_CAT_LBL[c]}</span>`).join('')}</div>`;
   const card = (title, sub, body) => `<div class="card-sm" style="padding:18px 20px;margin-bottom:18px">${title ? `<div style="font-size:15px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${title}</div>` : ''}${sub ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${sub}</div>` : ''}${body}</div>`;
 
-  if (!rows.length) return asParts ? { set: '<div class="empty">No sets match these filters.</div>', pass: '' } : controls + '<div class="empty">No sets match these filters.</div>';
+  if (!rows.length) return asParts ? { set: '<div class="empty">No sets match these filters.</div>' } : controls + '<div class="empty">No sets match these filters.</div>';
 
   // -- Summary --
   const all = z(); rows.forEach(r => add(all, r)); scBase = eff(all);
@@ -7959,7 +7969,7 @@ function buildScoutSetting(name, asParts) {   // asParts = return the pieces (te
   P.cross = cross ? card('Where the Pass Went From Each Passing Zone', crossSub, cross) : '';
   P.crossPdf = cross ? `<h3>Where the Pass Went From Each Passing Zone</h3>` + card('', crossSub, cross) : '';   // PDF: heading stays with the 3 grids
   P.ph = buildScoutPassHit(st, fileOk, nm, name);
-  if (asParts) return { set: summary + P.grid + P.rot, pass: P.pz + P.sz + P.crossPdf + P.ph };
+  if (asParts) return { set: summary + P.grid + P.rot, pz: P.pz, sz: P.sz, cross: P.crossPdf, ph: P.ph };
   return controls + summary + scColorKey() + P.grid + P.rot + P.pz + P.sz + P.cross + P.ph;
 }
 
@@ -8188,7 +8198,7 @@ function renderScoutDetail(name) {
       <div style="display:flex;gap:0;border:1px solid var(--text);border-radius:4px;overflow:hidden;width:max-content">
         ${[['team', 'Team report'], ['players', 'Player scouting'], ['setmap', 'Setter locations']].map(([v, l]) => `<button onclick="setScoutView('${v}')" style="padding:8px 18px;font-size:14px;font-weight:600;border:none;cursor:pointer;background:${scoutView === v ? 'var(--maroon)' : 'transparent'};color:${scoutView === v ? '#fff' : 'var(--text)'}">${l}</button>`).join('')}
       </div>
-      ${scoutView === 'team' ? `<button class="scout-back" onclick="exportScoutTeamPDF()" title="Team report as a PDF (3 pages at most), with the filters shown on the page">Export team report to PDF</button>` : ''}
+      ${scoutView === 'team' ? `<button class="scout-back" onclick="exportScoutTeamPDF()" title="Team report as a PDF, with the filters shown on the page">Export team report to PDF</button>` : ''}
       </div>
       <div id="scout-view-players" style="display:${scoutView === 'players' ? '' : 'none'}">${scoutView === 'players' ? buildScoutPlayers(name) : ''}</div>
       <div id="scout-view-setmap" style="display:${scoutView === 'setmap' ? '' : 'none'}">${scoutView === 'setmap' ? buildScoutSetterMap(name) : ''}</div>

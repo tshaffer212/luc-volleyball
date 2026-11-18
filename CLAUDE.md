@@ -124,6 +124,12 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   (setting rows add r[12] = serve group, '' = transition), the pass-zone matrix (three side by side) and
   opponent Pass & Hit (`buildScoutPassHit()`, now built from `players.atk` rows; atk rows add r[13] = serve group).
 
+- Team report PDF: "Export team report to PDF" (`exportScoutTeamPDF()`) feeds sections to the shared `_writePdf()`
+  (each section fits one page; consecutive short ones merge; very wide ones print sideways): overview KPIs +
+  rotation tables (`_stRotTables()`), set starts / subs (cards forced to 980px so text wraps), setting
+  breakdown (`buildScoutSetting(name, true)` returns the pieces), where they passed / set from, pass-to-set
+  grids, Pass & Hit. Uses the page's current Season and setting-breakdown filters. As many pages as needed.
+
 ### Scouting player tab ("Player scouting" view)
 The scouting detail has a "Team report | Player scouting" switch (`scoutView`, `setScoutView()`). Player
 scouting = a checklist of the opponent's players (`scoutPF.checked`), filters (rotation, set type, first ball /
