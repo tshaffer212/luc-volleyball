@@ -7398,6 +7398,7 @@ function renderAttack() {
   const totalAtt  = allCodes.reduce((s,cc) => s+(combos[cc]?.attempts||0), 0);
   const totalKill = allCodes.reduce((s,cc) => s+(combos[cc]?.kills||0), 0);
   const totalErr  = allCodes.reduce((s,cc) => s+(combos[cc]?.errors||0), 0);
+  const totalBlk  = allCodes.reduce((s,cc) => s+(combos[cc]?.blocked||0), 0);
   const topCombo  = allCodes.sort((a,b)=>(combos[b]?.attempts||0)-(combos[a]?.attempts||0))[0];
 
   document.getElementById('atk-kpi-row').innerHTML = `
@@ -7406,7 +7407,7 @@ function renderAttack() {
     <div class="card-sm"><div class="card-title">Kill %</div>
       <div class="stat-val big green">${totalAtt ? pct(totalKill/totalAtt*100) : '—'}</div></div>
     <div class="card-sm"><div class="card-title">Efficiency</div>
-      <div class="stat-val big" style="color:var(--gold)">${totalAtt ? pct((totalKill-totalErr)/totalAtt*100) : '—'}</div></div>
+      <div class="stat-val big" style="color:var(--gold)">${totalAtt ? pct((totalKill-totalErr-totalBlk)/totalAtt*100) : '—'}</div></div>
     <div class="card-sm"><div class="card-title">Top Call</div>
       <div class="stat-val big" style="font-size:20px">${topCombo ? (COMBO_NAMES[topCombo]||topCombo) : '—'}</div>
       <div class="stat-lbl">${topCombo||''}</div></div>

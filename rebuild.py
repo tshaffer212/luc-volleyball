@@ -152,6 +152,10 @@ def main():
                 sys.exit(1)
             print(f"\n🌐  Rebuilding dashboard.html")
             inject_data(TEMPLATE, DASH_DATA, DASHBOARD)
+            # Editorial redesign preview (separate copy until approved)
+            tpl_v2 = HERE / 'dashboard_template_v2.html'
+            if tpl_v2.exists():
+                inject_data(tpl_v2, DASH_DATA, HERE / 'dashboard-v2.html')
 
         # ── Step 3b: Player portal (locked per-player files for players.html) ─
         portal = HERE / 'build_player_portal.py'
@@ -187,6 +191,9 @@ def main():
                     'players.html',
                     'player_data',
                     'build_player_portal.py',
+                    'dashboard_template_v2.html',
+                    'dashboard-v2.html',
+                    'players-v2.html',
                 ]
                 subprocess.run(['git', 'add'] + files_to_commit, cwd=HERE, check=True)
                 # Only commit if there are staged changes
