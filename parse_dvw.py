@@ -417,6 +417,17 @@ def parse_scout_code(code):
 
 # ─── Main file parser ──────────────────────────────────────────────────────────
 
+def _dv_coord(fields, i):
+    """DVW court coordinate (fields 4/5/6 = start / mid / end click): 4-digit 'yyxx' on a 100 x 101 grid,
+    '-1-1' or blank when missing. Returned as the raw int (x = v % 100, y = v // 100) or None.
+    In VolleyMetrics files every skill is stored from the acting team's view (hitter/server near y=0-50,
+    net at y=50, far baseline ~y=89.5, sidelines ~x=11.5 / 88.5)."""
+    if len(fields) <= i:
+        return None
+    v = fields[i].strip()
+    return int(v) if v.isdigit() else None
+
+
 def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
     """
     Parse a single .dvw file into a session dict.
@@ -714,6 +725,13 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
             'end_subzone':   parsed.get('end_subzone'),
             'direction':     parsed.get('direction'),
             'num_blockers':  parsed.get('num_blockers'),
+            # Exact court spots (scouting player charts only; see _dv_coord)
+            'xy_s':          _dv_coord(fields, 4),
+            'xy_m':          _dv_coord(fields, 5),
+            'xy_e':          _dv_coord(fields, 6),
+            # Coded landing zone + sub-zone as written in VM codes (code[10] + code[11]), e.g. '6C'
+            'vm_end':        (code_str[10] + (code_str[11] if len(code_str) > 11 and code_str[11].isalpha() else ''))
+                             if (len(code_str) > 10 and code_str[8:9] == '~' and code_str[10].isdigit()) else None,
             # Setter call (K-code from setter's combo_code field)
             'setter_call_code': combo_code if skill_code == 'E' else None,
             'setter_call_name': setter_calls.get(combo_code, DEFAULT_SETTER_CALLS.get(combo_code)) if (skill_code == 'E' and combo_code) else None,

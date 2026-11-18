@@ -648,6 +648,10 @@
   [style*="color: var(--green)"], [style*="color: var(--red)"], [style*="color: var(--gold)"] { color: var(--text) !important; }
   .gold, .green, .red, .xlsx-gold, .xlsx-green, .xlsx-red, .stat-val.green, .stat-val.red,
   .eval-kill, .eval-err, .eval-pos, .eval-neg, .data-table .gold, .data-table .green, .data-table .red, .skill-pct { color: var(--text) !important; }
+  .sp-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  .sp-table th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--text);text-align:left;white-space:nowrap}
+  .sp-table th.num,.sp-table td.num{text-align:right}
+  .sp-table td{padding:6px 8px;border-bottom:1px solid var(--border)}
 </style>
 </head>
 <body>
@@ -7217,6 +7221,364 @@ function buildScoutStarts(name) {
 // Scouting set types = the same list as the Loyola reports (VALID_COMBOS); every other code counts as Other
 const scCombo = c => (c && VALID_COMBOS.has(c)) ? c : 'Other';
 
+// =========================== SCOUTING: PLAYER TAB ============================
+// Data: DATA.opp_rotation_stats[opp].players (aggregate.py compute_scout_players)
+//   atk: [fi, player, rot, combo, eval, pass grade before the set (# + ! - /) or T, start, mid, end, coded_end, set]
+//   srv: [fi, player, rot, serve_type, eval, start, end, coded_end, set]
+//   oth: [fi, player, rot, skill R/D/B/E, eval]  (R adds: zone passed, team's first attack eval after it, serve type)
+// Court spots are the raw DVW clicks ('yyxx' ints, -1 = missing). In VolleyMetrics files every
+// attack / serve is stored from the hitter's (server's) side: he is near y 0-50, net at y=50, the far
+// baseline ~89.5, sidelines ~11.5 / 88.5, and his left = small x. The charts turn that court 180 degrees
+// (x -> 100-x, y down the page) so their side is on top and Loyola's side is at the bottom, with
+// left / right still correct.
+let scoutView = 'team';
+let scoutPF = { opp: null, checked: [], rot: 'all', set: 'all', ph: 'all', st: 'all' };
+const SP_ATK_RES = ev => ev === '#' ? 'kill' : ev === '/' ? 'blocked' : ev === '=' ? 'error' : 'dug';
+const SP_SRV_RES = ev => ev === '#' ? 'ace' : ev === '=' ? 'error' : (ev === '+' || ev === '/') ? 'tough' : 'passed';
+const SP_CLR = { kill: '#2e6b3a', blocked: '#a3281f', error: '#a3281f', dug: '#4f7fa8', ace: '#2e6b3a', tough: '#4f7fa8', passed: '#9a958b' };
+const SP_RES_LBL = { kill: 'kill', blocked: 'blocked', error: 'error', dug: 'dug / kept in play', ace: 'ace', tough: 'tough serve', passed: 'passed' };
+const SP_STYPE = { Q: 'Jump spin', M: 'Jump float', H: 'Float' };
+const SP_POS_ORDER = ['OH', 'OPP', 'MB', 'S', 'L', 'DS', 'Serve'];
+const POS_TAG_SC = { OH: 'OH', MB: 'MB', OPP: 'OPP', S: 'S', L: 'L', DS: 'DS', Serve: 'Serve sub' };
+const SP_PASS_ROWS = [['#', 'Perfect pass (#)', 'Perfect'], ['+', 'Good pass (+)', 'Good'], ['!', 'Medium pass (!)', 'Medium'], ['-/', 'Poor pass (- /)', 'Poor'], ['T', 'Transition', 'Transition']];
+const SP_RZONE = { 1: 'right back', 6: 'middle back', 5: 'left back', 9: 'right middle', 8: 'middle', 7: 'left middle', 2: 'right front', 3: 'middle front', 4: 'left front' };
+const SP_RZONE_ORDER = ['1', '6', '5', '9', '8', '7', '2', '3', '4'];
+const spXY = v => (typeof v === 'number' && v >= 0) ? [v % 100, Math.floor(v / 100)] : null;
+
+function setScoutView(v) {
+  scoutView = v;
+  if (selectedOpp) renderScoutDetail(selectedOpp);
+}
+
+// All of this opponent's rows that pass the page's Season filter
+function spBase(name) {
+  const rs = DATA.opp_rotation_stats?.[name];
+  const P = rs?.players, setting = rs?.setting;
+  if (!P) return null;
+  const season = document.getElementById('scout-season-filter')?.value || 'all';
+  const files = setting?.files || [];
+  const ok = r => season === 'all' || files[r[0]]?.season === season;
+  return { atk: P.atk.filter(ok), srv: P.srv.filter(ok), oth: P.oth.filter(ok), names: setting?.names || {}, pos: rs?.starts?.pos || {}, files };
+}
+
+// Rows for one player with the player-tab filters applied (skip = the filter a table breaks down by)
+function spFilter(B, pn, skip) {
+  const F = scoutPF;
+  const rotOk = r => skip === 'rot' || F.rot === 'all' || String(r[2]) === String(F.rot);
+  const fileLbl = fi => { const f = B.files[fi] || {}; return `${f.file || ''}${f.date ? ' (' + f.date + ')' : ''}`; };
+  const atk = B.atk.filter(r => r[1] === pn && rotOk(r) && (skip === 'set' || F.set === 'all' || scCombo(r[3]) === F.set) && (skip === 'ph' || F.ph === 'all' || (F.ph === 'T' ? r[5] === 'T' : r[5] !== 'T')))
+    .map(r => { const res = SP_ATK_RES(r[4]);
+      return { rot: r[2], combo: r[3], ev: r[4], pg: r[5], res, s: spXY(r[6]), m: spXY(r[7]), e: spXY(r[8]),
+        label: `${r[3] || 'No code'}${COMBO_NAMES?.[r[3]] ? ' ' + COMBO_NAMES[r[3]] : ''} - Rotation ${r[2] || '?'} - ${SP_RES_LBL[res]} - coded landing zone ${r[9] || '?'} - ${fileLbl(r[0])}, set ${r[10]}` }; });
+  const srv = B.srv.filter(r => r[1] === pn && rotOk(r) && (F.st === 'all' || r[3] === F.st))
+    .map(r => { const res = SP_SRV_RES(r[4]);
+      return { rot: r[2], typ: r[3], ev: r[4], res, s: spXY(r[5]), m: null, e: spXY(r[6]),
+        label: `${SP_STYPE[r[3]] || 'Serve'} - Rotation ${r[2] || '?'} - ${SP_RES_LBL[res]} - coded landing zone ${r[7] || '?'} - ${fileLbl(r[0])}, set ${r[8]}` }; });
+  const oth = B.oth.filter(r => r[1] === pn && rotOk(r));
+  return { atk, srv, oth };
+}
+
+// Court with one line per attack / serve. y0 = first court row shown (0 = full court incl. the server).
+function spCourt(list, W, H, y0) {
+  const kx = W / 100, ky = H / (101 - y0);
+  const X = x => (100 - x) * kx, Y = y => (y - y0) * ky;
+  const L = (a, b, c, d, st) => `<line x1="${X(a).toFixed(1)}" y1="${Y(b).toFixed(1)}" x2="${X(c).toFixed(1)}" y2="${Y(d).toFixed(1)}" ${st}/>`;
+  const big = W > 220, R = big ? 3.2 : 2.1, SW = big ? 1.4 : 0.9;
+  let g = `<rect x="0" y="0" width="${W}" height="${H}" fill="#f3f1ec"/>`;
+  const top = Math.max(y0, 10.5);
+  g += `<rect x="${X(88.5).toFixed(1)}" y="${Y(top).toFixed(1)}" width="${(77 * kx).toFixed(1)}" height="${((50 - top) * ky).toFixed(1)}" fill="#efeadf" stroke="#8c8577" stroke-width="1.1"/>`;
+  g += `<rect x="${X(88.5).toFixed(1)}" y="${Y(50).toFixed(1)}" width="${(77 * kx).toFixed(1)}" height="${(39.5 * ky).toFixed(1)}" fill="#e7e1d3" stroke="#8c8577" stroke-width="1.1"/>`;
+  g += L(11.5, 36.8, 88.5, 36.8, 'stroke="#8c8577" stroke-width="0.9"') + L(11.5, 63.2, 88.5, 63.2, 'stroke="#8c8577" stroke-width="0.9"');
+  [37.2, 62.8].forEach(x => { g += L(x, 50, x, 89.5, 'stroke="#b9b2a4" stroke-dasharray="2 3" stroke-width="0.8"'); });
+  g += L(11.5, 76.3, 88.5, 76.3, 'stroke="#b9b2a4" stroke-dasharray="2 3" stroke-width="0.8"');
+  const zl = { 4: [75, 56.6], 3: [50, 56.6], 2: [25, 56.6], 7: [75, 69.8], 8: [50, 69.8], 9: [25, 69.8], 5: [75, 83], 6: [50, 83], 1: [25, 83] };
+  Object.entries(zl).forEach(([z, [x, y]]) => { g += `<text x="${X(x).toFixed(1)}" y="${(Y(y) + (big ? 5 : 3)).toFixed(1)}" text-anchor="middle" font-size="${big ? 13 : 8}" font-weight="700" fill="#cfc8b9" font-family="IBM Plex Sans,Arial,sans-serif">${z}</text>`; });
+  g += L(4, 50, 96, 50, `stroke="#1c1b19" stroke-width="${big ? 2.4 : 1.6}"`);
+  // misses first, scoring balls on top
+  const order = { passed: 0, dug: 1, tough: 2, error: 3, blocked: 4, kill: 5, ace: 5 };
+  [...list].sort((a, b) => order[a.res] - order[b.res]).forEach(r => {
+    if (!r.s || !r.e) return;
+    const col = SP_CLR[r.res];
+    // r.m = where the ball met the block / crossed the net (VM records it just past the net, y 50-57)
+    const pts = [r.s];
+    let end = r.e;
+    if (r.res === 'blocked') {                 // a stuff block: the line stops at the block
+      if (r.m) end = r.m;
+      else if (r.s[1] < 50 && end[1] > r.s[1]) { const t = (50 - r.s[1]) / (end[1] - r.s[1]); end = [r.s[0] + (end[0] - r.s[0]) * Math.min(1, t), 50]; }
+      else end = [end[0], 50];
+    } else if (r.m) pts.push(r.m);
+    pts.push(end);
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join(' ');
+    const op = (r.res === 'dug' || r.res === 'passed') ? 0.55 : 0.85;
+    const ex = X(end[0]), ey = Y(end[1]);
+    let mk = '';
+    if (r.res === 'kill' || r.res === 'ace') mk = `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="${R}" fill="${col}"/>`;
+    else if (r.res === 'dug' || r.res === 'tough') mk = `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="${R}" fill="#fff" stroke="${col}" stroke-width="${big ? 1.3 : 0.9}"/>`;
+    else if (r.res === 'passed') mk = `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="${(R * 0.8).toFixed(1)}" fill="#fff" stroke="${col}" stroke-width="0.9"/>`;
+    else if (r.res === 'error') mk = `<path d="M${(ex - R).toFixed(1)} ${(ey - R).toFixed(1)}L${(ex + R).toFixed(1)} ${(ey + R).toFixed(1)}M${(ex - R).toFixed(1)} ${(ey + R).toFixed(1)}L${(ex + R).toFixed(1)} ${(ey - R).toFixed(1)}" stroke="${col}" stroke-width="${big ? 1.6 : 1.1}"/>`;
+    else if (r.res === 'blocked') mk = `<path d="M${(ex - R * 1.7).toFixed(1)} ${ey.toFixed(1)}L${(ex + R * 1.7).toFixed(1)} ${ey.toFixed(1)}" stroke="${col}" stroke-width="${big ? 3 : 2}"/>`;
+    g += `<g><title>${r.label}</title><path d="${d}" fill="none" stroke="${col}" stroke-width="${SW}" opacity="${op}"${r.res === 'error' ? ' stroke-dasharray="4 3"' : ''}/>${mk}`
+       + `<circle cx="${X(r.s[0]).toFixed(1)}" cy="${Y(r.s[1]).toFixed(1)}" r="${(R * 0.55).toFixed(1)}" fill="#1c1b19" opacity=".7"/></g>`;
+  });
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;border-radius:3px">${g}</svg>`;
+}
+
+function spLegend(kind) {
+  const ln = (col, dash) => `<line x1="0" y1="5" x2="17" y2="5" stroke="${col}" stroke-width="2"${dash ? ' stroke-dasharray="4 3"' : ''}/>`;
+  const it = (svg, t) => `<span style="display:inline-flex;align-items:center;gap:5px"><svg width="26" height="10">${svg}</svg>${t}</span>`;
+  const items = kind === 'A' ? [
+    it(ln(SP_CLR.kill) + `<circle cx="21" cy="5" r="3.2" fill="${SP_CLR.kill}"/>`, 'Kill'),
+    it(ln(SP_CLR.blocked) + `<path d="M21 0L21 10" stroke="${SP_CLR.blocked}" stroke-width="3"/>`, 'Blocked (stops at the net)'),
+    it(ln(SP_CLR.dug) + `<circle cx="21" cy="5" r="3.2" fill="#fff" stroke="${SP_CLR.dug}" stroke-width="1.3"/>`, 'Dug / kept in play'),
+    it(ln(SP_CLR.error, 1) + `<path d="M18 2L24 8M18 8L24 2" stroke="${SP_CLR.error}" stroke-width="1.6"/>`, 'Error (out / net)'),
+    it(`<circle cx="5" cy="5" r="2" fill="#1c1b19"/>`, 'Where he hit from'),
+  ] : [
+    it(ln(SP_CLR.ace) + `<circle cx="21" cy="5" r="3.2" fill="${SP_CLR.ace}"/>`, 'Ace'),
+    it(ln(SP_CLR.tough) + `<circle cx="21" cy="5" r="3.2" fill="#fff" stroke="${SP_CLR.tough}" stroke-width="1.3"/>`, 'Tough serve (poor pass or overpass)'),
+    it(ln(SP_CLR.passed) + `<circle cx="21" cy="5" r="2.6" fill="#fff" stroke="${SP_CLR.passed}"/>`, 'Passed (good or OK pass)'),
+    it(ln(SP_CLR.error, 1) + `<path d="M18 2L24 8M18 8L24 2" stroke="${SP_CLR.error}" stroke-width="1.6"/>`, 'Error'),
+  ];
+  return `<div style="display:flex;gap:6px 16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-top:8px">${items.join('')}</div>`;
+}
+
+// Everything one player's card / PDF block needs
+function spStats(B, pn) {
+  const f = spFilter(B, pn);
+  const A = f.atk, S = f.srv, O = f.oth;
+  const cnt = (a, ev) => a.filter(r => r.ev === ev).length;
+  const effOf = a => a.length ? (cnt(a, '#') - cnt(a, '=') - cnt(a, '/')) / a.length : null;
+  const byRotA = spFilter(B, pn, 'rot').atk;
+  const bySetA = spFilter(B, pn, 'set').atk;
+  const byC = {}; bySetA.forEach(r => { (byC[scCombo(r.combo)] = byC[scCombo(r.combo)] || []).push(r); });
+  const R_ = O.filter(r => r[3] === 'R'), D_ = O.filter(r => r[3] === 'D'), BL = O.filter(r => r[3] === 'B'), E_ = O.filter(r => r[3] === 'E');
+  const byPassA = spFilter(B, pn, 'ph').atk;
+  const passRows = SP_PASS_ROWS.map(([k]) => [k, byPassA.filter(r => k.includes(r.pg))]);
+  const zones = SP_RZONE_ORDER.filter(z => R_.some(r => r[5] === z));
+  const recRows = [...zones.map(z => [z, R_.filter(r => r[5] === z)]), ['Total', R_]];
+  return {
+    A, S, k: cnt(A, '#'), e: cnt(A, '='), b: cnt(A, '/'), eff: effOf(A), effOf,
+    rotRows: [1, 2, 3, 4, 5, 6].map(r => [r, byRotA.filter(x => x.rot === r)]),
+    setRows: Object.entries(byC).sort((a, b) => (a[0] === 'Other') - (b[0] === 'Other') || b[1].length - a[1].length),
+    aces: cnt(S, '#'), serr: cnt(S, '='), tough: S.filter(r => r.res === 'tough').length,
+    srvRows: ['Q', 'M', 'H'].map(t => [t, S.filter(r => r.typ === t)]).filter(([, a]) => a.length),
+    passRows, recRows,
+    pass: R_.length, passPos: R_.filter(r => r[4] === '#' || r[4] === '+').length, passPerf: R_.filter(r => r[4] === '#').length, passErr: R_.filter(r => r[4] === '=').length,
+    digs: D_.length, blocks: BL.filter(r => r[4] === '#').length, sets: E_.length,
+  };
+}
+
+function spAtkTable(rows, base, lbl, small) {
+  const td = small ? 'style="padding:2px 4px"' : '';
+  const head = `<tr><th ${td}></th><th class="num" ${td}>K</th><th class="num" ${td}>E</th><th class="num" ${td}>BLK</th><th class="num" ${td}>ATT</th><th class="num" ${td}>EFF</th><th class="num" ${td}>K%</th></tr>`;
+  const body = rows.filter(([, a]) => a.length || !small).map(([k, a]) => {
+    const K = a.filter(r => r.ev === '#').length, E = a.filter(r => r.ev === '=').length, Bk = a.filter(r => r.ev === '/').length;
+    const v = a.length ? (K - E - Bk) / a.length : null;
+    const tone = effTone(v, a.length, base);
+    return `<tr><td ${td}>${lbl(k)}</td><td class="num" ${td}>${K}</td><td class="num" ${td}>${E}</td><td class="num" ${td}>${Bk || '-'}</td><td class="num" ${td}>${a.length}</td>`
+      + `<td class="num" ${td}><span style="font-weight:700;${tone ? 'color:' + tone : ''}">${a.length ? fmtEff3(v) : '-'}</span></td><td class="num" ${td}>${a.length ? Math.round(K / a.length * 100) + '%' : '-'}</td></tr>`;
+  }).join('');
+  return `<table class="sp-table" style="width:100%">${head}${body || `<tr><td colspan="7" style="color:var(--text-dim)">No attacks</td></tr>`}</table>`;
+}
+
+// Passing: by zone where he took the serve, split by the serve he passed (jump spin / float) and total,
+// plus the team's first attack right after his pass
+function spRecTable(st, small) {
+  const td = small ? 'style="padding:2px 3px"' : '';
+  const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
+  const pos = a => a.filter(r => r[4] === '#' || r[4] === '+').length;
+  const fbEff = a => { const f = a.filter(r => r[6]); if (!f.length) return '-';
+    const v = (f.filter(r => r[6] === '#').length - f.filter(r => r[6] === '=').length - f.filter(r => r[6] === '/').length) / f.length;
+    const tone = effTone(v, f.length, null); return `<span style="font-weight:700;${tone ? 'color:' + tone : ''}">${fmtEff3(v)}</span>`; };
+  const g = 'style="text-align:center;border-bottom:1px solid var(--border)' + (small ? ';padding:1px 3px' : '') + '"';
+  const head = `<tr><th ${td}></th><th colspan="4" ${g}>All serves</th><th colspan="2" ${g}>vs Jump spin</th><th colspan="2" ${g}>vs Float</th><th colspan="2" ${g}>First attack after</th></tr>
+    <tr><th ${td}>${small ? 'Zone' : 'Where he passed'}</th><th class="num" ${td}>Pass</th><th class="num" ${td}>Perf%</th><th class="num" ${td}>Pos%</th><th class="num" ${td}>Err</th><th class="num" ${td}>Pass</th><th class="num" ${td}>Pos%</th><th class="num" ${td}>Pass</th><th class="num" ${td}>Pos%</th><th class="num" ${td}>ATT</th><th class="num" ${td}>EFF</th></tr>`;
+  const body = st.recRows.map(([z, a]) => {
+    const Q = a.filter(r => r[7] === 'Q'), F = a.filter(r => r[7] === 'M' || r[7] === 'H');
+    const tot = z === 'Total';
+    const lbl = tot ? '<b>Total</b>' : (small ? 'Zone ' + z : `Zone ${z} <span style="color:var(--text-muted);font-size:11px">${SP_RZONE[z] || ''}</span>`);
+    return `<tr${tot ? ' style="border-top:1px solid var(--text)"' : ''}><td ${td}>${lbl}</td><td class="num" ${td}>${a.length}</td><td class="num" ${td}>${pc(a.filter(r => r[4] === '#').length, a.length)}</td><td class="num" ${td}>${pc(pos(a), a.length)}</td><td class="num" ${td}>${a.filter(r => r[4] === '=').length || '-'}</td>`
+      + `<td class="num" ${td}>${Q.length || '-'}</td><td class="num" ${td}>${pc(pos(Q), Q.length)}</td><td class="num" ${td}>${F.length || '-'}</td><td class="num" ${td}>${pc(pos(F), F.length)}</td>`
+      + `<td class="num" ${td}>${a.filter(r => r[6]).length || '-'}</td><td class="num" ${td}>${fbEff(a)}</td></tr>`;
+  }).join('');
+  return `<table class="sp-table" style="width:100%">${head}${body}</table>`;
+}
+
+function spSrvTable(st, small) {
+  const td = small ? 'style="padding:2px 4px"' : '';
+  const row = (lbl, a, b) => `<tr><td ${td}>${b ? '<b>' + lbl + '</b>' : lbl}</td><td class="num" ${td}>${a.length}</td><td class="num" ${td}>${a.filter(r => r.ev === '#').length}</td><td class="num" ${td}>${a.filter(r => r.res === 'tough').length}</td><td class="num" ${td}>${a.filter(r => r.ev === '=').length}</td></tr>`;
+  return `<table class="sp-table" style="width:100%"><tr><th ${td}></th><th class="num" ${td}>Serves</th><th class="num" ${td}>Ace</th><th class="num" ${td}>Tough</th><th class="num" ${td}>Err</th></tr>`
+    + st.srvRows.map(([t, a]) => row(SP_STYPE[t] || t, a)).join('') + (st.S.length ? row('Total', st.S, 1) : `<tr><td colspan="5" style="color:var(--text-dim)">No serves</td></tr>`) + `</table>`;
+}
+
+function spFilterLine() {
+  const F = scoutPF;
+  return [F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot, F.set === 'all' ? 'all set types' : (F.set === 'Other' ? 'other set codes' : F.set + ' ' + (COMBO_NAMES[F.set] || '')),
+    F.ph === 'all' ? 'all attacks' : F.ph === 'F' ? 'first ball only' : 'transition only', F.st === 'all' ? 'all serves' : (SP_STYPE[F.st] || F.st) + ' serves'].join(', ');
+}
+
+function spCard(name, B, pn) {
+  const st = spStats(B, pn);
+  const nm = B.names[pn] || '';
+  const pos = B.pos[pn];
+  const stat = (l, v) => `<div style="min-width:54px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">${l}</div><div style="font-family:var(--serif,Georgia,serif);font-size:22px;font-weight:700;line-height:1.15">${v}</div></div>`;
+  const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
+  const sTone = effTone(st.eff, st.A.length, null);
+  return `<div class="card-sm" style="padding:18px 20px;margin-bottom:22px;border-top:3px solid var(--maroon)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+      <div><div style="font-family:var(--serif,Georgia,serif);font-size:24px;font-weight:700">#${pn} ${nm}${pos ? ` <span style="font-family:var(--sans,Arial);font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:1px 5px;vertical-align:middle">${POS_TAG_SC[pos] || pos}</span>` : ''}</div>
+        <div style="font-size:12px;color:var(--text-muted)">${name} - ${spFilterLine()}</div></div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        ${stat('Att', st.A.length)}${stat('K', st.k)}${stat('E', st.e)}${stat('BLK', st.b)}${stat('Eff', st.A.length ? `<span${sTone ? ` style="color:${sTone}"` : ''}>${fmtEff3(st.eff)}</span>` : '-')}${stat('K%', pc(st.k, st.A.length))}
+        ${stat('Serves', st.S.length)}${stat('Aces', st.aces)}${stat('Srv err', st.serr)}
+        ${st.pass ? stat('Passes', st.pass) + stat('Pos %', pc(st.passPos, st.pass)) : ''}${st.digs ? stat('Digs', st.digs) : ''}${st.blocks ? stat('Blocks', st.blocks) : ''}${pos === 'S' && st.sets ? stat('Sets', st.sets) : ''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:16px">
+      <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Attack by rotation</div>${spAtkTable(st.rotRows, st.eff, r => 'Rotation ' + r)}</div>
+      <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Attack by set type</div>${spAtkTable(st.setRows, st.eff, c => `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${SC_CAT_CLR[SC_CODE_CAT[c] || 'Other']}"></span><b>${c}</b> <span style="color:var(--text-muted);font-size:11px">${c === 'Other' ? 'other codes' : (COMBO_NAMES[c] || '')}</span>`)}</div>
+      <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Attack by pass before the set</div>${spAtkTable(st.passRows, st.eff, k => SP_PASS_ROWS.find(x => x[0] === k)[1])}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">First-ball attacks by how well his team passed the serve; transition = every later attack in the rally.</div></div>
+      <div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Serving</div>${spSrvTable(st)}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Tough = Loyola passed it poorly or overpassed it.</div></div>
+    </div>
+    ${st.pass ? `<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Passing - ${st.pass} serves received</div><div style="overflow-x:auto">${spRecTable(st)}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Zones are on his side of the court. Positive = perfect or good pass. First attack after = his team's first swing right after his pass (kills minus errors minus blocked, over attempts).</div></div>` : ''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+      <div style="border:1px solid var(--border);border-radius:6px;padding:12px 14px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Attacking - ${st.A.length} attacks</div>
+        ${st.A.length ? `<div style="display:flex;justify-content:center">${spCourt(st.A, 330, 470, 22)}</div>` : '<div class="empty">No attacks with these filters.</div>'}${spLegend('A')}</div>
+      <div style="border:1px solid var(--border);border-radius:6px;padding:12px 14px"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Serving - ${st.S.length} serves</div>
+        ${st.S.length ? `<div style="display:flex;justify-content:center">${spCourt(st.S, 250, 470, 0)}</div>` : '<div class="empty">No serves with these filters.</div>'}${spLegend('S')}</div>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px">Their side is on top, Loyola's side is at the bottom (light numbers = zones on Loyola's side). Lines are drawn from the exact spots VolleyMetrics recorded. Hover a line for its set type, rotation and result.</div>
+  </div>`;
+}
+
+function spPlayerList(B) {
+  const all = new Set([...B.atk.map(r => r[1]), ...B.srv.map(r => r[1]), ...B.oth.map(r => r[1])]);
+  const n = (a, pn) => a.reduce((t, r) => t + (r[1] === pn), 0);
+  const np = pn => B.oth.reduce((t, r) => t + (r[1] === pn && r[3] === 'R'), 0);
+  return [...all].map(pn => ({ pn, name: B.names[pn] || '', pos: B.pos[pn], atk: n(B.atk, pn), srv: n(B.srv, pn), rcv: np(pn) }))
+    .sort((a, b) => (SP_POS_ORDER.indexOf(a.pos) + 1 || 99) - (SP_POS_ORDER.indexOf(b.pos) + 1 || 99) || (b.atk + b.srv) - (a.atk + a.srv));
+}
+
+function buildScoutPlayers(name) {
+  const B = spBase(name);
+  if (!B) return '<div class="empty">No player data for this opponent.</div>';
+  if (scoutPF.opp !== name) scoutPF = { opp: name, checked: [], rot: 'all', set: 'all', ph: 'all', st: 'all' };
+  const list = spPlayerList(B);
+  const F = scoutPF;
+  const sel = (k, opts) => `<select onchange="setSPF('${k}',this.value)" style="font-size:14px;padding:6px 10px">${opts.map(([v, l]) => `<option value="${v}" ${String(F[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  const lab = t => `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${t}</div>`;
+  const checklist = list.map(p => `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:${F.checked.includes(p.pn) ? 'var(--surface2)' : 'transparent'}">
+      <input type="checkbox" ${F.checked.includes(p.pn) ? 'checked' : ''} onchange="spToggle('${p.pn}', this.checked)">
+      <span style="font-weight:600">#${p.pn} ${p.name}</span>${p.pos ? `<span style="font-size:10px;font-weight:700;color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:0 4px">${POS_TAG_SC[p.pos] || p.pos}</span>` : ''}
+      <span style="margin-left:auto;font-size:12px;color:var(--text-muted);white-space:nowrap">${[p.atk ? p.atk + ' att' : '', p.srv ? p.srv + ' srv' : '', p.rcv ? p.rcv + ' pass' : ''].filter(Boolean).join(', ') || 'no touches'}</span></label>`).join('');
+  const checked = F.checked.filter(pn => list.some(p => p.pn === pn));
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+      <div style="font-size:13px;color:var(--text-muted)">Check the players you want. Their cards fill in below and follow the filters (and the Season filter above).</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="scout-back" onclick="spAll(true)">Select all</button><button class="scout-back" onclick="spAll(false)">Clear</button>
+        <button class="scout-back" onclick="exportScoutPlayersPDF()" ${checked.length ? '' : 'disabled style="opacity:.5;cursor:default"'}>Export checked to PDF (2 per page)</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px;margin-bottom:14px">${checklist || '<div class="empty">No players in these files.</div>'}</div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding:14px 16px;background:var(--surface2);border-radius:8px">
+      <div>${lab('Rotation')}${sel('rot', [['all', 'All rotations'], ...[1, 2, 3, 4, 5, 6].map(r => [r, 'Rotation ' + r])])}</div>
+      <div>${lab('Set type')}${sel('set', [['all', 'All set types'], ...[...VALID_COMBOS].map(c => [c, c + ' ' + (COMBO_NAMES[c] || '')]), ['Other', 'Other codes']])}</div>
+      <div>${lab('Attacks')}${sel('ph', [['all', 'All attacks'], ['F', 'First ball (after their pass)'], ['T', 'Transition']])}</div>
+      <div>${lab('Serve type')}${sel('st', [['all', 'All serves'], ['Q', 'Jump spin'], ['M', 'Jump float'], ['H', 'Float']])}</div>
+    </div>
+    ${checked.length ? checked.map(pn => spCard(name, B, pn)).join('') : '<div class="empty" style="padding:30px 0">No players checked yet.</div>'}`;
+}
+
+function spRefresh() {
+  const el = document.getElementById('scout-view-players');
+  if (el && selectedOpp) el.innerHTML = buildScoutPlayers(selectedOpp);
+}
+function spToggle(pn, on) {
+  const c = scoutPF.checked.filter(x => x !== pn);
+  if (on) c.push(pn);
+  const order = spPlayerList(spBase(scoutPF.opp)).map(p => p.pn);
+  scoutPF.checked = c.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  spRefresh();
+}
+function spAll(on) {
+  scoutPF.checked = on ? spPlayerList(spBase(scoutPF.opp)).map(p => p.pn) : [];
+  spRefresh();
+}
+function setSPF(k, v) { scoutPF[k] = v; spRefresh(); }
+
+// PDF: checked players, two per letter page
+function _spPdfBlock(name, B, pn) {
+  const st = spStats(B, pn);
+  const pos = B.pos[pn];
+  const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
+  const setLbl = c => `<span style="display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:4px;background:${SC_CAT_CLR[SC_CODE_CAT[c] || 'Other']}"></span>${c}`;
+  return `<div class="pb">
+    <div class="ph"><div><b>#${pn} ${B.names[pn] || ''}</b>${pos ? `<span class="tag">${POS_TAG_SC[pos] || pos}</span>` : ''}</div>
+      <span>${st.A.length} att, ${st.k} K, ${st.e} E, ${st.b} BLK, Eff ${st.A.length ? fmtEff3(st.eff) : '-'}, K% ${pc(st.k, st.A.length)} - ${st.S.length} serves, ${st.aces} aces, ${st.serr} err${st.pass ? ` - ${st.pass} passes, ${pc(st.passPos, st.pass)} pos` : ''}</span></div>
+    <div class="pc">
+      <div class="pt"><div class="tc"><div>${spAtkTable(st.rotRows, st.eff, r => 'Rot ' + r, 1)}<div style="height:5px"></div>${st.A.length ? spAtkTable(st.passRows, st.eff, k => SP_PASS_ROWS.find(x => x[0] === k)[2], 1) : ''}</div>
+        <div>${spAtkTable(st.setRows.slice(0, 8), st.eff, setLbl, 1)}<div style="height:5px"></div>${spSrvTable(st, 1)}</div></div>
+        ${st.pass ? `<div style="height:5px"></div>${spRecTable(st, 1)}` : ''}</div>
+      <div class="pg2"><div>${st.A.length ? spCourt(st.A, 168, 252, 22) : '<div class="none">No attacks</div>'}<div class="cap">Attacking (${st.A.length})</div></div>
+        <div>${st.S.length ? spCourt(st.S, 120, 252, 0) : '<div class="none">No serves</div>'}<div class="cap">Serving (${st.S.length})</div></div></div>
+    </div></div>`;
+}
+function exportScoutPlayersPDF() {
+  const name = scoutPF.opp; const B = spBase(name); if (!B) return;
+  const list = spPlayerList(B).map(p => p.pn);
+  const pns = scoutPF.checked.filter(pn => list.includes(pn));
+  if (!pns.length) return;
+  const season = document.getElementById('scout-season-filter')?.value || 'all';
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const pages = [];
+  for (let i = 0; i < pns.length; i += 2) pages.push(pns.slice(i, i + 2));
+  const legend = `Attacks: kill = green line + dot, blocked = red line stopping at the net, dug / kept in play = blue open circle, error = red dashed line + x, black dot = where he hit from. Serves: ace = green dot, tough = blue open circle, passed = gray, error = red x. Their side on top, Loyola's side at the bottom.`;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${name} - Player scouting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--text:#1c1b19;--text-muted:#6b6760;--text-dim:#9a958c;--border:#d9d5cc;--surface2:#f4f2ed;--maroon:#7a0026;--hi:#2e6b3a;--lo:#a3281f;--green:#2e6b3a;--red:#a3281f}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"IBM Plex Sans",-apple-system,Arial,sans-serif;color:var(--text);font-size:9px;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
+  @page{size:letter portrait;margin:.3in}
+  .pg{width:720px;height:960px;overflow:hidden;display:flex;flex-direction:column;gap:8px;margin:0 auto;page-break-after:always;break-after:page}
+  .pg:last-child{page-break-after:auto;break-after:auto}
+  @media screen{body{background:#8a8780;padding:14px 0}.pg{background:#fff;padding:0;box-shadow:0 2px 12px rgba(0,0,0,.35);margin:0 auto 14px}}
+  .top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--text);padding:4px 2px}
+  .top b{font-size:9px;letter-spacing:1.3px;text-transform:uppercase;color:var(--maroon)}
+  .top span{font-size:8.5px;color:var(--text-muted)}
+  .pb{flex:1;min-height:0;display:flex;flex-direction:column;gap:5px;border-bottom:1px solid var(--border);padding-bottom:6px}
+  .ph{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .ph b{font-family:"Source Serif 4",Georgia,serif;font-size:17px}
+  .ph span{font-size:8.5px;color:var(--text-muted);text-align:right;max-width:60%;line-height:1.3}
+  .tag{font-size:8px;font-weight:700;border:1px solid var(--border);border-radius:2px;padding:0 3px;margin-left:6px;color:var(--text-muted);vertical-align:middle}
+  .pc{display:flex;gap:12px;min-height:0;flex:1}
+  .pt{flex:1;min-width:0}
+  .tc{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pg2{display:flex;gap:8px;align-items:flex-start}
+  .cap{font-size:8px;text-align:center;color:var(--text-muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+  .none{width:120px;height:252px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);border:1px dashed var(--border)}
+  table{border-collapse:collapse;width:100%;font-size:8.5px}
+  th{font-size:7.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--text);text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  td{border-bottom:1px solid #ece9e2;text-align:right}
+  .leg{font-size:7.5px;color:var(--text-muted);margin-top:auto}
+</style></head><body>
+${pages.map((pg, i) => `<div class="pg"><div class="top"><b>${name} - Player scouting</b><span>${season === 'all' ? 'All seasons' : season} - ${spFilterLine()} - ${dateStr} - Page ${i + 1} of ${pages.length}</span></div>
+${pg.map(pn => _spPdfBlock(name, B, pn)).join('')}${pg.length < 2 ? '<div class="pb" style="border:none"></div>' : ''}<div class="leg">${legend}</div></div>`).join('')}
+<script>
+(function(){ var ready = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+  Promise.race([ready, new Promise(function (r) { setTimeout(r, 2500); })]).then(function () {
+    if (!window.__noPrint) { setTimeout(function () { window.focus(); window.print(); }, 400); window.onafterprint = function () { window.close(); }; } }); })();
+<\/script></body></html>`;
+  const win = window.open('', '_blank', 'width=900,height=1000');
+  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+}
+
 function buildScoutSetting(name) {
   const st = DATA.opp_rotation_stats?.[name]?.setting;
   if (!st || !st.sets?.length) return '<div class="empty">No set to attack data for this opponent.</div>';
@@ -7537,6 +7899,13 @@ function renderScoutDetail(name) {
         </div>
       </div>
 
+      <!-- Team report / Player scouting switch -->
+      <div style="display:flex;gap:0;margin-bottom:18px;border:1px solid var(--text);border-radius:4px;overflow:hidden;width:max-content">
+        ${[['team', 'Team report'], ['players', 'Player scouting']].map(([v, l]) => `<button onclick="setScoutView('${v}')" style="padding:8px 18px;font-size:14px;font-weight:600;border:none;cursor:pointer;background:${scoutView === v ? 'var(--maroon)' : 'transparent'};color:${scoutView === v ? '#fff' : 'var(--text)'}">${l}</button>`).join('')}
+      </div>
+      <div id="scout-view-players" style="display:${scoutView === 'players' ? '' : 'none'}">${scoutView === 'players' ? buildScoutPlayers(name) : ''}</div>
+      <div id="scout-view-team" style="display:${scoutView === 'players' ? 'none' : ''}">
+
       <!-- Team Metrics Strip -->
       ${team ? `<div style="display:flex;gap:0;margin-bottom:20px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
         ${[
@@ -7583,10 +7952,11 @@ function renderScoutDetail(name) {
           <td class="num">${fmt(f.action_count)}</td>
         </tr>`).join('')}</tbody>
       </table>
+      </div>
     </div>
   `;
 
-  if (A?.combos && Object.keys(A.combos).length > 0) {
+  if (scoutView !== 'players' && A?.combos && Object.keys(A.combos).length > 0) {
     const cm = {};
     Object.entries(A.combos).forEach(([k, v]) => { const c = scCombo(k); const o = cm[c] || (cm[c] = { attempts: 0, evals: {} });
       o.attempts += v.attempts || 0; Object.entries(v.evals || {}).forEach(([e, n]) => { o.evals[e] = (o.evals[e] || 0) + n; }); });

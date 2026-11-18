@@ -119,6 +119,23 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   `scColorKey()` = the plain-English color key (colors -> play calls via `SC_CAT_CODES`, descriptions in
   `SC_CAT_DESC`), shown above the rotation boxes and in the setting breakdown; set-type rows carry the swatch.
 
+### Scouting player tab ("Player scouting" view)
+The scouting detail has a "Team report | Player scouting" switch (`scoutView`, `setScoutView()`). Player
+scouting = a checklist of the opponent's players (`scoutPF.checked`), filters (rotation, set type, first ball /
+transition, serve type, plus the page's Season filter) and one card per checked player (`spCard()`): attack
+stats, attack by rotation / set type / pass before the set, serving by type, passing by zone split vs jump
+spin / vs float / total with the team's first attack after his pass, and two charts (`spCourt()`).
+"Export checked to PDF (2 per page)" = `exportScoutPlayersPDF()`.
+- Data: `opp_rotation_stats[opp].players` from `compute_scout_players()` (see its docstring for row layouts).
+- Lines are drawn from the exact court spots VolleyMetrics clicked: `parse_dvw.py` stores DVW fields 4/5/6 as
+  `xy_s` / `xy_m` / `xy_e` (int 'yyxx', x = v % 100, y = v // 100) and the coded landing zone as `vm_end`.
+  Every attack / serve is stored from the hitter's (server's) side: net y=50, far baseline ~89.5, sidelines
+  ~11.5 / 88.5, his left = small x. Charts turn the court 180 degrees (x -> 100-x, y down the page): their side
+  on top, Loyola's at the bottom. `xy_m` on attacks = where the ball met the block / crossed the net (blocked
+  lines stop there). Check: 99.2% of in-court attack lines and 99.6% of serve lines land in the coded zone.
+- Existing scout sessions in volleyball_data.json were backfilled with these fields; new files get them from the
+  parser. Loyola's own charts were NOT changed (user's choice) and still use the old zone fields.
+
 ### X6 / X8 auto-correction (always on)
 X6 is impossible in R4-R6 and X8 in R1-R3, so `swap_right_side()` (aggregate.py) swaps every such code
 (X6 in R4-R6 -> X8, X8 in R1-R3 -> X6, start zone adjusted) for Loyola AND opponents, with no cap.
@@ -169,6 +186,11 @@ VM format: `code[8]='~'`, then:
 - `code[13]` = end zone (digit)
 
 Sub-zone letters (A–D) apply to serve landing zones (2×2 quadrant grid).
+
+**Correction (verified Nov 2026 against the court coordinates):** in VM attack codes `code[10]` is the END
+(landing) zone 1-9 (zones 7/8/9 included), `code[11]` its sub-zone letter, `code[12]` the attack type
+(H hard / T tip / P soft) and `code[13]` the NUMBER OF BLOCKERS (0-4), not the end zone. The layout above is
+what the Loyola charts still use (left unchanged on purpose). New code should use `vm_end` / `xy_*` instead.
 
 Evaluation codes for attacks: `#`=kill, `=`=error (out/net), `/`=blocked, `+`=positive/in-play, `-`=negative/in-play.
 

@@ -2155,6 +2155,71 @@ def main(raw_path, out_path):
                 out[pn] = votes[pn].most_common(1)[0][0]
         return out
 
+    def compute_scout_players(sessions_for_opp):
+        """Scouting player tab: every attack / serve by the scouted team with the exact court spots
+        VolleyMetrics clicked (xy_* from parse_dvw), plus their other touches for the general stats.
+          atk: [file_idx, player, rot, combo, eval, pass ('#','+','!','-','/' = grade of their serve-receive
+                pass before this first-ball attack, 'T' = transition), start, mid, end, coded_end, set]
+                coords = raw DVW int 'yyxx' (-1 = missing)
+          srv: [file_idx, player, rot, serve_type (Q jump spin / M jump float / H float), eval,
+                start, end, coded_end, set]
+          oth: [file_idx, player, rot, skill (R pass / D dig / B block / E set), eval]
+               R rows add [zone where he passed it (coded, 1-9), eval of the team's first attack after
+               his pass ('' = no first-ball attack: overpass, error, freeball), serve type he passed
+               (Q jump spin / M jump float / H float)]
+        file_idx matches setting.files; duplicate files (same name + date) count once.
+        Combo codes are after the X6/X8 (V6/V8) auto-swap; rotation = the same lineup-based rotation as
+        the rest of the scouting page."""
+        atk, srv, oth, seen = [], [], [], set()
+        c_ = lambda v: v if isinstance(v, int) else -1
+        for fi, session in enumerate(sessions_for_opp):
+            key = (session.get('file'), session.get('date'))
+            if key in seen:
+                continue
+            seen.add(key)
+            side = opp_side_for_session(session)
+            set_lineups = session.get('away_set_lineups' if side == 'away' else 'home_set_lineups', {})
+            setters_f = file_setters(session, side)
+            sl = {}
+            for k, v in set_lineups.items():
+                try: sl[int(k)] = v
+                except Exception: sl[k] = v
+            groups = defaultdict(list)
+            for a in session.get('actions', []):
+                groups[a.get('rally_seq', 0)].append(a)
+            for rs in sorted(groups):
+                fb_open, rcv_row, grade = False, None, 'T'
+                for a in groups[rs]:
+                    sd, sk = a.get('team_side'), a.get('skill_code')
+                    if sd != side:
+                        if sk != 'B':
+                            fb_open = False
+                        continue
+                    pn = str(a.get('player_num') or '')
+                    if not pn:
+                        continue
+                    rot = get_opp_rotation(a, side, sl, setters_f)
+                    rot = rot if rot and 1 <= rot <= 6 else 0
+                    ev = a.get('evaluation') or ''
+                    if sk == 'R':
+                        fb_open, grade = True, (ev or '?')
+                        ve = a.get('vm_end') or ''
+                        rcv_row = [fi, pn, rot, 'R', ev, ve[:1] if ve[:1].isdigit() else '', '', a.get('technique') or '']
+                        oth.append(rcv_row)
+                    elif sk == 'A':
+                        if fb_open and rcv_row is not None and not rcv_row[6]:
+                            rcv_row[6] = ev or '?'
+                        atk.append([fi, pn, rot, a.get('combo_code') or '', ev, grade if fb_open else 'T',
+                                    c_(a.get('xy_s')), c_(a.get('xy_m')), c_(a.get('xy_e')),
+                                    a.get('vm_end') or '', a.get('set_number') or 0])
+                        fb_open = False
+                    elif sk == 'S':
+                        srv.append([fi, pn, rot, a.get('technique') or '', ev,
+                                    c_(a.get('xy_s')), c_(a.get('xy_e')), a.get('vm_end') or '', a.get('set_number') or 0])
+                    elif sk in ('D', 'B', 'E'):
+                        oth.append([fi, pn, rot, sk, ev])
+        return {'atk': atk, 'srv': srv, 'oth': oth}
+
     def compute_scout_starts(sessions_for_opp):
         """
         Scouting: how the opponent starts each set and what they change.
@@ -2357,6 +2422,7 @@ def main(raw_path, out_path):
         opp_rotation_stats[opp]['setting'] = compute_scout_setting(sess_list)
         opp_rotation_stats[opp]['starts'] = compute_scout_starts(sess_list)
         opp_rotation_stats[opp]['starts']['pos'] = compute_scout_positions(sess_list)
+        opp_rotation_stats[opp]['players'] = compute_scout_players(sess_list)
 
     # ── Output ────────────────────────────────────────────────────────────────
     total_loyola_actions = sum(v['actions'] for v in season_stats.values())
