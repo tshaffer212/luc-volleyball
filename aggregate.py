@@ -1732,14 +1732,64 @@ def main(raw_path, out_path):
                for (pn,se),v in player_season.items()}
 
     # ── Scout aggregation ─────────────────────────────────────────────────────
+    _SIDE_SKIP = {'university', 'college', 'men', 'mens', 'women', 'womens', 'the', 'of', 'at', 'a', 'and', 'volleyball'}
+
+    def _team_words(name):
+        import re as _re
+        return [w for w in _re.findall(r"[a-z0-9&]+", (name or '').lower().replace("'s", 's')) if w not in _SIDE_SKIP]
+
+    def _name_score(opp, team):
+        """How well the scout label (full name or abbreviation like UCSD / LW / MCK / Pepp) matches a team name."""
+        ow, tw = _team_words(opp), _team_words(team)
+        if not ow or not tw:
+            return 0
+        if ow == tw:
+            return 100
+        if all(w in tw for w in ow):
+            return 60
+        if len(ow) == 1:
+            ab = ow[0]
+            full = [w for w in __import__('re').findall(r"[a-z0-9&]+", (team or '').lower()) if w not in ('the', 'of', 'at', 'a', 'and', 's', 'men', 'mens', 'volleyball')]
+            if ab == ''.join(w[0] for w in full) or ab == ''.join(w[0] for w in tw):
+                return 50                                   # initials: UCSD, NKU, BSU
+            if len(ab) >= 3 and any(w.startswith(ab) for w in tw):
+                return 40                                   # prefix: MCK, Pepp, Man
+            for w in tw:                                    # letters in order within a word: LW → Lindenwood
+                if w[0] == ab[0]:
+                    it = iter(w)
+                    if all(ch in it for ch in ab):
+                        return 25
+        return 0
+
+    def resolve_opp_sides(opp_groups):
+        """
+        Decide which side (home/away) is the scouted team in every scout file.
+        1) Roster overlap: with 2+ files for an opponent, the scouted team is the side whose
+           players show up again in that opponent's other files.
+        2) Otherwise the team name that best matches the scout label.
+        """
+        def roster(sess, side):
+            return {(p.get('name') or '').lower() for p in (sess.get(f'{side}_players') or {}).values() if p.get('name')}
+        for opp, sess_list in opp_groups.items():
+            for s_ in sess_list:
+                sc = {sd: 0 for sd in ('home', 'away')}
+                if len(sess_list) >= 2:
+                    others = [roster(o, 'home') | roster(o, 'away') for o in sess_list if o is not s_]
+                    for sd in sc:
+                        mine = roster(s_, sd)
+                        sc[sd] = sum(1 for o in others if len(mine & o) >= 3)
+                if sc['home'] != sc['away']:
+                    s_['_opp_side'] = max(sc, key=sc.get)
+                    continue
+                h, a = _name_score(opp, s_.get('home_team')), _name_score(opp, s_.get('away_team'))
+                s_['_opp_side'] = 'home' if h > a else 'away'
+
     def opp_side_for_session(session):
-        """Determine which team_side ('home' or 'away') is the scouted opponent."""
-        opp   = (session.get('opponent') or '').lower()
-        home  = (session.get('home_team') or '').lower()
-        # Any significant word from opponent name appears in home_team → opp is home
-        skip  = {'university','college','men','men\'s','women','women\'s','the','of','at','a'}
-        words = [w for w in opp.split() if len(w) > 2 and w not in skip]
-        return 'home' if (words and any(w in home for w in words)) else 'away'
+        """Which team_side ('home' or 'away') is the scouted opponent (set by resolve_opp_sides)."""
+        if session.get('_opp_side'):
+            return session['_opp_side']
+        h, a = _name_score(session.get('opponent'), session.get('home_team')), _name_score(session.get('opponent'), session.get('away_team'))
+        return 'home' if h > a else 'away'
 
     def get_opp_rotation(action, opp_side, set_lineups):
         """Return the opponent's rotation (1-6) for this action, or None."""
@@ -1953,6 +2003,83 @@ def main(raw_path, out_path):
 
         return {'team': team, 'rotations': rotations, 'setters': setters}
 
+    def compute_scout_setting(sessions_for_opp):
+        """
+        Scouting: one compact row per opponent set that was attacked, so the page can
+        slice it any way (setter, rotation, pass quality, where the pass was taken,
+        where the set was made, set type) — plus Pass & Hit per opponent player.
+
+        set rows: [file_idx, rot, setter, hitter, phase, pass_zone, passer, set_zone,
+                   combo, cat, attack_eval, opp_won_rally]
+          phase     = grade of the serve-receive pass for first-ball sets (# + ! - /),
+                      'T' = transition (any later possession)
+          pass_zone = zone where the serve was passed (reception end zone) — first ball only
+          set_zone  = zone the setter set from (= where the pass / dig went)
+        """
+        files, names, rows, ph = [], {}, [], {}
+        for fi, session in enumerate(sessions_for_opp):
+            files.append({'file': session.get('file'), 'season': session.get('season'), 'date': session.get('date')})
+            opp_side = opp_side_for_session(session)
+            for n_, pinfo in (session.get(f'{opp_side}_players') or {}).items():
+                if pinfo.get('name'):
+                    names[str(n_)] = pinfo['name']
+            set_lineups = session.get('away_set_lineups' if opp_side == 'away' else 'home_set_lineups', {})
+            sl = {}
+            for k, v in set_lineups.items():
+                try: sl[int(k)] = v
+                except Exception: sl[k] = v
+            groups = defaultdict(list)
+            for a in session.get('actions', []):
+                groups[a.get('rally_seq', 0)].append(a)
+            for rs in sorted(groups):
+                rally = groups[rs]
+                winner = None
+                for a in reversed(rally):
+                    tm = _pa_terminal(a)
+                    if tm and a.get('team_side') in ('home', 'away'):
+                        winner = a['team_side'] if tm > 0 else ('away' if a['team_side'] == 'home' else 'home')
+                        break
+                won = 1 if winner == opp_side else 0
+                rcv, fb_open = None, False
+                for i, a in enumerate(rally):
+                    side, sk = a.get('team_side'), a.get('skill_code')
+                    if side != opp_side:
+                        if sk not in ('B',):          # a block touch doesn't end the possession phase
+                            fb_open = False
+                        continue
+                    if sk == 'R' and rcv is None:
+                        rcv, fb_open = a, True
+                        continue
+                    if sk != 'E':
+                        continue
+                    nxt = rally[i + 1] if i + 1 < len(rally) else None
+                    first_ball = fb_open and rcv is not None
+                    fb_open = False
+                    if not nxt or nxt.get('team_side') != opp_side or nxt.get('skill_code') != 'A':
+                        continue
+                    ev = nxt.get('evaluation', '')
+                    if ev not in ('#', '+', '!', '-', '/', '='):
+                        continue
+                    rot = get_opp_rotation(a, opp_side, sl)
+                    combo = nxt.get('combo_code') or ''
+                    cat = 'Dump' if combo in ('PP', 'P2', 'PR') else atk_zone_cat(nxt)
+                    szone = str(a.get('end_zone') or '')
+                    rows.append([fi, rot if rot and 1 <= rot <= 6 else 0, a.get('player_num') or '', nxt.get('player_num') or '',
+                                 (rcv.get('evaluation') or '?') if first_ball else 'T',
+                                 str(rcv.get('end_zone') or '') if first_ball else '',
+                                 (rcv.get('player_num') or '') if first_ball else '',
+                                 szone if szone not in ('0', 'None') else '', combo, cat, ev, won])
+            # Pass & Hit for the opponent's players (same rules as Loyola's card)
+            for sn, pl in compute_pass_hit(session.get('actions', []), opp_side).items():
+                for pn, v in pl.items():
+                    dst = ph.setdefault(str(fi), {}).setdefault(pn, {'ph': {}, 'np': {}, 'pg': {}})
+                    for g in ('ph', 'np'):
+                        for e_, rec in v[g].items():
+                            c = dst[g].setdefault(e_, [0, 0]); c[0] += rec[0]; c[1] += rec[1]
+                    for e_, n_ in v['pg'].items():
+                        dst['pg'][e_] = dst['pg'].get(e_, 0) + n_
+        return {'files': files, 'names': names, 'sets': rows, 'ph': ph}
+
     scout_index    = []
     opponent_stats = defaultdict(lambda: {'files':0,'actions':0,'skills':{}})
     # Group scout sessions by opponent for rotation stats
@@ -1970,12 +2097,18 @@ def main(raw_path, out_path):
             'away_team':    s.get('away_team'),
             'action_count': s.get('action_count', 0),
         })
+        opp_sessions[opp].append(s)
+
+    resolve_opp_sides(opp_sessions)
+    for s in scouts_raw:
+        opp = s.get('opponent') or 'Unknown'
+        side = opp_side_for_session(s)
         os_ = opponent_stats[opp]
         os_['files']   += 1
         os_['actions'] += s.get('action_count', 0)
         for action in s.get('actions', []):
-            add_action(os_['skills'], action)
-        opp_sessions[opp].append(s)
+            if action.get('team_side') == side:          # the scouted team only (not the team they played)
+                add_action(os_['skills'], action)
 
     for os_ in opponent_stats.values():
         derive(os_['skills'])
@@ -1987,6 +2120,7 @@ def main(raw_path, out_path):
         if opp == 'Unknown':
             continue
         opp_rotation_stats[opp] = compute_scout_rotation_stats(sess_list)
+        opp_rotation_stats[opp]['setting'] = compute_scout_setting(sess_list)
 
     # ── Output ────────────────────────────────────────────────────────────────
     total_loyola_actions = sum(v['actions'] for v in season_stats.values())

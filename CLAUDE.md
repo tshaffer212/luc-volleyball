@@ -67,6 +67,14 @@ Competition = practice drill results from `private/competition.csv` (Date, Numbe
 git-ignored) → (W − L) / 2, counted on dates of the sessions in view. Reports card: "Overall team" and
 "By position" views. Same scoring on the coach Player tab and the player portal.
 
+### Scouting (opponent files)
+`resolve_opp_sides()` in aggregate.py decides which side of each scout file is the scouted team: roster
+overlap with that opponent's other files first, then name matching (handles abbreviations like UCSD, NKU,
+LW, MCK, Pepp). `opponent_stats` skills count the scouted team only. `opp_rotation_stats[opp].setting` =
+one row per attacked set `[file_idx, rot, setter, hitter, phase, pass_zone, passer, set_zone, combo, cat,
+eval, won]` (phase = pass grade or 'T'; set_zone = E end zone = where the setter set from) + `ph`
+(Pass & Hit per file). The page (`buildScoutSetting`) slices it by setter / rotation / pass quality.
+
 ### Coach-only virtual players (Jake Read 2.0)
 `VIRTUAL_PLAYERS` in `aggregate.py` adds `7L` = "Jake Read 2.0", a libero-only copy of #7 (Fall 2027 only):
 only R/RM/RQ/D/F/E skills (and R/D/E/X Points Added touches) are copied, he's in the LIBEROS group, and
