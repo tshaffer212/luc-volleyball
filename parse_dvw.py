@@ -550,6 +550,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
     scout_lines      = sections.get('3SCOUT', [])
     current_rally_seq = 0   # increments each time a rally-end marker ('p') is seen
     current_away_zone = None  # tracks LUC rotation for away Volleymetrics matches via az{N} codes
+    # Score BEFORE each rally (home, away), from the point lines '*p08:05' / 'ap08:05' (= score after
+    # that rally, home:away). Reset to 0:0 whenever the set number changes.
+    cur_score, cur_score_set = (0, 0), None
 
     for idx, line in enumerate(scout_lines):
         if not line or line[0] not in ('*', 'a'):
@@ -578,6 +581,13 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         # skill actions, but they mark the boundary between rallies.
         if code_str[1] == 'p' and len(code_str) >= 5 and ':' in code_str[2:6]:
             current_rally_seq += 1
+            try:
+                h_, a_ = code_str[2:].split(':')[:2]
+                cur_score = (int(h_[:2]), int(a_[:2]))
+                if len(fields) > 8 and fields[8].strip().isdigit():
+                    cur_score_set = int(fields[8].strip())
+            except Exception:
+                pass
             continue
 
         parsed = parse_scout_code(code_str)
@@ -639,6 +649,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         if len(fields) > 8:
             try: set_num = int(fields[8].strip())
             except: pass
+        if set_num is not None and set_num != cur_score_set:
+            cur_score, cur_score_set = (0, 0), set_num      # new set starts at 0:0
+        rally_score = cur_score
         if len(fields) > 9:
             try: rot_h = int(fields[9].strip())
             except: pass
@@ -725,6 +738,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
             'end_subzone':   parsed.get('end_subzone'),
             'direction':     parsed.get('direction'),
             'num_blockers':  parsed.get('num_blockers'),
+            # Score before this rally (home, away) - scouting Red zone filter
+            'pts_h':         rally_score[0],
+            'pts_a':         rally_score[1],
             # Exact court spots (scouting player charts only; see _dv_coord)
             'xy_s':          _dv_coord(fields, 4),
             'xy_m':          _dv_coord(fields, 5),

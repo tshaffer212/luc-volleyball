@@ -130,6 +130,14 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   breakdown (`buildScoutSetting(name, true)` returns the pieces), where they passed / set from, pass-to-set
   grids, Pass & Hit. Uses the page's current Season and setting-breakdown filters. As many pages as needed.
 
+- Red zone ("Situation" filter `scout-rz-filter`, `scRZ()`): rallies where, before the rally, the leading
+  team has 20+ points (10+ in set 5) and the teams are within 3. Score comes from the point lines in the file
+  (`pts_h` / `pts_a` = score before the rally, parse_dvw; scout sessions backfilled) via `in_red_zone()` in
+  aggregate.py. Flags: setting.sets r[13], players.atk r[14], players.srv r[9], players.oth r[8]; team strip /
+  rotation numbers from `opp_rotation_stats[opp].rz` (compute_scout_rotation_stats(rz_only=True)); subs use
+  their own score (`scRZsub`). Applies to Team report, Player scouting, Setter locations and all PDFs; set starts
+  and set-to-set changes are set-level, so they are not filtered (noted on the cards).
+
 ### Scouting player tab ("Player scouting" view)
 The scouting detail has a "Team report | Player scouting" switch (`scoutView`, `setScoutView()`). Player
 scouting = a checklist of the opponent's players (`scoutPF.checked`), filters (rotation, set type, first ball /

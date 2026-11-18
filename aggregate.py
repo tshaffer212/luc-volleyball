@@ -1866,7 +1866,17 @@ def main(raw_path, out_path):
         t = (a or {}).get('technique') or ''
         return 'spin' if t == 'Q' else ('float' if t in ('M', 'H') else '')
 
-    def compute_scout_rotation_stats(sessions_for_opp):
+    def in_red_zone(a):
+        """Red zone = the last few points of a set: before this rally the leading team has 20+ points
+        (10+ in set 5) and the teams are within 3 points. Score = pts_h / pts_a from parse_dvw (the point
+        lines in the file). Returns 1 / 0."""
+        h, w = a.get('pts_h'), a.get('pts_a')
+        if not isinstance(h, int) or not isinstance(w, int):
+            return 0
+        thr = 10 if a.get('set_number') == 5 else 20
+        return 1 if max(h, w) >= thr and abs(h - w) <= 3 else 0
+
+    def compute_scout_rotation_stats(sessions_for_opp, rz_only=False):
         """
         Compute per-rotation and team-level stats for a scouted opponent
         across all their scout sessions.
@@ -1907,6 +1917,8 @@ def main(raw_path, out_path):
 
             for rs in sorted(rally_groups):
                 rally = rally_groups[rs]
+                if rz_only and not (rally and in_red_zone(rally[0])):
+                    continue                      # Red zone version: only rallies played in the red zone
                 opp_acts = [a for a in rally if a.get('team_side') == opp_side]
                 if not opp_acts:
                     continue
@@ -2187,7 +2199,8 @@ def main(raw_path, out_path):
           atk: [file_idx, player, rot, combo, eval, pass ('#','+','!','-','/' = grade of their serve-receive
                 pass before this first-ball attack, 'T' = transition), start, mid, end, coded_end, set,
                 passer (first-ball attacks off a set only, else ''), won (1 = his team won the rally),
-                serve group of the pass before a first-ball attack ('spin' / 'float', '' = transition)]
+                serve group of the pass before a first-ball attack ('spin' / 'float', '' = transition),
+                red zone 1/0 (r[14])]   srv rows end with red zone 1/0 (r[9]); oth rows have it at r[8]
                 coords = raw DVW int 'yyxx' (-1 = missing). Passer + won feed Pass & Hit (same rules as the
                 Reports card: his first-ball attack off a set after his own pass vs after someone else's).
           srv: [file_idx, player, rot, serve_type (Q jump spin / M jump float / H float), eval,
@@ -2243,7 +2256,7 @@ def main(raw_path, out_path):
                         fb_open, grade, set_seen = True, (ev or '?'), False
                         rcv_sg = serve_group(a)
                         ve = a.get('vm_end') or ''
-                        rcv_row = [fi, pn, rot, 'R', ev, ve[:1] if ve[:1].isdigit() else '', '', a.get('technique') or '']
+                        rcv_row = [fi, pn, rot, 'R', ev, ve[:1] if ve[:1].isdigit() else '', '', a.get('technique') or '', in_red_zone(a)]
                         oth.append(rcv_row)
                     elif sk == 'A':
                         if fb_open and rcv_row is not None and not rcv_row[6]:
@@ -2252,13 +2265,14 @@ def main(raw_path, out_path):
                                     c_(a.get('xy_s')), c_(a.get('xy_m')), c_(a.get('xy_e')),
                                     a.get('vm_end') or '', a.get('set_number') or 0,
                                     rcv_row[1] if (fb_open and set_seen and rcv_row is not None) else '', won,
-                                    rcv_sg if fb_open else ''])
+                                    rcv_sg if fb_open else '', in_red_zone(a)])
                         fb_open = False
                     elif sk == 'S':
                         srv.append([fi, pn, rot, a.get('technique') or '', ev,
-                                    c_(a.get('xy_s')), c_(a.get('xy_e')), a.get('vm_end') or '', a.get('set_number') or 0])
+                                    c_(a.get('xy_s')), c_(a.get('xy_e')), a.get('vm_end') or '', a.get('set_number') or 0,
+                                    in_red_zone(a)])
                     elif sk in ('D', 'B', 'E'):
-                        oth.append([fi, pn, rot, sk, ev])
+                        oth.append([fi, pn, rot, sk, ev, '', '', '', in_red_zone(a)])
         return {'atk': atk, 'srv': srv, 'oth': oth}
 
     def compute_scout_starts(sessions_for_opp):
@@ -2363,6 +2377,7 @@ def main(raw_path, out_path):
         set rows: [file_idx, rot, setter, hitter, phase, pass_zone, passer, set_zone,
                    combo, cat, attack_eval, opp_won_rally, serve_group]
           serve_group = serve they passed before a first-ball set: 'spin' / 'float' ('' = transition)
+          r[13] = 1 if the rally was in the red zone (in_red_zone)
           phase     = grade of the serve-receive pass for first-ball sets (# + ! - /),
                       'T' = transition (any later possession)
           pass_zone = zone where the serve was passed (reception end zone) — first ball only
@@ -2421,7 +2436,7 @@ def main(raw_path, out_path):
                                  (rcv.get('evaluation') or '?') if first_ball else 'T',
                                  str(rcv.get('end_zone') or '') if first_ball else '',
                                  (rcv.get('player_num') or '') if first_ball else '',
-                                 szone, combo, cat, ev, won, serve_group(rcv) if first_ball else ''])
+                                 szone, combo, cat, ev, won, serve_group(rcv) if first_ball else '', in_red_zone(a)])
             # Pass & Hit for the opponent's players (same rules as Loyola's card)
             for sn, pl in compute_pass_hit(session.get('actions', []), opp_side).items():
                 for pn, v in pl.items():
@@ -2484,6 +2499,8 @@ def main(raw_path, out_path):
         opp_rotation_stats[opp]['starts'] = compute_scout_starts(sess_list)
         opp_rotation_stats[opp]['starts']['pos'] = compute_scout_positions(sess_list)
         opp_rotation_stats[opp]['players'] = compute_scout_players(sess_list)
+        _rz = compute_scout_rotation_stats(sess_list, rz_only=True)       # same numbers, red-zone rallies only
+        opp_rotation_stats[opp]['rz'] = {'team': _rz['team'], 'rotations': _rz['rotations']}
 
     # ── Output ────────────────────────────────────────────────────────────────
     total_loyola_actions = sum(v['actions'] for v in season_stats.values())

@@ -1427,6 +1427,11 @@
       <option value="all">All Seasons</option>
     </select></div>
     <div class="filter-sep"></div>
+    <div><label>Situation</label><br><select id="scout-rz-filter" onchange="renderScout()" title="Red zone = the end of a set: the leading team has 20+ points (10+ in set 5) and the teams are within 3 points">
+      <option value="all">All rallies</option>
+      <option value="rz">Red zone only</option>
+    </select></div>
+    <div class="filter-sep"></div>
     <div><label>Opponent</label><br><select id="scout-opp-filter" onchange="renderScout()">
       <option value="all">All Opponents</option>
     </select></div>
@@ -7045,6 +7050,12 @@ let selectedOpp = null;
 // Data: DATA.opp_rotation_stats[opp].setting = {files, names, sets: rows, ph}
 //   row = [file_idx, rot, setter, hitter, phase, pass_zone, passer, set_zone, combo, cat, attack_eval, opp_won]
 let scoutF = { opp: null, setter: 'all', rot: 'all', pass: 'all' };
+// Scouting "Situation" filter: Red zone = rallies at the end of a set (leader at 20+, 10+ in set 5, within 3).
+// Row flags from aggregate.py in_red_zone(): setting.sets r[13], players.atk r[14], players.srv r[9],
+// players.oth r[8]; team / rotation numbers come from opp_rotation_stats[opp].rz.
+const scRZ = () => document.getElementById('scout-rz-filter')?.value === 'rz';
+const scRZsub = r => { const thr = r[1] === 5 ? 10 : 20; return Math.max(r[4], r[5]) >= thr && Math.abs(r[4] - r[5]) <= 3; };   // subs rows [fi, set, out, in, pf, pa]
+const SC_RZ_NOTE = 'Red zone only: rallies where the leading team had 20+ points (10+ in set 5) and the teams were within 3.';
 const SC_CATS = ['Left', 'Quick', 'Right', 'Dball', 'BIC', 'Dump'];
 const SC_CAT_CLR = { Left: '#9e3b55', Quick: '#c9a227', Right: '#5b8fb9', Dball: '#6d5fa8', BIC: '#5f9e7f', Dump: '#b9b4aa', Other: '#d9d5cc' };
 const SC_CAT_TXT = { Left: '#fff', Quick: '#1c1b19', Right: '#fff', Dball: '#fff', BIC: '#fff', Dump: '#1c1b19', Other: '#1c1b19' };
@@ -7111,7 +7122,7 @@ function buildScoutStarts(name) {
   const POS_WORD = { OH: 'outside', MB: 'middle', OPP: 'opposite', S: 'setter', L: 'libero', DS: 'DS', Serve: 'serving sub' };
   const nmP = n => `${nm(n)}${pos[n] ? ` <span style="font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-left:4px">${POS_TAG[pos[n]] || pos[n]}</span>` : ''}`;
   const sets = st.sets.filter(r => fileOk(r[0]));
-  const subs = (st.subs || []).filter(r => fileOk(r[0]));
+  const subs = (st.subs || []).filter(r => fileOk(r[0]) && (!scRZ() || scRZsub(r)));
   if (!sets.length) return '<div class="empty">No set start data for this season.</div>';
   const H = 'style="font-size:12px;color:var(--text-muted);text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--text);white-space:nowrap"';
   const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
@@ -7128,7 +7139,7 @@ function buildScoutStarts(name) {
       const v = c[k] || 0; const isTop = v && v === top;
       return `<td class="num" style="${isTop ? 'font-weight:700;background:var(--surface2)' : v ? '' : 'color:var(--text-dim)'}">${v ? `${pc(v, n)} <span style="color:var(--text-muted);font-weight:400">(${v})</span>` : '-'}</td>`; }).join('')}</tr>`;
   }).join('');
-  const startCard = card('Starting Rotation', 'Which rotation they start each set in. Most common start is shaded. Serving first / receiving first = who served the first point of the set.',
+  const startCard = card('Starting Rotation', 'Which rotation they start each set in. Most common start is shaded. Serving first / receiving first = who served the first point of the set.' + (scRZ() ? ' (Set starts, so the Red zone filter does not apply here.)' : ''),
     T(`<tr><th ${H}></th><th class="num" ${H}>Sets</th>${[1, 2, 3, 4, 5, 6].map(k => `<th class="num" ${H}>Rotation ${k}</th>`).join('')}</tr>`, startRows));
 
   // 2) Next set after a lost / won set
@@ -7173,7 +7184,7 @@ function buildScoutStarts(name) {
     ['Most often brought in', o => o.ins],
     ['Most often taken out', o => o.outs],
   ].map(([lbl, f]) => `<tr><td style="font-weight:600;white-space:nowrap;vertical-align:top">${lbl}</td>${cell(L, f)}${cell(W, f)}</tr>`).join('');
-  const changeCard = card('Next Set: After Losing vs After Winning a Set', 'Compares each set with the one before it in the same match. Only a true switch counts: serving first in Rotation 1 and then receiving first in Rotation 6 keeps the same first server (they side out into Rotation 1), and starting in the same rotation is not a switch either. Starting six = the six players on court for the first serve (libero not included).',
+  const changeCard = card('Next Set: After Losing vs After Winning a Set', 'Compares each set with the one before it in the same match. Only a true switch counts: serving first in Rotation 1 and then receiving first in Rotation 6 keeps the same first server (they side out into Rotation 1), and starting in the same rotation is not a switch either. Starting six = the six players on court for the first serve (libero not included).' + (scRZ() ? ' (Set to set, so the Red zone filter does not apply here.)' : ''),
     T(`<tr><th ${H}></th><th ${H}>After losing a set</th><th ${H}>After winning a set</th></tr>`, changeRows));
 
   // 3) In-set substitutions
@@ -7258,7 +7269,8 @@ function spBase(name) {
   const season = document.getElementById('scout-season-filter')?.value || 'all';
   const files = setting?.files || [];
   const ok = r => season === 'all' || files[r[0]]?.season === season;
-  return { atk: P.atk.filter(ok), srv: P.srv.filter(ok), oth: P.oth.filter(ok), names: setting?.names || {}, pos: rs?.starts?.pos || {}, files };
+  const rz = scRZ();
+  return { atk: P.atk.filter(r => ok(r) && (!rz || r[14])), srv: P.srv.filter(r => ok(r) && (!rz || r[9])), oth: P.oth.filter(r => ok(r) && (!rz || r[8])), names: setting?.names || {}, pos: rs?.starts?.pos || {}, files };
 }
 
 // Rows for one player with the player-tab filters applied (skip = the filter a table breaks down by)
@@ -7431,7 +7443,7 @@ function spSrvTable(st, small) {
 
 function spFilterLine() {
   const F = scoutPF;
-  return [F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot, F.set === 'all' ? 'all set types' : (F.set === 'Other' ? 'other set codes' : F.set + ' ' + (COMBO_NAMES[F.set] || '')),
+  return [...(scRZ() ? ['RED ZONE ONLY'] : []), F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot, F.set === 'all' ? 'all set types' : (F.set === 'Other' ? 'other set codes' : F.set + ' ' + (COMBO_NAMES[F.set] || '')),
     F.ph === 'all' ? 'all attacks' : F.ph === 'F' ? 'first ball only' : 'transition only', F.st === 'all' ? 'all serves' : (SP_STYPE[F.st] || F.st) + ' serves'].join(', ');
 }
 
@@ -7477,8 +7489,8 @@ function spCard(name, B, pn) {
 function spPlayerList(B) {
   const all = new Set([...B.atk.map(r => r[1]), ...B.srv.map(r => r[1]), ...B.oth.map(r => r[1])]);
   const n = (a, pn) => a.reduce((t, r) => t + (r[1] === pn), 0);
-  const np = pn => B.oth.reduce((t, r) => t + (r[1] === pn && r[3] === 'R'), 0);
-  return [...all].map(pn => ({ pn, name: B.names[pn] || '', pos: B.pos[pn], atk: n(B.atk, pn), srv: n(B.srv, pn), rcv: np(pn) }))
+  const np = (pn, sk) => B.oth.reduce((t, r) => t + (r[1] === pn && r[3] === sk), 0);
+  return [...all].map(pn => ({ pn, name: B.names[pn] || '', pos: B.pos[pn], atk: n(B.atk, pn), srv: n(B.srv, pn), rcv: np(pn, 'R'), dig: np(pn, 'D') }))
     .sort((a, b) => (SP_POS_ORDER.indexOf(a.pos) + 1 || 99) - (SP_POS_ORDER.indexOf(b.pos) + 1 || 99) || (b.atk + b.srv) - (a.atk + a.srv));
 }
 
@@ -7493,7 +7505,7 @@ function buildScoutPlayers(name) {
   const checklist = list.map(p => `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:${F.checked.includes(p.pn) ? 'var(--surface2)' : 'transparent'}">
       <input type="checkbox" ${F.checked.includes(p.pn) ? 'checked' : ''} onchange="spToggle('${p.pn}', this.checked)">
       <span style="font-weight:600">#${p.pn} ${p.name}</span>${p.pos ? `<span style="font-size:10px;font-weight:700;color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:0 4px">${POS_TAG_SC[p.pos] || p.pos}</span>` : ''}
-      <span style="margin-left:auto;font-size:12px;color:var(--text-muted);white-space:nowrap">${[p.atk ? p.atk + ' att' : '', p.srv ? p.srv + ' srv' : '', p.rcv ? p.rcv + ' pass' : ''].filter(Boolean).join(', ') || 'no touches'}</span></label>`).join('');
+      <span style="margin-left:auto;font-size:12px;color:var(--text-muted);white-space:nowrap">${[p.atk ? p.atk + ' att' : '', p.srv ? p.srv + ' srv' : '', p.rcv ? p.rcv + ' pass' : ''].filter(Boolean).join(', ') || (p.dig ? p.dig + ' dig' + (p.dig === 1 ? '' : 's') : 'other touches only')}</span></label>`).join('');
   const checked = F.checked.filter(pn => list.some(p => p.pn === pn));
   return `
     <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:8px">
@@ -7623,7 +7635,7 @@ function smBase(name) {
   const st = DATA.opp_rotation_stats?.[name]?.setting;
   if (!st || !st.sets?.length) return null;
   const season = document.getElementById('scout-season-filter')?.value || 'all';
-  const rows = st.sets.filter(r => season === 'all' || st.files[r[0]]?.season === season);
+  const rows = st.sets.filter(r => (season === 'all' || st.files[r[0]]?.season === season) && (!scRZ() || r[13]));
   const cnt = {}; rows.forEach(r => { if (r[2]) cnt[r[2]] = (cnt[r[2]] || 0) + 1; });
   const setters = Object.entries(cnt).sort((a, b) => b[1] - a[1]);
   return { st, rows, setters, names: st.names || {} };
@@ -7686,7 +7698,7 @@ function smGroups(B) {
 
 function smFilterLine() {
   const F = scoutMap;
-  return `${F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot}, ${(SC_PASS.find(([v]) => v === F.pass) || [, 'All sets'])[1]}`;
+  return `${scRZ() ? 'RED ZONE ONLY, ' : ''}${F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot}, ${(SC_PASS.find(([v]) => v === F.pass) || [, 'All sets'])[1]}`;
 }
 
 function buildScoutSetterMap(name) {
@@ -7699,7 +7711,7 @@ function buildScoutSetterMap(name) {
   const F = scoutMap;
   const lab = t => `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${t}</div>`;
   const setterBoxes = B.setters.map(([p, c]) => `<label style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:${F.setters.includes(p) ? 'var(--surface2)' : 'transparent'}">
-      <input type="checkbox" ${F.setters.includes(p) ? 'checked' : ''} onchange="smToggle('${p}', this.checked)"><b>#${p} ${B.names[p] || ''}</b><span style="color:var(--text-muted);font-size:12px">${c} sets</span></label>`).join('');
+      <input type="checkbox" ${F.setters.includes(p) ? 'checked' : ''} onchange="smToggle('${p}', this.checked)"><b>#${p} ${B.names[p] || ''}</b><span style="color:var(--text-muted);font-size:12px">${c} set${c === 1 ? '' : 's'}</span></label>`).join('');
   const chip = (k, v, l) => `<button onclick="setSM('${k}','${v}')" style="padding:6px 12px;border-radius:5px;border:1px solid var(--border);cursor:pointer;font-size:13px;background:${String(F[k]) === String(v) ? 'var(--maroon)' : 'var(--surface2)'};color:${String(F[k]) === String(v) ? '#fff' : 'var(--text)'}">${l}</button>`;
   const groups = smGroups(B);
   const maps = groups.map(g => `<div class="card-sm" style="padding:18px 20px;margin-bottom:22px;border-top:3px solid var(--maroon)">
@@ -7740,7 +7752,7 @@ function setSM(k, v) { scoutMap[k] = v; smRefresh(); }
 //   vs float / total)
 // It prints what the Team report shows, with its current filters (Season, setting breakdown filters).
 function _stRotTables(name) {
-  const rots = DATA.opp_rotation_stats?.[name]?.rotations || {};
+  const rots = (scRZ() ? DATA.opp_rotation_stats?.[name]?.rz?.rotations : DATA.opp_rotation_stats?.[name]?.rotations) || {};
   const cats = ['Left', 'Quick', 'Right', 'Dball', 'BIC'];
   const sw = c => `<span style="display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:3px;background:${SC_CAT_CLR[c]}"></span>`;
   const pct = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
@@ -7770,7 +7782,7 @@ function exportScoutTeamPDF() {
   const name = selectedOpp; if (!name) return;
   const os = DATA.opponent_stats?.[name], rs = DATA.opp_rotation_stats?.[name];
   if (!os || !rs) return;
-  const team = rs.team || {};
+  const team = (scRZ() ? rs.rz?.team : rs.team) || {};
   const season = document.getElementById('scout-season-filter')?.value || 'all';
   const by = team.by || {};
   const sv = (k) => `vs Spin ${by.spin?.[k] ?? '-'}%, vs Float ${by.float?.[k] ?? '-'}%`;
@@ -7801,7 +7813,7 @@ function exportScoutTeamPDF() {
   sections.docTitle = `${name} - Team scouting report`;
   const passLbl = (SC_PASS.find(p => p[0] === scoutF.pass) || [])[1] || 'All sets';
   const setterLbl = scoutF.setter === 'all' ? 'All setters' : `#${scoutF.setter} ${rs.setting?.names?.[scoutF.setter] || ''}`;
-  const filters = `<span><b>Opponent:</b> ${name}</span><span><b>Season:</b> ${season === 'all' ? 'All seasons' : season}</span><span><b>Files:</b> ${os.files}</span>`
+  const filters = `<span><b>Opponent:</b> ${name}</span><span><b>Season:</b> ${season === 'all' ? 'All seasons' : season}</span>${scRZ() ? '<span><b>Situation:</b> RED ZONE ONLY (leader at 20+, 10+ in set 5, within 3)</span>' : ''}<span><b>Files:</b> ${os.files}</span>`
     + `<span><b>Setting breakdown:</b> ${setterLbl}, ${scoutF.rot === 'all' ? 'all rotations' : 'Rotation ' + scoutF.rot}, ${passLbl}</span>`;
   const win = window.open('', '_blank', 'width=1200,height=900');
   if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
@@ -7856,7 +7868,7 @@ function buildScoutSetting(name, asParts) {   // asParts = return the pieces (te
   const season = document.getElementById('scout-season-filter')?.value || 'all';
   const fileOk = fi => season === 'all' || st.files[fi]?.season === season;
   const nm = n => st.names[n] ? `#${n} ${st.names[n]}` : `#${n}`;
-  const base = st.sets.filter(r => fileOk(r[0]));
+  const base = st.sets.filter(r => fileOk(r[0]) && (!scRZ() || r[13]));
 
   // Setter list (by volume) for the dropdown
   const setCnt = {}; base.forEach(r => { setCnt[r[2]] = (setCnt[r[2]] || 0) + 1; });
@@ -7983,7 +7995,7 @@ function buildScoutPassHit(st, fileOk, nm, name) {
   const z = () => ({ n: 0, k: 0, e: 0, b: 0, w: 0, pg: {} });
   const pl = {};
   P.atk.forEach(r => {
-    if (!fileOk(r[0]) || !r[11]) return;
+    if (!fileOk(r[0]) || !r[11] || (scRZ() && !r[14])) return;
     const pn = r[1], g = r[11] === pn ? 'ph' : 'np', sg = r[13] || '';
     const o = pl[pn] || (pl[pn] = { ph: { all: z(), spin: z(), float: z() }, np: { all: z(), spin: z(), float: z() } });
     [o[g].all, sg && o[g][sg]].filter(Boolean).forEach(t => {
@@ -8087,8 +8099,10 @@ function renderScoutDetail(name) {
   if (!os) { container.innerHTML = '<div class="empty">No data</div>'; return; }
 
   const A = os.skills?.A, S = os.skills?.S, R = os.skills?.R;
-  const team = rotData?.team;
-  const rots = rotData?.rotations || {};
+  // Attack Combinations chart: red zone = rebuilt from the red-zone attack rows
+  const combosSrc = scRZ() ? (() => { const c = {}, sf = document.getElementById('scout-season-filter')?.value || 'all', fl = rotData?.setting?.files || []; (rotData?.players?.atk || []).forEach(r => { if (!r[14] || (sf !== 'all' && fl[r[0]]?.season !== sf)) return; const k = r[3] || '(none)'; const o = c[k] || (c[k] = { attempts: 0, evals: {} }); o.attempts++; o.evals[r[4]] = (o.evals[r[4]] || 0) + 1; }); return c; })() : A?.combos;
+  const team = scRZ() ? rotData?.rz?.team : rotData?.team;
+  const rots = (scRZ() ? rotData?.rz?.rotations : rotData?.rotations) || {};
   const setters = rotData?.setters || {};
 
   // -- helper: bar chart for set distribution -------------------------------
@@ -8200,6 +8214,7 @@ function renderScoutDetail(name) {
       </div>
       ${scoutView === 'team' ? `<button class="scout-back" onclick="exportScoutTeamPDF()" title="Team report as a PDF, with the filters shown on the page">Export team report to PDF</button>` : ''}
       </div>
+      ${scRZ() ? `<div style="margin:-6px 0 16px;padding:10px 14px;border-left:4px solid var(--maroon);background:var(--surface2);font-size:14px"><b style="color:var(--maroon);letter-spacing:.5px">RED ZONE ONLY</b> - ${SC_RZ_NOTE.replace('Red zone only: ', '')} Every table, chart and PDF below uses only those rallies (set starts excepted).</div>` : ''}
       <div id="scout-view-players" style="display:${scoutView === 'players' ? '' : 'none'}">${scoutView === 'players' ? buildScoutPlayers(name) : ''}</div>
       <div id="scout-view-setmap" style="display:${scoutView === 'setmap' ? '' : 'none'}">${scoutView === 'setmap' ? buildScoutSetterMap(name) : ''}</div>
       <div id="scout-view-team" style="display:${scoutView === 'team' ? '' : 'none'}">
@@ -8236,7 +8251,7 @@ function renderScoutDetail(name) {
       <div id="scout-setting">${buildScoutSetting(name)}</div>
 
       <!-- Attack Combinations -->
-      ${A?.combos && Object.keys(A.combos).length > 0 ? `
+      ${combosSrc && Object.keys(combosSrc).length > 0 ? `
       <div class="section-title">Attack Combinations</div>
       <div class="chart-wrap" style="margin-top:8px;margin-bottom:20px"><canvas id="chart-scout-combos"></canvas></div>` : ''}
 
@@ -8255,9 +8270,9 @@ function renderScoutDetail(name) {
     </div>
   `;
 
-  if (scoutView === 'team' && A?.combos && Object.keys(A.combos).length > 0) {
+  if (scoutView === 'team' && combosSrc && Object.keys(combosSrc).length > 0) {
     const cm = {};
-    Object.entries(A.combos).forEach(([k, v]) => { const c = scCombo(k); const o = cm[c] || (cm[c] = { attempts: 0, evals: {} });
+    Object.entries(combosSrc).forEach(([k, v]) => { const c = scCombo(k); const o = cm[c] || (cm[c] = { attempts: 0, evals: {} });
       o.attempts += v.attempts || 0; Object.entries(v.evals || {}).forEach(([e, n]) => { o.evals[e] = (o.evals[e] || 0) + n; }); });
     const comboEntries = Object.entries(cm).filter(([, v]) => v.attempts).sort((a, b) => (a[0] === 'Other') - (b[0] === 'Other') || b[1].attempts - a[1].attempts);
     makeChart('chart-scout-combos', 'bar', {
