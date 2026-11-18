@@ -722,7 +722,6 @@
   <button class="tab-btn" onclick="showTab('attack')">Attack</button>
   <button class="tab-btn" onclick="showTab('servrcv')">Serve &amp; Receive</button>
   <button class="tab-btn" onclick="showTab('setter')">Setter</button>
-  <button class="tab-btn" onclick="showTab('fbso')">FBSO</button>
   <button class="tab-btn" onclick="showTab('player')">Player</button>
   <button class="tab-btn" onclick="showTab('scout')">Scouting</button>
 </nav>
@@ -1367,39 +1366,6 @@
 
   <!-- Per-K-call attack breakdown tables -->
   <div id="set-call-attack-tables"></div>
-</div>
-
-<!-- =========================== FBSO TAB =========================== -->
-<div id="tab-fbso" class="tab-panel">
-  <div class="filter-bar">
-    <div><label>Season</label><br><select id="fbso-season" onchange="syncSeason(this.value)">
-      <option value="all">All Seasons</option>
-    </select></div>
-  </div>
-
-  <div class="grid-4" id="fbso-kpi-row"></div>
-
-  <div class="grid-2 mt-16">
-    <div class="card">
-      <h3>FBSO % by Match</h3>
-      <div class="chart-wrap"><canvas id="chart-fbso-match"></canvas></div>
-    </div>
-    <div class="card">
-      <h3>FBSO % Trend</h3>
-      <div class="chart-wrap"><canvas id="chart-fbso-trend"></canvas></div>
-    </div>
-  </div>
-
-  <div class="section-title mt-20">Match Log</div>
-  <div class="table-scroll">
-    <table class="data-table">
-      <thead><tr>
-        <th>Date</th><th>Opponent</th><th>Season</th>
-        <th class="num">Rcv Rallies</th><th class="num">FBSO Kills</th><th class="num">FBSO %</th>
-      </tr></thead>
-      <tbody id="fbso-match-log"></tbody>
-    </table>
-  </div>
 </div>
 
 <!-- =========================== PLAYER TAB =========================== -->
@@ -9176,6 +9142,7 @@ function renderSetter() {
 
 // =========================== FBSO TAB ========================================
 function renderFbso() {
+  if (!document.getElementById('tab-fbso')) return;   // FBSO tab removed (Nov 2026); FBSO lives in Reports / Player tab
   const seasonVal = document.getElementById('fbso-season')?.value || 'all';
   const seasons   = resolveSeasons(seasonVal);
 
