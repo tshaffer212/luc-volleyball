@@ -7107,12 +7107,18 @@ function buildScoutStarts(name) {
     list.sort((a, b) => a[1] - b[1]);
     for (let i = 1; i < list.length; i++) if (list[i][1] === list[i - 1][1] + 1 && list[i - 1][4] !== null) pairs.push([list[i - 1], list[i]]);
   });
+  const srvRot = r => !r[3] || !r[2] ? 0 : r[2] === 'S' ? r[3] : (r[3] % 6) + 1;   // rotation of their first serve
   const after = won => {
     const P = pairs.filter(([a]) => a[4] === won); const n = P.length;
     if (!n) return null;
-    const known = P.filter(([a, b]) => a[3] && b[3]);
-    const same = known.filter(([a, b]) => a[3] === b[3]).length;
-    const moves = {}; known.filter(([a, b]) => a[3] !== b[3]).forEach(([a, b]) => { const k = `Rotation ${a[3]} to Rotation ${b[3]}`; moves[k] = (moves[k] || 0) + 1; });
+    // A true switch = the first server changed AND it isn't the same starting rotation.
+    // Receiving first in Rotation k = serving first in Rotation k+1 (6 wraps to 1) after the side out,
+    // so serving in R1 then receiving in R6 keeps the same first server: not a switch.
+    const known = P.filter(([a, b]) => srvRot(a) && srvRot(b));
+    const keep = ([a, b]) => srvRot(a) === srvRot(b) || a[3] === b[3];
+    const same = known.filter(keep).length;
+    const SR = r => r[2] === 'S' ? 'serving' : 'receiving';
+    const moves = {}; known.filter(x => !keep(x)).forEach(([a, b]) => { const k = `Rotation ${a[3]} ${SR(a)} to Rotation ${b[3]} ${SR(b)}`; moves[k] = (moves[k] || 0) + 1; });
     const topMove = Object.entries(moves).sort((x, y) => y[1] - x[1]).slice(0, 3);
     const ins = {}, outs = {}; let lineupChanged = 0;
     P.forEach(([a, b]) => {
@@ -7128,14 +7134,14 @@ function buildScoutStarts(name) {
   const cell = (o, f) => `<td style="vertical-align:top">${o ? f(o) : '<span style="color:var(--text-dim)">No sets</span>'}</td>`;
   const changeRows = [
     ['Next sets', o => `${o.n}`],
-    ['Kept the same starting rotation', o => `<b>${pc(o.same, o.knownN)}</b> <span style="color:var(--text-muted)">(${o.same} of ${o.knownN})</span>`],
-    ['Changed starting rotation', o => `<b>${pc(o.knownN - o.same, o.knownN)}</b> <span style="color:var(--text-muted)">(${o.knownN - o.same} of ${o.knownN})</span>`],
-    ['Most common changes', o => o.topMove.length ? o.topMove.map(([m, c]) => `${m} <span style="color:var(--text-muted)">(${c}x)</span>`).join('<br>') : '-'],
+    ['Kept the same rotation', o => `<b>${pc(o.same, o.knownN)}</b> <span style="color:var(--text-muted)">(${o.same} of ${o.knownN})</span>`],
+    ['True rotation switch', o => `<b>${pc(o.knownN - o.same, o.knownN)}</b> <span style="color:var(--text-muted)">(${o.knownN - o.same} of ${o.knownN})</span>`],
+    ['Switches made', o => o.topMove.length ? o.topMove.map(([m, c]) => `${m} <span style="color:var(--text-muted)">(${c}x)</span>`).join('<br>') : 'None'],
     ['Changed the starting six', o => `<b>${pc(o.lineupChanged, o.n)}</b> <span style="color:var(--text-muted)">(${o.lineupChanged} of ${o.n})</span>`],
     ['Most often brought in', o => o.ins],
     ['Most often taken out', o => o.outs],
   ].map(([lbl, f]) => `<tr><td style="font-weight:600;white-space:nowrap;vertical-align:top">${lbl}</td>${cell(L, f)}${cell(W, f)}</tr>`).join('');
-  const changeCard = card('Next Set: After Losing vs After Winning a Set', 'Compares each set with the one before it in the same match. Starting six = the six players on court for the first serve (libero not included).',
+  const changeCard = card('Next Set: After Losing vs After Winning a Set', 'Compares each set with the one before it in the same match. Only a true switch counts: serving first in Rotation 1 and then receiving first in Rotation 6 keeps the same first server (they side out into Rotation 1), and starting in the same rotation is not a switch either. Starting six = the six players on court for the first serve (libero not included).',
     T(`<tr><th ${H}></th><th ${H}>After losing a set</th><th ${H}>After winning a set</th></tr>`, changeRows));
 
   // 3) In-set substitutions
