@@ -4006,11 +4006,11 @@ function exportRptPDF(which) {
 function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const docTitle = sections.length === 1 ? sections[0]?.title : (sections.docTitle || 'All Reports');
-  // One landscape page per report: a compact header (report + filters) on every
+  // One portrait page per report: a compact header (report + filters) on every
   // page, sessions + KPI tiles on the first page, then the report itself scaled
-  // down (width AND height) so it always fits on that single page.
+  // up or down (best of 1–3 columns) so it fills that single page.
   const pages = sections.map((sec, i) => `
-<div class="page">
+<div class="sheet"><div class="page">
   <div class="pdf-hdr">
     <div><div class="pdf-hdr-title">LUC VOLLEYBALL</div><div class="pdf-hdr-sub">${esc(sec.title)}</div></div>
     <div class="pdf-date">Generated ${dateStr}${sections.length > 1 ? ` · Page ${i+1} of ${sections.length}` : ''}</div>
@@ -4019,7 +4019,7 @@ function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
   ${i === 0 && sessionLine ? `<div class="pdf-sessions"><b>Sessions:</b> ${esc(sessionLine)}</div>` : ''}
   ${i === 0 && kpiHTML ? `<div class="pdf-kpis">${kpiHTML}</div>` : ''}
   <div class="page-body"><div class="fit-src">${sec.html}</div></div>
-</div>`).join('');
+</div></div>`).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>LUC Volleyball — ${esc(docTitle)}</title>
@@ -4030,15 +4030,16 @@ function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{background:#fff}
   body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a}
-  /* Letter paper. Pages are sized a little under the printable area so they fit
-     even with Safari's own margins + header/footer. Safari ignores @page size,
-     so a separate fit is computed for landscape AND portrait and the print
-     orientation picked in the dialog chooses which one applies. */
-  @page{size:letter landscape;margin:.3in}
-  .page{width:960px;height:720px;overflow:hidden;display:flex;flex-direction:column;
-        page-break-after:always;break-after:page;margin:0 auto}
-  @media print and (orientation: portrait){ .page{width:720px;height:960px} }
-  .page:last-child{page-break-after:auto;break-after:auto}
+  /* Letter portrait. Pages are sized a little under the printable area so they fit
+     even with Safari's own margins + header/footer. (Portrait only: Safari judges
+     print "orientation" by the window shape, which picked the wrong layout.) */
+  @page{size:letter portrait;margin:.3in}
+  .sheet{width:720px;height:960px;overflow:hidden;position:relative;page-break-after:always;break-after:page;margin:0 auto;background:#fff}
+  .sheet:last-child{page-break-after:auto;break-after:auto}
+  .page{width:720px;height:960px;overflow:hidden;display:flex;flex-direction:column}
+  /* Very wide reports (e.g. Attack by Set Type) are laid out landscape and turned
+     sideways on the portrait sheet, so they can be printed much larger. */
+  .sheet.rot .page{width:960px;height:720px;transform:translateY(960px) rotate(-90deg);transform-origin:top left}
   .pdf-hdr{background:#6b0020;color:#fff;padding:7px 12px;display:flex;justify-content:space-between;align-items:center;flex:none}
   .pdf-hdr-title{font-size:14px;font-weight:700;letter-spacing:.5px}
   .pdf-hdr-sub{font-size:11px;color:#FEBC18;font-weight:700;margin-top:2px}
@@ -4056,8 +4057,6 @@ function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
   .fit-src{width:max-content}
   .fit{display:flex;align-items:flex-start;gap:14px;width:max-content;transform-origin:top left}
   .fit-col{display:flex;flex-direction:column;width:max-content}
-  .fit-P{display:none}
-  @media print and (orientation: portrait){ .fit-L{display:none} .fit-P{display:flex} }
   /* Maroon total / header rows: force white text (gold/green/red vanish on maroon) */
   tr[style*="maroon"] td, tr[style*="maroon"] th,
   tr[style*="#6b0020"] td, tr[style*="#8D0034"] td { background:#6b0020!important; color:#fff!important; }
@@ -4070,11 +4069,14 @@ function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
   .xlsx-tbl th,.xlsx-tbl td,.data-table th,.data-table td{padding:3px 7px;border:1px solid #ddd;position:static!important}
   .xlsx-tbl th,.data-table th{text-align:left;font-weight:600;background:#f0f0f0!important;color:#333!important}
   .xlsx-tbl tbody tr:nth-child(even) td{background:#fafafa}
+  .fit.stretch .fit-col{flex:1 1 auto;min-width:0}
+  .fit.stretch table{width:100%}
+  .fit .xlsx-tbl th,.fit .xlsx-tbl td,.fit .data-table th,.fit .data-table td{padding-top:var(--py,3px)!important;padding-bottom:var(--py,3px)!important}
   .xlsx-dim{color:#bbb} .num{text-align:right} .gold{color:#8a6500} .green{color:#1a6e1a} .red{color:#b50000}
   .table-scroll{max-height:none!important;overflow:visible!important;box-shadow:none!important;border:none!important}
   .card{border:none!important;box-shadow:none!important;padding:0!important;background:none!important}
   @media print{ body{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
-  @media screen{ body{background:#888} .page{background:#fff;margin:12px auto;box-shadow:0 2px 10px rgba(0,0,0,.4)} }
+  @media screen{ body{background:#888} .sheet{margin:12px auto;box-shadow:0 2px 10px rgba(0,0,0,.4)} }
 </style></head><body>
 ${pages}
 <script>
@@ -4083,7 +4085,7 @@ ${pages}
     // into whole blocks (each table / chart / heading stays intact) that are
     // measured ONCE; the best column count (1–3) and scale are then worked out
     // from those sizes, and the final layout is built just once per orientation.
-    var GAP = 14, SIZES = { L: [960, 720], P: [720, 960] };
+    var GAP = 14, SIZES = { P: [720, 960] };
     function blocksOf(root) {
       var out = [];
       (function walk(el) {
@@ -4122,25 +4124,44 @@ ${pages}
       });
       document.body.removeChild(meas);
       src.style.display = 'none';
-      ['L', 'P'].forEach(function(o) {
-        page.style.width = SIZES[o][0] + 'px'; page.style.height = SIZES[o][1] + 'px';
+      function fitFor(W, H) {
+        page.style.width = W + 'px'; page.style.height = H + 'px';
         var availW = body.clientWidth - 30, availH = body.clientHeight - 14, best = null;   // small safety margin
         for (var n = 1; n <= Math.min(3, blocks.length); n++) {
           var pl = plan(sizes, n);
-          var s = Math.min(1, availW / pl.W, availH / pl.H) * 0.98;
-          if (!best || s > best.s + 0.02) best = { s: s, pl: pl };
+          var s = Math.min(2.2, availW / pl.W, availH / pl.H) * 0.98;   // scale UP too, so the report fills the page
+          if (!best || s > best.s + 0.02) best = { s: s, pl: pl, fill: pl.H * s / availH };
         }
-        var box = document.createElement('div'); box.className = 'fit fit-' + o;
-        best.pl.cols.forEach(function(c) {
-          var col = document.createElement('div'); col.className = 'fit-col';
-          c.forEach(function(i){ col.appendChild(blocks[i].cloneNode(true)); });
-          box.appendChild(col);
-        });
-        if (best.s < 1) box.style.transform = 'scale(' + best.s.toFixed(4) + ')';
-        body.appendChild(box);
+        return best;
+      }
+      var bL = fitFor(960, 720), bP = fitFor(720, 960);
+      // Turn the page sideways only for very wide reports: upright it would leave most of the
+      // page empty (width-limited), and sideways it prints clearly bigger.
+      var useL = bP.fill < 0.75 && bL.s > bP.s * 1.15;
+      var best = useL ? bL : bP;
+      if (useL) { page.parentNode.classList.add('rot'); page.style.width = '960px'; page.style.height = '720px'; }
+      else { page.style.width = '720px'; page.style.height = '960px'; }
+      var box = document.createElement('div'); box.className = 'fit';
+      best.pl.cols.forEach(function(c) {
+        var col = document.createElement('div'); col.className = 'fit-col';
+        c.forEach(function(i){ col.appendChild(blocks[i].cloneNode(true)); });
+        box.appendChild(col);
       });
+      box.style.transform = 'scale(' + best.s.toFixed(4) + ')';
+      body.appendChild(box);
+      // Tall reports stop growing at the bottom of the page — stretch the tables across the
+      // spare width instead, so there's no empty strip down the side.
+      var availW2 = body.clientWidth - 30;
+      if (box.offsetWidth * best.s < availW2 - 12) { box.classList.add('stretch'); box.style.width = (availW2 / best.s) + 'px'; }
+      // Wide tables can't grow any bigger without running off the side, so use the
+      // leftover height for roomier rows (easier to read, no half-empty page).
+      var availH2 = body.clientHeight - 14, lo = 3, hi = 18;
+      for (var it = 0; it < 10; it++) {
+        var mid = (lo + hi) / 2; box.style.setProperty('--py', mid + 'px');
+        if (box.offsetHeight * best.s <= availH2) lo = mid; else hi = mid;
+      }
+      box.style.setProperty('--py', lo + 'px');
       src.remove();
-      page.style.width = ''; page.style.height = '';
     });
     setTimeout(function(){ window.print(); }, 150);
     window.onafterprint = function(){ window.close(); };
