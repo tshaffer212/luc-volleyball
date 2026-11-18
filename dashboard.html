@@ -6417,7 +6417,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
 
   const overview = `<div class="card pl-card" id="pl-sec-overview"><h3 class="pl-h">At a glance <span class="pl-muted">vs ${avgLbl} average</span></h3>
     <div class="pl-kpis">${tiles}</div>
-    <div class="pl-g2" style="margin-top:14px"><div><h3 class="pl-h">Where his points come from <span class="pl-muted">weighted for ${(PL_POSS[group] || 'his position').toLowerCase()}</span></h3>${paBars}</div>
+    <div class="pl-g2" style="margin-top:14px"><div><h3 class="pl-h">Where his points come from <span class="pl-muted">weighted for ${PL_GROUP_PLURAL[group] || 'his position'}</span></h3>${paBars}</div>
     <div><h3 class="pl-h">Insights</h3>${insights}</div></div></div>`;
 
   // ── Attacking ──
@@ -6521,25 +6521,196 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
     (serving || defense ? `<div class="pl-g2">${serving}${defense}</div>` : '') + trends;
 }
 
-// One-click PDF of the current player profile (one page per section)
+// One-page, print-friendly player report (white background, no dark boxes).
+// The live Player tab HTML is copied into the print window, split into whole blocks
+// (a table / chart / list never breaks), laid out in 2 columns (portrait) or
+// 3 columns (landscape) and scaled to fit exactly one Letter page.
+function _playerPdfHtml({ detailHTML, filters, title, dateStr }) {
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
+<style>
+  :root { --maroon:#6b0020; --gold:#8a6500; --green:#1a7a2e; --red:#b3261e; --blue:#1f5fa8;
+          --surface:#fff; --surface2:#f4f4f4; --surface3:#e9e9e9; --border:#d6d6d6; --bg:#fff;
+          --text:#1a1a1a; --text-muted:#666; --text-dim:#9a9a9a; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:#fff}
+  body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:10px;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:letter portrait;margin:.3in}
+  .pg{width:720px;height:960px;overflow:hidden;display:flex;flex-direction:column;margin:0 auto;background:#fff}
+  .pg-L{width:960px;height:720px;display:none}
+  @media print and (orientation: landscape){ .pg-P{display:none!important} .pg-L{display:flex!important} }
+  @media screen{ body{background:#7a7a7a;padding:14px 0} .pg{box-shadow:0 2px 12px rgba(0,0,0,.45);margin:0 auto 14px} .pg-L{display:flex} }
+
+  /* Header band */
+  .band{flex:none;border-bottom:2px solid #6b0020}
+  .bar{background:#6b0020;color:#fff;display:flex;justify-content:space-between;align-items:center;padding:6px 12px}
+  .bar b{font-size:12px;letter-spacing:.6px} .bar span{font-size:9px;opacity:.85}
+  .who{display:flex;align-items:center;gap:14px;padding:8px 12px 4px}
+  .who .detail-num{font-size:34px;font-weight:900;color:#6b0020;line-height:1}
+  .who h2{font-size:18px;font-weight:800;color:#1a1a1a}
+  .who p{font-size:10px;color:#555;margin-top:2px}
+  .who .pa{margin-left:auto;text-align:right}
+  .who .pa > div:nth-child(2){font-size:20px!important}
+  .filters{display:flex;flex-wrap:wrap;gap:2px 12px;padding:3px 12px 6px;font-size:8.5px;color:#444}
+  .libero-badge{display:inline-block;background:#6b0020;color:#fff;font-size:8px;padding:1px 5px;border-radius:3px;font-weight:700;text-transform:uppercase;margin-left:4px;vertical-align:middle}
+  .band .pl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:6px;padding:0 12px 8px}
+  .band .pl-kpi{background:#f5f5f5;border:1px solid #e2e2e2;border-radius:6px;padding:5px 7px}
+  .band .pl-kpi-l{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#666}
+  .band .pl-kpi-v{font-size:15px;font-weight:800;margin-top:1px}
+  .band .pl-kpi-c{font-size:7.5px;color:#666;margin-top:1px}
+
+  /* Columns */
+  .cols-area{flex:1;min-height:0;overflow:hidden;padding:8px 12px 0}
+  .cols{display:flex;align-items:flex-start;gap:14px;transform-origin:top left}
+  .col{display:flex;flex-direction:column;gap:8px}
+  .blk{width:340px;break-inside:avoid}
+  .sec{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:#6b0020;border-bottom:1.5px solid #6b0020;padding-bottom:2px;margin-bottom:5px}
+  .sec .pl-muted{font-weight:400;letter-spacing:0;text-transform:none;color:#777;font-size:8.5px}
+  .cont{font-size:8px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px}
+  .foot{flex:none;font-size:7.5px;color:#999;text-align:right;padding:3px 12px 4px}
+
+  /* Player-tab pieces, light theme */
+  .pl-h{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;color:#6b0020;margin:7px 0 3px;font-weight:700}
+  .blk > .pl-h:first-child, .blk > div > .pl-h:first-child{margin-top:0}
+  .pl-muted{color:#777;font-weight:400;text-transform:none;letter-spacing:0}
+  .pl-tbl{width:100%;border-collapse:collapse;font-size:9px}
+  .pl-tbl th{font-size:7.5px;text-transform:uppercase;color:#666;text-align:left;padding:2px 4px;border-bottom:1px solid #bbb;font-weight:700;background:#f3f3f3}
+  .pl-tbl td{padding:2px 4px;border-bottom:1px solid #e6e6e6}
+  .pl-tbl th.num,.pl-tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .pl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr))!important;gap:5px}
+  .pl-kpi{background:#f5f5f5;border:1px solid #e2e2e2;border-radius:5px;padding:4px 6px;min-width:0}
+  .pl-kpi-l{font-size:7px;text-transform:uppercase;letter-spacing:.4px;color:#666}
+  .pl-kpi-v{font-size:13px;font-weight:800}
+  .pl-kpi-c{font-size:7px;color:#666}
+  .pl-g2,.pl-g3{display:block}
+  .pl-pa-row{display:grid;grid-template-columns:118px 1fr 40px;gap:6px;align-items:center;margin:3px 0;font-size:9px}
+  .pl-pa-track{position:relative;height:9px;background:#ececec;border-radius:2px}
+  .pl-pa-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#999}
+  .pl-ins{border-left:3px solid #b08a00;padding:3px 7px;background:#fdf6e3;border-radius:3px;margin:4px 0;font-size:9px;line-height:1.35}
+  .pl-ins.bad{border-color:#b3261e;background:#fdecea} .pl-ins.good{border-color:#1a7a2e;background:#e9f5ec}
+  .pl-rots{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+  .pl-rot{background:#f5f5f5;border:1px solid #e2e2e2;border-radius:5px;padding:4px;text-align:center}
+  .pl-rot div:nth-child(2){font-size:13px!important}
+  .pl-bar{display:flex;height:9px;border-radius:2px;overflow:hidden;background:#ececec}
+  .pl-court{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:4px}
+  .pl-zone{background:#f5f5f5;border:1px solid #e2e2e2;border-radius:4px;padding:4px;text-align:center;min-height:30px;font-size:9px}
+  svg{max-width:100%}
+  b,strong{font-weight:700}
+</style></head><body>
+<div id="src" style="display:none">${detailHTML}</div>
+<script>
+(function () {
+  var src = document.getElementById('src');
+  src.querySelectorAll('.pl-nav, .pl-filters, button, select, input, .rpt-export-btn').forEach(function (e) { e.remove(); });
+  // Header band pieces
+  var head = src.querySelector('.detail-header');
+  var paBox = head ? head.querySelector('div[style*="margin-left:auto"]') : null;
+  var overview = src.querySelector('#pl-sec-overview');
+  var kpis = overview ? overview.querySelector(':scope > .pl-kpis') : null;
+
+  // Blocks: every section split at its grid columns; a section's title goes on its first block
+  var blocks = [];
+  src.querySelectorAll('[id^="pl-sec-"]').forEach(function (sec) {
+    var h = sec.querySelector(':scope > h3.pl-h');
+    var title = h ? h.innerHTML : '';
+    var parts = [], loose = [];
+    Array.prototype.forEach.call(sec.children, function (ch) {
+      if (ch === h || ch === kpis) return;
+      if (ch.classList.contains('pl-g2') || ch.classList.contains('pl-g3')) {
+        if (loose.length) { parts.push(loose); loose = []; }
+        Array.prototype.forEach.call(ch.children, function (c) { parts.push([c]); });
+      } else loose.push(ch);
+    });
+    if (loose.length) parts.push(loose);
+    var isOverview = sec.id === 'pl-sec-overview';
+    parts.forEach(function (els, i) {
+      var b = document.createElement('div'); b.className = 'blk';
+      if (isOverview) { var h0 = els[0].querySelector(':scope > h3.pl-h'); if (h0) h0.className = 'sec'; }
+      if (!isOverview) b.innerHTML = i === 0 ? '<div class="sec">' + title + '</div>' : '<div class="cont">' + (h ? h.childNodes[0].textContent.trim() : '') + ' (cont.)</div>';
+      b.dataset.cont = (!isOverview && i > 0) ? '1' : '';
+      els.forEach(function (e) { b.appendChild(e.cloneNode(true)); });
+      if (b.textContent.trim()) blocks.push(b);
+    });
+  });
+
+  // Measure each block once at the column width
+  var meas = document.createElement('div');
+  meas.style.cssText = 'position:absolute;left:-99999px;top:0';
+  document.body.appendChild(meas);
+  var sizes = blocks.map(function (b) { meas.appendChild(b); var h = b.offsetHeight + 8; meas.removeChild(b); return h; });
+  document.body.removeChild(meas);
+
+  function plan(n) {                       // order-preserving column fill, balanced by height
+    var total = sizes.reduce(function (a, b) { return a + b; }, 0), target = total / n, cols = [[]], acc = 0;
+    sizes.forEach(function (h, i) {
+      if (acc > 0 && acc + h / 2 > target && cols.length < n) { cols.push([]); acc = 0; }
+      cols[cols.length - 1].push(i); acc += h;
+    });
+    var H = 0; cols.forEach(function (c) { H = Math.max(H, c.reduce(function (a, i) { return a + sizes[i]; }, 0)); });
+    return { cols: cols, W: cols.length * 340 + (cols.length - 1) * 14, H: H };
+  }
+  function buildPage(cls, W, Hpage, ncols) {
+    var pg = document.createElement('div'); pg.className = 'pg ' + cls;
+    pg.style.width = W + 'px'; pg.style.height = Hpage + 'px';
+    var band = document.createElement('div'); band.className = 'band';
+    band.innerHTML = '<div class="bar"><b>LUC VOLLEYBALL · PLAYER REPORT</b><span>Generated ${esc(dateStr)}</span></div>';
+    if (head) {
+      var who = document.createElement('div'); who.className = 'who';
+      var num = head.querySelector('.detail-num'), info = head.querySelector('.detail-info');
+      if (num) who.appendChild(num.cloneNode(true));
+      if (info) who.appendChild(info.cloneNode(true));
+      if (paBox) { var p = paBox.cloneNode(true); p.className = 'pa'; p.removeAttribute('style'); who.appendChild(p); }
+      band.appendChild(who);
+    }
+    var f = document.createElement('div'); f.className = 'filters'; f.innerHTML = ${JSON.stringify(filters).replace(/</g, '\\u003c')}; band.appendChild(f);
+    if (kpis) band.appendChild(kpis.cloneNode(true));
+    var area = document.createElement('div'); area.className = 'cols-area';
+    var foot = document.createElement('div'); foot.className = 'foot';
+    foot.textContent = 'Efficiency = (K − E − BLK) / Att · Points Added weighted by position';
+    pg.appendChild(band); pg.appendChild(area); pg.appendChild(foot);
+    document.body.appendChild(pg);
+    var availW = area.clientWidth - 24, availH = area.clientHeight - 8, best = null;
+    ncols.forEach(function (n) {
+      if (n > blocks.length) return;
+      var pl = plan(n), s = Math.min(1, availW / pl.W, availH / pl.H);
+      if (!best || s > best.s + 0.02) best = { pl: pl, s: s };
+    });
+    var cols = document.createElement('div'); cols.className = 'cols';
+    best.pl.cols.forEach(function (c) {
+      var col = document.createElement('div'); col.className = 'col';
+      c.forEach(function (i, k) {
+        var b = blocks[i].cloneNode(true);
+        if (b.dataset.cont && k > 0) { var cl = b.querySelector(':scope > .cont'); if (cl) cl.remove(); }   // "(cont.)" only where a section continues at the top of a new column
+        col.appendChild(b);
+      });
+      cols.appendChild(col);
+    });
+    cols.style.transform = 'scale(' + best.s.toFixed(3) + ')';
+    area.appendChild(cols);
+  }
+  buildPage('pg-P', 720, 960, [1, 2]);
+  buildPage('pg-L', 960, 720, [2, 3]);
+  if (!window.__noPrint) { setTimeout(function () { window.focus(); window.print(); }, 400); window.onafterprint = function () { window.close(); }; }
+})();
+<\/script></body></html>`;
+}
+
 function exportPlayerPDF() {
   const root = document.getElementById('player-detail'); if (!root) return;
   const name = root.querySelector('.detail-info h2')?.childNodes[0]?.textContent.trim() || 'Player';
   const num = plCtx.num;
-  const sections = [...root.querySelectorAll('[id^="pl-sec-"]')].map(el => ({
-    title: `#${num} ${name} — ${el.querySelector('.pl-h')?.childNodes[0]?.textContent.trim() || ''}`,
-    html: _rptSnapshotPanel(el) }));
-  if (!sections.length) return;
-  sections.docTitle = `#${num} ${name} — Player Report`;
-  const win = window.open('', '_blank', 'width=1200,height=800');
-  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const typeLbl = { match:'Matches', practice:'Practices', both:'Matches + Practices' }[plType] || '';
-  const f = [['Player', `#${num} ${name}`], ['Season', plCtx.season === 'all' ? 'All seasons' : plCtx.season], ['Type', typeLbl],
+  const f = [['Season', plCtx.season === 'all' ? 'All seasons' : plCtx.season], ['Type', typeLbl],
              ['Session', plSession === 'all' ? 'All' : (DATA.sessions.find(s => s.id === plSession)?.date || '')], ['Set', plSet === 'all' ? 'All sets' : `Set ${plSet}`],
-             ['Pass scale', rcvPassScale + '-point'], ['Points Added', 'Weighted by position']];
+             ['Pass scale', rcvPassScale + '-point'], ['Compare to', plCompare === 'pos' ? 'Position average' : 'Team average']];
   const filters = f.map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('');
-  _writePdf(win, { sections, filters, sessionLine: '', kpiHTML: '', dateStr: new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) });
+  const win = window.open('', '_blank', 'width=900,height=1000');
+  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
+  win.document.open();
+  win.document.write(_playerPdfHtml({ detailHTML: root.innerHTML, filters, title: `#${num} ${name} — Player Report`,
+    dateStr: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) }));
+  win.document.close();
 }
 
 
