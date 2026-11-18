@@ -1012,7 +1012,7 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
 # position. Plays whose rotation can't be determined are left alone.
 BACK_ROW_SETTER_ZONES  = {1, 6, 5}   # R1, R2, R3
 FRONT_ROW_SETTER_ZONES = {4, 3, 2}   # R4, R5, R6
-_SWAP_START_ZONE = {'X6': '2', 'X8': '9'}   # keep the start zone consistent with the new code
+_SWAP_START_ZONE = {'X6': '2', 'X8': '9', 'V6': '2', 'V8': '9'}   # keep the start zone consistent with the new code
 
 def side_setters(session, side):
     """A side's setter(s) in one file: players who made a big share of that side's sets."""
@@ -1038,18 +1038,20 @@ def setter_zone_on_play(action, side, parse_side, setters):
     return None
 
 def swap_right_side(session, sides, coded_zone=None, prefer_coded=False):
-    """Swap impossible X6/X8 codes in place for the given sides. Returns [(side, from, to, n)].
+    """Swap impossible right-side codes in place (X6/X8 and the high versions V6/V8) for the given sides.
+    Returns [(side, from, to, n)].
     prefer_coded=True uses the coded setter zone first (match files: that's the rotation the
     report tables show), lineup position as fallback; otherwise the other way round."""
     parse_side = session.get('luc_side') or 'home'
     acts = session.get('actions', [])
-    names = {a.get('combo_code'): a.get('combo_name') for a in acts if a.get('combo_code') in ('X6', 'X8') and a.get('combo_name')}
+    pair = {'X6': 'X8', 'X8': 'X6', 'V6': 'V8', 'V8': 'V6'}
+    names = {a.get('combo_code'): a.get('combo_name') for a in acts if a.get('combo_code') in pair and a.get('combo_name')}
     report = []
     for side in sides:
         setters = side_setters(session, side)
         swaps = Counter()
         for a in acts:
-            if a.get('team_side') != side or a.get('skill_code') != 'A' or a.get('combo_code') not in ('X6', 'X8'):
+            if a.get('team_side') != side or a.get('skill_code') != 'A' or a.get('combo_code') not in pair:
                 continue
             zc = coded_zone(side, a) if coded_zone else None
             zl = setter_zone_on_play(a, side, parse_side, setters)
@@ -1057,8 +1059,8 @@ def swap_right_side(session, sides, coded_zone=None, prefer_coded=False):
             if not isinstance(z, int):
                 continue
             src = a['combo_code']
-            if (src == 'X6' and z in FRONT_ROW_SETTER_ZONES) or (src == 'X8' and z in BACK_ROW_SETTER_ZONES):
-                dst = 'X8' if src == 'X6' else 'X6'
+            if (src in ('X6', 'V6') and z in FRONT_ROW_SETTER_ZONES) or (src in ('X8', 'V8') and z in BACK_ROW_SETTER_ZONES):
+                dst = pair[src]
                 a['combo_fixed_from'] = src
                 a['combo_code'] = dst
                 if names.get(dst):
@@ -1844,12 +1846,15 @@ def main(raw_path, out_path):
         except (TypeError, ValueError):
             return None
 
-    def atk_zone_cat(action):
+    def atk_zone_cat(action, rot=None):
         """Categorize an attack: Left / Quick / Right in the front row; the back row is split
-        into Dball (X8/V8, right back row) and BIC (XP pipe family, middle/left back row)."""
+        into Dball (X8/V8, right back row) and BIC (XP pipe family, middle/left back row).
+        rot (1-6): a D-ball can't happen in Rotation 1-3 (the right side is front row there), so an
+        attack that only LOOKS like a D-ball by its start zone counts as Right in those rotations."""
         sz = str(action.get('start_zone') or '')
         cc = action.get('combo_code') or ''
-        if cc in ('X8', 'V8') or sz in ('1', '9'): return 'Dball'
+        if cc in ('X8', 'V8'): return 'Dball'
+        if sz in ('1', '9'): return 'Right' if rot in (1, 2, 3) else 'Dball'
         if cc in ('XP', 'XB', 'XR', 'VP', 'VB', 'VR', 'X0', 'V0') or sz in ('5', '6', '7', '8'): return 'BIC'
         if sz == '4':   return 'Left'
         if sz == '3':   return 'Quick'
@@ -1961,7 +1966,7 @@ def main(raw_path, out_path):
                     if a.get('skill_code') != 'A':
                         continue
                     ev  = a.get('evaluation', '')
-                    cat = atk_zone_cat(a)
+                    cat = atk_zone_cat(a, int(rot_key) if rot_key else None)
                     k   = 1 if ev == '#' else 0
                     er  = 1 if ev == '=' else 0
                     bk  = 1 if ev == '/' else 0
@@ -1995,7 +2000,7 @@ def main(raw_path, out_path):
                     a_idx = opp_acts.index(a)
                     nxt = next((x for x in opp_acts[a_idx+1:] if x.get('skill_code') == 'A'), None)
                     if nxt and s_key:
-                        cat = atk_zone_cat(nxt)
+                        cat = atk_zone_cat(nxt, s_rot)
                         rotations[s_key]['set']['att']    += 1
                         rotations[s_key]['set']['by_zone'][cat] = \
                             rotations[s_key]['set']['by_zone'].get(cat, 0) + 1
@@ -2175,7 +2180,7 @@ def main(raw_path, out_path):
                         continue
                     rot = get_opp_rotation(a, opp_side, sl, setters_f)
                     combo = nxt.get('combo_code') or ''
-                    cat = 'Dump' if combo in ('PP', 'P2', 'PR') else atk_zone_cat(nxt)
+                    cat = 'Dump' if combo in ('PP', 'P2', 'PR') else atk_zone_cat(nxt, rot)
                     szone = str(a.get('end_zone') or '')
                     rows.append([fi, rot if rot and 1 <= rot <= 6 else 0, a.get('player_num') or '', nxt.get('player_num') or '',
                                  (rcv.get('evaluation') or '?') if first_ball else 'T',
