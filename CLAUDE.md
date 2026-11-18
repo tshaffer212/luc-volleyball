@@ -116,6 +116,8 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
 - Scouting set types use the same list as the Loyola reports (`VALID_COMBOS`: X5 V5 X6 V6 XP X8 X1 X2 X7);
   every other code (PP, V8, XM, XR, ...) counts as "Other" via `scCombo()`. The "where the ball was set"
   bars (Left/Quick/Right/D-ball/BIC/Dump) are location-based and still include those codes.
+  `scColorKey()` = the plain-English color key (colors -> play calls via `SC_CAT_CODES`, descriptions in
+  `SC_CAT_DESC`), shown above the rotation boxes and in the setting breakdown; set-type rows carry the swatch.
 
 ### X6 / X8 auto-correction (always on)
 X6 is impossible in R4-R6 and X8 in R1-R3, so `swap_right_side()` (aggregate.py) swaps every such code

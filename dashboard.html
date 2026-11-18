@@ -7044,7 +7044,30 @@ let scoutF = { opp: null, setter: 'all', rot: 'all', pass: 'all' };
 const SC_CATS = ['Left', 'Quick', 'Right', 'Dball', 'BIC', 'Dump'];
 const SC_CAT_CLR = { Left: '#9e3b55', Quick: '#c9a227', Right: '#5b8fb9', Dball: '#6d5fa8', BIC: '#5f9e7f', Dump: '#b9b4aa', Other: '#d9d5cc' };
 const SC_CAT_TXT = { Left: '#fff', Quick: '#1c1b19', Right: '#fff', Dball: '#fff', BIC: '#fff', Dump: '#1c1b19', Other: '#1c1b19' };
-const SC_CAT_LBL = { Left: 'Left (pin 4)', Quick: 'Quick (middle)', Right: 'Right (pin 2)', Dball: 'D-ball (X8, back row right)', BIC: 'BIC / pipe (XP, back row)', Dump: 'Setter dump' };
+const SC_CAT_LBL = { Left: 'Left (pin 4)', Quick: 'Quick (middle)', Right: 'Right (pin 2)', Dball: 'D-ball (back row right)', BIC: 'BIC / pipe (back row middle)', Dump: 'Setter dump' };
+// Plain-English color key: which play calls make up each color, and what the set is
+const SC_CAT_CODES = { Left: ['X5', 'V5'], Quick: ['X1', 'X2', 'X7'], Right: ['X6', 'V6'], Dball: ['X8'], BIC: ['XP'], Dump: ['PP'] };
+const SC_CODE_CAT = {}; Object.entries(SC_CAT_CODES).forEach(([c, l]) => l.forEach(x => { SC_CODE_CAT[x] = c; }));
+const SC_CAT_DESC = {
+  Left: 'Set to the outside hitter at the left antenna, front row.',
+  Quick: 'Fast set to the middle: in front of the setter (X1), behind the setter (X2) or in the gap between the setter and the outside (X7).',
+  Right: 'Set to the opposite at the right antenna while he is front row (Rotations 1-3).',
+  Dball: 'Back-row attack by the opposite from the right side of the court (Rotations 4-6 only).',
+  BIC: 'Fast back-row attack through the middle of the court, usually by an outside hitter.',
+  Dump: 'The setter attacks or tips the second ball over himself.',
+};
+function scColorKey() {
+  const nm = c => c === 'PP' ? '' : (COMBO_NAMES?.[c] || c);
+  const items = SC_CATS.map(c => `<div style="display:flex;gap:10px;align-items:flex-start">
+      <span style="flex:0 0 14px;height:14px;margin-top:3px;border-radius:3px;background:${SC_CAT_CLR[c]}"></span>
+      <div><div style="font-weight:700;color:var(--text)">${SC_CAT_LBL[c]} <span style="font-weight:400;color:var(--text-muted)">- ${SC_CAT_CODES[c].map(x => `<b style="color:var(--text)">${x}</b> ${nm(x)}`).join(', ')}</span></div>
+      <div style="color:var(--text-muted)">${SC_CAT_DESC[c]}</div></div></div>`).join('');
+  return `<div style="margin:6px 0 16px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:10px">Color key - what each color means</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px 26px;font-size:13px;line-height:1.4">${items}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:10px">X = normal set, V = high ball (a higher, slower version of the same set). Other set codes are colored by where the attack started. The same colors are used in the rotation boxes and the setting breakdown.</div>
+  </div>`;
+}
 const SC_PASS = [
   ['all', 'All sets'], ['fb', 'All first ball'], ['#', 'Perfect (#)'], ['+', 'Good (+)'], ['!', 'Medium (!)'],
   ['oos', 'Out of system (- /)'], ['insys', 'In system (# +)'], ['T', 'Transition'],
@@ -7251,7 +7274,7 @@ function buildScoutSetting(name) {
       <div><div style="font-size:12px;color:var(--text-muted)">Attack Eff off these sets</div><div style="font-size:28px;font-weight:800;color:var(--text)">${fE(eff(all))}</div></div>
       <div><div style="font-size:12px;color:var(--text-muted)">Kill %</div><div style="font-size:28px;font-weight:800">${pc(all.k, all.a)}</div></div>
       <div style="flex:1;min-width:280px"><div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Where the ball was set</div>${distBar(all)}<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Top sets: ${topSets(all, 5)}</div></div>
-    </div>${legend}`;
+    </div>${scColorKey()}`;
 
   // -- By hitter / set type --
   const byH = group(rows, r => r[3]);
@@ -7259,7 +7282,7 @@ function buildScoutSetting(name) {
     `<tr><td style="font-weight:600;white-space:nowrap">${nm(h)}</td>${atkCells(o)}<td class="num" style="color:var(--gold)">${pc(o.a, all.a)}</td><td style="font-size:12px">${topSets(o)}</td></tr>`).join('');
   const byC = group(rows, r => scCombo(r[8]));
   const comboRows = Object.entries(byC).sort((a, b) => (a[0] === 'Other') - (b[0] === 'Other') || b[1].a - a[1].a).map(([c, o]) =>
-    `<tr><td style="white-space:nowrap"><b>${c}</b> <span style="color:var(--text-muted);font-size:12px">${c === 'Other' ? 'Any other code' : (COMBO_NAMES?.[c] || '')}</span></td>${atkCells(o)}<td class="num" style="color:var(--gold)">${pc(o.a, all.a)}</td></tr>`).join('');
+    `<tr><td style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:7px;background:${SC_CAT_CLR[SC_CODE_CAT[c] || 'Other']}"></span><b>${c}</b> <span style="color:var(--text-muted);font-size:12px">${c === 'Other' ? 'Any other code' : (COMBO_NAMES?.[c] || '')}</span></td>${atkCells(o)}<td class="num" style="color:var(--gold)">${pc(o.a, all.a)}</td></tr>`).join('');
 
   // -- By rotation (ignores the rotation filter) --
   const rotRowsBase = base.filter(r => fSetter(r) && fPass(r));
@@ -7531,6 +7554,7 @@ function renderScoutDetail(name) {
 
       <!-- Rotation Grid (2x3: 1 2 3 / 4 5 6) -->
       <div class="section-title">Rotation Breakdown</div>
+      ${scColorKey()}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:26px">
         ${ROT_ORDER.map(r => rotCard(r)).join('')}
       </div>
