@@ -109,6 +109,9 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
 ### X6 / X8 auto-correction (always on)
 X6 is impossible in R4-R6 and X8 in R1-R3, so `swap_right_side()` (aggregate.py) swaps every such code
 (X6 in R4-R6 -> X8, X8 in R1-R3 -> X6, start zone adjusted) for Loyola AND opponents, with no cap.
+The high versions get the same rule (V6 in R4-R6 -> V8, V8 in R1-R3 -> V6). In scouting, an attack with no
+X8/V8 code that only starts in zone 1/9 counts as Right (not D-ball) in R1-R3 (`atk_zone_cat(action, rot)`),
+so D-balls never show in Rotation 1-3.
 It uses the same rotation the pages show: match files = coded setter zone (lineup as fallback, via
 `fix_right_side_typos()`), scout files = setter's lineup position. Fixes are listed in `combo_fixes`
 and printed when aggregate.py runs. Rotation boxes are labeled "Rotation 1" ... "Rotation 6".
