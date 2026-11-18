@@ -1002,65 +1002,86 @@ def compute_match_rotation_stats(actions, loyola_side='both'):
     }
 
 
-# ── Right-side typo auto-correction (match files) ─────────────────────────────
-# In a 5-1 the opposite is front row while the setter is back row (R1–R3) and
-# back row while the setter is front row (R4–R6). So an X6 (in-system right,
-# front row) can't happen in R4–R6 and an X8 (D-ball, back-row right) can't
-# happen in R1–R3. When only a few attacks break that rule they're coding typos
-# and get swapped (X6↔X8). When a large share breaks it, the team's rotation
-# itself is off (e.g. old opponent files with placeholder lineups), so nothing
-# is changed — "fixing" those would corrupt good codes.
-RIGHT_SIDE_TYPO_MAX_SHARE = 0.20   # ≤20% of that team's X6+X8 in the match …
-RIGHT_SIDE_TYPO_MAX_COUNT = 3      # … and at most 3 swaps — more than that isn't a typo
+# ── Right-side auto-correction: X6 <-> X8 (matches and scout files) ──────────
+# In a 5-1 the opposite is front row while the setter is back row (R1-R3) and back
+# row while the setter is front row (R4-R6). An X6 (in-system right, front row) is
+# therefore impossible in R4-R6 and an X8 (D-ball, back-row right) impossible in
+# R1-R3, so every such code is swapped: X6 in R4-R6 -> X8, X8 in R1-R3 -> X6.
+# The rotation used is the same one the pages show: match files use the coded
+# setter zone (lineup position as fallback); scout files use the setter's lineup
+# position. Plays whose rotation can't be determined are left alone.
 BACK_ROW_SETTER_ZONES  = {1, 6, 5}   # R1, R2, R3
 FRONT_ROW_SETTER_ZONES = {4, 3, 2}   # R4, R5, R6
+_SWAP_START_ZONE = {'X6': '2', 'X8': '9'}   # keep the start zone consistent with the new code
+
+def side_setters(session, side):
+    """A side's setter(s) in one file: players who made a big share of that side's sets."""
+    cnt = Counter(str(a.get('player_num')) for a in session.get('actions', [])
+                  if a.get('team_side') == side and a.get('skill_code') == 'E' and a.get('player_num'))
+    if not cnt:
+        return []
+    top = cnt.most_common(1)[0][1]
+    return [p for p, n in cnt.most_common(2) if n >= max(10, 0.3 * top)]
+
+def setter_zone_on_play(action, side, parse_side, setters):
+    """Court zone (1-6) of `side`'s setter on this action, from that side's lineup.
+    parse_side = the side the parser stored in 'luc_lineup' (the other is 'opp_lineup')."""
+    lineup = action.get('luc_lineup') if side == parse_side else action.get('opp_lineup')
+    if not lineup or not setters:
+        return None
+    pos = [i + 1 for i, p in enumerate(lineup) if str(p) in setters]
+    if len(pos) == 1:
+        return pos[0]
+    if len(pos) > 1:                      # 6-2: the back-row setter is the one setting
+        back = [z for z in pos if z in BACK_ROW_SETTER_ZONES]
+        return back[0] if back else pos[0]
+    return None
+
+def swap_right_side(session, sides, coded_zone=None, prefer_coded=False):
+    """Swap impossible X6/X8 codes in place for the given sides. Returns [(side, from, to, n)].
+    prefer_coded=True uses the coded setter zone first (match files: that's the rotation the
+    report tables show), lineup position as fallback; otherwise the other way round."""
+    parse_side = session.get('luc_side') or 'home'
+    acts = session.get('actions', [])
+    names = {a.get('combo_code'): a.get('combo_name') for a in acts if a.get('combo_code') in ('X6', 'X8') and a.get('combo_name')}
+    report = []
+    for side in sides:
+        setters = side_setters(session, side)
+        swaps = Counter()
+        for a in acts:
+            if a.get('team_side') != side or a.get('skill_code') != 'A' or a.get('combo_code') not in ('X6', 'X8'):
+                continue
+            zc = coded_zone(side, a) if coded_zone else None
+            zl = setter_zone_on_play(a, side, parse_side, setters)
+            z = (zc if isinstance(zc, int) else zl) if prefer_coded else (zl if zl is not None else zc)
+            if not isinstance(z, int):
+                continue
+            src = a['combo_code']
+            if (src == 'X6' and z in FRONT_ROW_SETTER_ZONES) or (src == 'X8' and z in BACK_ROW_SETTER_ZONES):
+                dst = 'X8' if src == 'X6' else 'X6'
+                a['combo_fixed_from'] = src
+                a['combo_code'] = dst
+                if names.get(dst):
+                    a['combo_name'] = names[dst]
+                a['start_zone'] = _SWAP_START_ZONE[dst]
+                swaps[(src, dst)] += 1
+        for (src, dst), n in swaps.items():
+            report.append((side, src, dst, n))
+    return report
 
 def fix_right_side_typos(session):
-    """Swap impossible X6/X8 codes in place. Returns list of (side, from, to, n)."""
+    """Match files: swap impossible X6/X8 codes for both Loyola and the opponent."""
     if session.get('type') != 'match':
         return []
     ls = loyola_side_for_session(session)
     if ls not in ('home', 'away'):
         return []
     opp = 'away' if ls == 'home' else 'home'
-    zone_of = {
-        ls:  lambda a: a.get('rotation'),                       # LUC setter zone
-        opp: (lambda a: a.get('rot_h')) if opp == 'home'
-             else (lambda a: a.get('az_zone') or a.get('rot_v')),  # opponent setter zone
-    }
-    acts = session.get('actions', [])
-    report = []
-    for side, zf in zone_of.items():
-        cands, wrong = 0, []
-        for a in acts:
-            if a.get('team_side') != side or a.get('skill_code') != 'A':
-                continue
-            cc = a.get('combo_code')
-            if cc not in ('X6', 'X8'):
-                continue
-            z = zf(a)
-            if not isinstance(z, int):
-                continue
-            cands += 1
-            if (cc == 'X6' and z in FRONT_ROW_SETTER_ZONES) or (cc == 'X8' and z in BACK_ROW_SETTER_ZONES):
-                wrong.append(a)
-        if not wrong:
-            continue
-        if len(wrong) > RIGHT_SIDE_TYPO_MAX_SHARE * cands or len(wrong) > RIGHT_SIDE_TYPO_MAX_COUNT:
-            report.append((side, 'skipped', f'{len(wrong)}/{cands} look wrong — rotation likely off', 0))
-            continue
-        names = {a.get('combo_code'): a.get('combo_name') for a in acts if a.get('combo_code') in ('X6', 'X8') and a.get('combo_name')}
-        swaps = {}
-        for a in wrong:
-            src = a['combo_code']; dst = 'X8' if src == 'X6' else 'X6'
-            a['combo_fixed_from'] = src
-            a['combo_code'] = dst
-            if names.get(dst):
-                a['combo_name'] = names[dst]
-            swaps[(src, dst)] = swaps.get((src, dst), 0) + 1
-        for (src, dst), n in swaps.items():
-            report.append((side, src, dst, n))
-    return report
+    def coded_zone(side, a):
+        if side == ls:
+            return a.get('rotation')                      # LUC setter zone as coded
+        return a.get('rot_h') if opp == 'home' else (a.get('az_zone') or None)
+    return swap_right_side(session, [ls, opp], coded_zone, prefer_coded=True)
 
 
 # ── Points Added: position weights (share of each player's score, rows = 100%) ─
@@ -1207,7 +1228,7 @@ def main(raw_path, out_path):
                                  'from': f, 'to': to, 'n': n} for side, f, to, n in rep]
             for side, f, to, n in rep:
                 who = 'LUC' if side == loyola_side_for_session(s) else 'OPP'
-                print(f"  Combo fix {s['file']} [{who}]: " + (f"{f}→{to} ×{n}" if f != 'skipped' else f"skipped ({to})"), file=sys.stderr)
+                print(f"  Combo fix {s['file']} [{who}]: " + f"{f}->{to} x{n}", file=sys.stderr)
 
     # ── Per-season player rosters ─────────────────────────────────────────────
     # Build season-specific rosters from practice files.
@@ -1791,32 +1812,48 @@ def main(raw_path, out_path):
         h, a = _name_score(session.get('opponent'), session.get('home_team')), _name_score(session.get('opponent'), session.get('away_team'))
         return 'home' if h > a else 'away'
 
-    def get_opp_rotation(action, opp_side, set_lineups):
-        """Return the opponent's rotation (1-6) for this action, or None."""
-        if opp_side == 'home':
-            return action.get('rot_h')
-        # Away opponent: derive from opp_lineup vs starting lineup
-        opp_lineup = action.get('opp_lineup')
-        set_num    = action.get('set_number')
-        if not opp_lineup or not set_num:
-            return None
-        start = set_lineups.get(set_num) or set_lineups.get(str(set_num))
-        if not start or len(start) < 6:
-            return None
-        p1 = opp_lineup[0]
+    def file_setters(session, side):
+        """The scouted team's setter(s) in one file: whoever made a big share of that side's sets
+        (one setter in a 5-1, two in a 6-2)."""
+        cnt = Counter(str(a.get('player_num')) for a in session.get('actions', [])
+                      if a.get('team_side') == side and a.get('skill_code') == 'E' and a.get('player_num'))
+        if not cnt:
+            return []
+        top = cnt.most_common(1)[0][1]
+        return [p for p, n in cnt.most_common(2) if n >= max(10, 0.3 * top)]
+
+    def get_opp_rotation(action, opp_side, set_lineups, setters=None):
+        """Scouted team's rotation for this action, numbered like Loyola's (R1 = setter in
+        zone 1, R2 = zone 6, R3 = zone 5, R4 = zone 4, R5 = zone 3, R6 = zone 2).
+        The setter's zone comes from that side's lineup on the action (lineup slot i = zone i+1).
+        With two setters on court (6-2) the back-row one is the setter. Home side falls back to
+        the coded home setter zone (field 9)."""
+        lineup = action.get('luc_lineup') if opp_side == 'home' else action.get('opp_lineup')
+        zone = None
+        if lineup and setters:
+            pos = [i + 1 for i, p in enumerate(lineup) if str(p) in setters]
+            if len(pos) == 1:
+                zone = pos[0]
+            elif len(pos) > 1:
+                back = [z for z in pos if z in (1, 6, 5)]
+                zone = back[0] if back else pos[0]
+        if zone is None and opp_side == 'home' and action.get('rot_h'):
+            zone = action.get('rot_h')
         try:
-            j = start.index(p1)
-        except ValueError:
+            return SETTER_ZONE_TO_ROT.get(int(zone))
+        except (TypeError, ValueError):
             return None
-        return (6 - j) % 6 + 1
 
     def atk_zone_cat(action):
-        """Categorize an attack by start zone into Left/Quick/Right/BR."""
+        """Categorize an attack: Left / Quick / Right in the front row; the back row is split
+        into Dball (X8/V8, right back row) and BIC (XP pipe family, middle/left back row)."""
         sz = str(action.get('start_zone') or '')
+        cc = action.get('combo_code') or ''
+        if cc in ('X8', 'V8') or sz in ('1', '9'): return 'Dball'
+        if cc in ('XP', 'XB', 'XR', 'VP', 'VB', 'VR', 'X0', 'V0') or sz in ('5', '6', '7', '8'): return 'BIC'
         if sz == '4':   return 'Left'
         if sz == '3':   return 'Quick'
         if sz == '2':   return 'Right'
-        if sz in ('1','5','6','7','8','9'): return 'BR'
         return 'Other'
 
     def compute_scout_rotation_stats(sessions_for_opp):
@@ -1827,10 +1864,10 @@ def main(raw_path, out_path):
         """
         def new_rot():
             return {
-                'atk':  {'att':0,'k':0,'e':0,'bk':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'BR':0,'Dump':0}},
+                'atk':  {'att':0,'k':0,'e':0,'bk':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'Dball':0,'BIC':0,'Dump':0}},
                 'rcv':  {'att':0,'in_sys':0,'fbso_rallies':0,'fbso_kills':0,'zones':{}},
                 'dig':  {'att':0,'err':0},
-                'set':  {'att':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'BR':0}},
+                'set':  {'att':0,'by_zone':{'Left':0,'Quick':0,'Right':0,'Dball':0,'BIC':0}},
             }
 
         rotations = {str(r): new_rot() for r in range(1, 7)}
@@ -1841,6 +1878,7 @@ def main(raw_path, out_path):
         for session in sessions_for_opp:
             opp_side   = opp_side_for_session(session)
             set_lineups = session.get('away_set_lineups' if opp_side == 'away' else 'home_set_lineups', {})
+            setters_f = file_setters(session, opp_side)
             # Convert string keys to int if needed
             set_lineups_int = {}
             for k, v in set_lineups.items():
@@ -1865,7 +1903,7 @@ def main(raw_path, out_path):
                 first_rcv  = next((a for a in opp_acts if a.get('skill_code') == 'R'), None)
                 first_act  = opp_acts[0]
                 rot_action = first_rcv or first_act
-                opp_rot    = get_opp_rotation(rot_action, opp_side, set_lineups_int)
+                opp_rot    = get_opp_rotation(rot_action, opp_side, set_lineups_int, setters_f)
                 rot_key    = str(opp_rot) if opp_rot and 1 <= opp_rot <= 6 else None
 
                 # ── Reception ──────────────────────────────────────────────────
@@ -1943,7 +1981,7 @@ def main(raw_path, out_path):
                 for a in opp_acts:
                     if a.get('skill_code') != 'E':
                         continue
-                    s_rot  = get_opp_rotation(a, opp_side, set_lineups_int)
+                    s_rot  = get_opp_rotation(a, opp_side, set_lineups_int, setters_f)
                     s_key  = str(s_rot) if s_rot and 1 <= s_rot <= 6 else None
                     pnum   = a.get('player_num', '')
                     pname  = a.get('player_name', '') or f'#{pnum}'
@@ -2024,6 +2062,7 @@ def main(raw_path, out_path):
                 if pinfo.get('name'):
                     names[str(n_)] = pinfo['name']
             set_lineups = session.get('away_set_lineups' if opp_side == 'away' else 'home_set_lineups', {})
+            setters_f = file_setters(session, opp_side)
             sl = {}
             for k, v in set_lineups.items():
                 try: sl[int(k)] = v
@@ -2060,7 +2099,7 @@ def main(raw_path, out_path):
                     ev = nxt.get('evaluation', '')
                     if ev not in ('#', '+', '!', '-', '/', '='):
                         continue
-                    rot = get_opp_rotation(a, opp_side, sl)
+                    rot = get_opp_rotation(a, opp_side, sl, setters_f)
                     combo = nxt.get('combo_code') or ''
                     cat = 'Dump' if combo in ('PP', 'P2', 'PR') else atk_zone_cat(nxt)
                     szone = str(a.get('end_zone') or '')
@@ -2100,6 +2139,13 @@ def main(raw_path, out_path):
         opp_sessions[opp].append(s)
 
     resolve_opp_sides(opp_sessions)
+    scout_fix_total = Counter()
+    for s_ in scouts_raw:
+        side_ = opp_side_for_session(s_)
+        for _side, f_, t_, n_ in swap_right_side(s_, [side_], (lambda sd, a: a.get('rot_h')) if side_ == 'home' else None):
+            scout_fix_total[(f_, t_)] += n_
+    if scout_fix_total:
+        print("  Scout combo fixes: " + ", ".join(f"{f}->{t} x{n}" for (f, t), n in scout_fix_total.items()), file=sys.stderr)
     for s in scouts_raw:
         opp = s.get('opponent') or 'Unknown'
         side = opp_side_for_session(s)

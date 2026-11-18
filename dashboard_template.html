@@ -5287,7 +5287,7 @@ function renderPointsAdded() {
       <td style="color:var(--text-muted)">${POSL[r.group] || ''}</td>
       <td class="num">${r.sets.size}</td>
       <td class="num" style="font-weight:700;color:${clr(r.total)}">${f(r.total)}</td>
-      <td class="num" style="color:${clr(per)}">${(per >= 0 ? '+' : '') + per.toFixed(3)}</td>
+      <td class="num" style="color:${clr(per, 0.05)}">${(per >= 0 ? '+' : '') + per.toFixed(3)}</td>
       <td>${bar(per)}</td>
       ${PA_WCOLS.map(c => cell(r, c)).join('')}
     </tr>`; }).join('')
@@ -6724,7 +6724,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
       .map(([sp, r]) => `<tr><td>#${sp} ${getPlayerName(sp, lookSeason)}</td><td class="num">${r.a}</td><td class="num" style="font-weight:700;color:${_plClr((r.k-r.e-r.b)/r.a, 0.35, 0.15)}">${_plE((r.k-r.e-r.b)/r.a)}</td></tr>`).join('');
     const ROTZ = { '1':'Z1','2':'Z6','3':'Z5','4':'Z4','5':'Z3','6':'Z2' };
     const rotCells = Object.keys(A.rot).length ? ['4','3','2','5','6','1'].map(r => { const x = A.rot[r] || { k:0,e:0,b:0,a:0 }; const e2 = x.a ? (x.k-x.e-x.b)/x.a : null;
-      return `<div class="pl-rot"><div style="font-size:11px;font-weight:700">R${r} <span class="pl-muted" style="font-weight:400">setter ${ROTZ[r]}</span></div><div style="font-size:18px;font-weight:800;color:${_plClr(e2, 0.35, 0.15)}">${fmtEff3(e2)}</div><div class="pl-muted" style="font-size:11px">${x.a} att</div></div>`; }).join('') : '';
+      return `<div class="pl-rot"><div style="font-size:11px;font-weight:700">Rotation ${r} <span class="pl-muted" style="font-weight:400">setter ${ROTZ[r]}</span></div><div style="font-size:18px;font-weight:800;color:${_plClr(e2, 0.35, 0.15)}">${fmtEff3(e2)}</div><div class="pl-muted" style="font-size:11px">${x.a} att</div></div>`; }).join('') : '';
     attack = `<div class="card pl-card" id="pl-sec-attack"><h3 class="pl-h">Attacking</h3><div class="pl-g2"><div>
       <table class="pl-tbl"><tr><th>All attacks</th><th class="num">K</th><th class="num">E</th><th class="num">BLK</th><th class="num">Att</th><th class="num">Eff</th><th class="num">K%</th></tr>
         <tr><td><b>Total</b></td>${effTd(ev['#']||0, ev['=']||0, ev['/']||0, A.A.att)}<td class="num">${_plP(ev['#']||0, A.A.att)}</td></tr></table>
@@ -7075,9 +7075,10 @@ let selectedOpp = null;
 // Data: DATA.opp_rotation_stats[opp].setting = {files, names, sets: rows, ph}
 //   row = [file_idx, rot, setter, hitter, phase, pass_zone, passer, set_zone, combo, cat, attack_eval, opp_won]
 let scoutF = { opp: null, setter: 'all', rot: 'all', pass: 'all' };
-const SC_CATS = ['Left', 'Quick', 'Right', 'BR', 'Dump'];
-const SC_CAT_CLR = { Left: '#e05a70', Quick: '#FEBC18', Right: '#7ec8f5', BR: '#8888ff', Dump: '#aaaaaa', Other: '#555' };
-const SC_CAT_LBL = { Left: 'Left (pin 4)', Quick: 'Quick (middle)', Right: 'Right (pin 2)', BR: 'Back row', Dump: 'Setter dump' };
+const SC_CATS = ['Left', 'Quick', 'Right', 'Dball', 'BIC', 'Dump'];
+const SC_CAT_CLR = { Left: '#9e3b55', Quick: '#c9a227', Right: '#5b8fb9', Dball: '#6d5fa8', BIC: '#5f9e7f', Dump: '#b9b4aa', Other: '#d9d5cc' };
+const SC_CAT_TXT = { Left: '#fff', Quick: '#1c1b19', Right: '#fff', Dball: '#fff', BIC: '#fff', Dump: '#1c1b19', Other: '#1c1b19' };
+const SC_CAT_LBL = { Left: 'Left (pin 4)', Quick: 'Quick (middle)', Right: 'Right (pin 2)', Dball: 'D-ball (X8, back row right)', BIC: 'BIC / pipe (XP, back row)', Dump: 'Setter dump' };
 const SC_PASS = [
   ['all', 'All sets'], ['fb', 'All first ball'], ['#', 'Perfect (#)'], ['+', 'Good (+)'], ['!', 'Medium (!)'],
   ['oos', 'Out of system (- /)'], ['insys', 'In system (# +)'], ['T', 'Transition'],
@@ -7117,7 +7118,7 @@ function buildScoutSetting(name) {
   const chips = SC_PASS.map(([v, l]) => `<button onclick="setScoutF('pass','${v}')" style="padding:6px 12px;border-radius:5px;border:1px solid var(--border);cursor:pointer;font-size:13px;background:${scoutF.pass === v ? 'var(--maroon)' : 'var(--surface2)'};color:${scoutF.pass === v ? '#fff' : 'var(--text)'}">${l}</button>`).join('');
   const controls = `<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding:14px 16px;background:var(--surface2);border-radius:8px">
       <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Setter</div>${sel('setter', [['all', `All setters (${base.length})`], ...setterList.map(([n, c]) => [n, `${nm(n)} - ${c} sets`])])}</div>
-      <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Rotation</div>${sel('rot', [['all', 'All rotations'], ...[1, 2, 3, 4, 5, 6].map(r => [r, 'R' + r])])}</div>
+      <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Rotation</div>${sel('rot', [['all', 'All rotations'], ...[1, 2, 3, 4, 5, 6].map(r => [r, 'Rotation ' + r])])}</div>
       <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Pass before the set</div><div style="display:flex;gap:5px;flex-wrap:wrap">${chips}</div></div>
     </div>`;
 
@@ -7143,7 +7144,7 @@ function buildScoutSetting(name) {
   const ATK_HEAD = `<th class="num" ${H}>K</th><th class="num" ${H}>E</th><th class="num" ${H}>BLK</th><th class="num" ${H}>ATT</th><th class="num" ${H}>EFF</th><th class="num" ${H}>K%</th>`;
   const distBar = o => { const t = o.a || 1;
     return `<div style="display:flex;height:16px;min-width:200px;border-radius:3px;overflow:hidden;background:var(--surface3)">${SC_CATS.filter(c => o.cat[c]).map(c =>
-      `<div title="${SC_CAT_LBL[c]}: ${o.cat[c]} (${Math.round(o.cat[c] / t * 100)}%)" style="width:${o.cat[c] / t * 100}%;background:${SC_CAT_CLR[c]};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#111">${o.cat[c] / t >= 0.12 ? Math.round(o.cat[c] / t * 100) + '%' : ''}</div>`).join('')}</div>`; };
+      `<div title="${SC_CAT_LBL[c]}: ${o.cat[c]} (${Math.round(o.cat[c] / t * 100)}%)" style="width:${o.cat[c] / t * 100}%;background:${SC_CAT_CLR[c]};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${SC_CAT_TXT[c] || '#1c1b19'}">${o.cat[c] / t >= 0.12 ? Math.round(o.cat[c] / t * 100) + '%' : ''}</div>`).join('')}</div>`; };
   const topSets = (o, n = 3) => Object.entries(o.combo).sort((a, b) => b[1] - a[1]).slice(0, n)
     .map(([c, k]) => `<span title="${COMBO_NAMES?.[c] || ''}" style="white-space:nowrap"><b>${c}</b> ${Math.round(k / o.a * 100)}%</span>`).join(', ');
   const legend = `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin:4px 0 10px">${SC_CATS.map(c => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${SC_CAT_CLR[c]};margin-right:5px"></span>${SC_CAT_LBL[c]}</span>`).join('')}</div>`;
@@ -7171,8 +7172,8 @@ function buildScoutSetting(name) {
   // -- By rotation (ignores the rotation filter) --
   const rotRowsBase = base.filter(r => fSetter(r) && fPass(r));
   const byR = group(rotRowsBase, r => r[1] ? String(r[1]) : null);
-  const rotRows = ['1', '2', '3', '4', '5', '6'].map(r => { const o = byR[r]; if (!o) return `<tr><td>R${r}</td><td colspan="10" style="color:var(--text-dim)">No sets</td></tr>`;
-    return `<tr${String(scoutF.rot) === r ? ' style="background:rgba(254,188,24,.08)"' : ''}><td style="font-weight:700;color:var(--gold)">R${r}</td><td class="num">${o.a}</td><td>${distBar(o)}</td>${atkCells(o)}<td style="font-size:12px">${topSets(o)}</td></tr>`; }).join('');
+  const rotRows = ['1', '2', '3', '4', '5', '6'].map(r => { const o = byR[r]; if (!o) return `<tr><td>Rotation ${r}</td><td colspan="10" style="color:var(--text-dim)">No sets</td></tr>`;
+    return `<tr${String(scoutF.rot) === r ? ' style="background:rgba(254,188,24,.08)"' : ''}><td style="font-weight:700;white-space:nowrap">Rotation ${r}</td><td class="num">${o.a}</td><td>${distBar(o)}</td>${atkCells(o)}<td style="font-size:12px">${topSets(o)}</td></tr>`; }).join('');
 
   // -- Set distribution by where the pass was taken (first ball only) --
   const fbRows = rows.filter(r => r[4] !== 'T');
@@ -7194,7 +7195,7 @@ function buildScoutSetting(name) {
         return `<td class="num" style="background:rgba(254,188,24,${(p * 0.6).toFixed(2)});${p ? '' : 'color:var(--text-dim)'}">${c ? Math.round(p * 100) + '%' : '-'}</td>`; }).join('')}<td class="num">${n}</td></tr>`; }).join('')) : '';
 
   const passLbl = (SC_PASS.find(p => p[0] === scoutF.pass) || [])[1];
-  const filtLbl = `${scoutF.setter === 'all' ? 'All setters' : nm(scoutF.setter)}, ${scoutF.rot === 'all' ? 'all rotations' : 'R' + scoutF.rot}, ${passLbl}`;
+  const filtLbl = `${scoutF.setter === 'all' ? 'All setters' : nm(scoutF.setter)}, ${scoutF.rot === 'all' ? 'all rotations' : 'Rotation ' + scoutF.rot}, ${passLbl}`;
 
   return controls + summary +
     `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:18px">
@@ -7324,13 +7325,13 @@ function renderScoutDetail(name) {
 
   // -- helper: bar chart for set distribution -------------------------------
   function distBar(byZone) {
-    const total = (byZone.Left||0) + (byZone.Quick||0) + (byZone.Right||0) + (byZone.BR||0);
+    const total = (byZone.Left||0) + (byZone.Quick||0) + (byZone.Right||0) + (byZone.Dball||0) + (byZone.BIC||0);
     if (!total) return '<span style="color:var(--text-dim);font-size:14px">No set data</span>';
     const bar = (label, val, color) => {
       const pct = Math.round(val/total*100);
       if (!pct) return '';
       return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
-        <div style="width:56px;font-size:14px;color:var(--text-muted)">${label}</div>
+        <div style="width:64px;font-size:14px;color:var(--text-muted)">${label}</div>
         <div style="flex:1;height:16px;background:var(--surface3);border-radius:3px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
         </div>
@@ -7338,10 +7339,11 @@ function renderScoutDetail(name) {
       </div>`;
     };
     return `<div style="margin-top:4px">
-      ${bar('Left',  byZone.Left||0,  '#e05a70')}
-      ${bar('Quick', byZone.Quick||0, '#FEBC18')}
-      ${bar('Right', byZone.Right||0, '#7ec8f5')}
-      ${bar('BR',    byZone.BR||0,    '#8888ff')}
+      ${bar('Left',  byZone.Left||0,  SC_CAT_CLR.Left)}
+      ${bar('Quick', byZone.Quick||0, SC_CAT_CLR.Quick)}
+      ${bar('Right', byZone.Right||0, SC_CAT_CLR.Right)}
+      ${bar('D-ball', byZone.Dball||0, SC_CAT_CLR.Dball)}
+      ${bar('BIC',   byZone.BIC||0,   SC_CAT_CLR.BIC)}
     </div>`;
   }
 
@@ -7357,13 +7359,13 @@ function renderScoutDetail(name) {
     const set = rv.set || {att:0,by_zone:{}};
     const hasData = atk.att > 0 || rcv.att > 0;
     if (!hasData) return `<div class="card-sm" style="opacity:0.4;min-height:260px">
-      <div style="font-weight:700;font-size:22px;color:var(--gold);margin-bottom:8px">R${r}</div>
+      <div style="font-weight:700;font-size:20px;color:var(--text);margin-bottom:8px">Rotation ${r}</div>
       <div style="color:var(--text-dim);font-size:14px">No data</div>
     </div>`;
 
     return `<div class="card-sm" style="min-height:260px;padding:18px 20px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-weight:700;font-size:22px;color:var(--gold)">R${r}</span>
+        <span style="font-weight:700;font-size:20px;color:var(--text)">Rotation ${r}</span>
         <span style="font-size:14px;color:var(--text-dim)">${atk.att} atk, ${rcv.att} rcv</span>
       </div>
 
@@ -7423,11 +7425,11 @@ function renderScoutDetail(name) {
       <!-- Team Metrics Strip -->
       ${team ? `<div style="display:flex;gap:0;margin-bottom:20px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
         ${[
-          ['SO%',        team.so_pct+'%',    'Sideout rate (receive to win rally)', 'var(--gold)'],
-          ['FBSO%',      team.fbso_pct+'%',  'First ball sideout (1st attack kill)', '#7ec8f5'],
-          ['Kill%',      team.k_pct+'%',     'Attack kill rate (K/ATT)', 'var(--red)'],
+          ['SO%',        team.so_pct+'%',    'Sideout rate (receive to win rally)', 'var(--text)'],
+          ['FBSO%',      team.fbso_pct+'%',  'First ball sideout (1st attack kill)', 'var(--text)'],
+          ['Kill%',      team.k_pct+'%',     'Attack kill rate (K/ATT)', 'var(--text)'],
           ['Efficiency', fmtEff3(team.eff),'(K-E-BLK)/ATT', effColor(team.eff)],
-          ['In-Sys Rcv', team.in_sys_pct+'%','Reception in-system (# or +)', 'var(--green)'],
+          ['In-Sys Rcv', team.in_sys_pct+'%','Reception in-system (# or +)', 'var(--text)'],
         ].map(([lbl,val,tip,col],i) => `
           <div style="flex:1;padding:18px 14px;background:var(--surface2);${i?'border-left:1px solid var(--border)':''};text-align:center" title="${tip}">
             <div style="font-size:32px;font-weight:800;color:${col}">${val}</div>

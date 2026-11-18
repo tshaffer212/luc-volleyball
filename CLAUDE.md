@@ -65,6 +65,13 @@ background, ink text, maroon accent, Source Serif 4 + IBM Plex Sans (Google Font
 efficiency shown as .340 via `fmtEff3()` / `fmtEffPct3()`, ASCII-only text (no special symbols: use "-" and
 "," not em dashes or middle dots). `dashboard-v2.html` / `players-v2.html` are now just redirects to the live
 pages; `dashboard_template_v2.html` is retired (a stub).
+- Number colors: numbers are plain ink. Only notably high/low values get color, via `var(--hi)` (green) /
+  `var(--lo)` (red): efficiency through `effTone(v, n, base)` = at least .100 above/below the comparison
+  average (default `EFF_BASE`, the dataset's Loyola efficiency) with 10+ attempts. No yellow/orange/gold on
+  numbers; CSS neutralises old inline `var(--green)/var(--red)/var(--gold)` text colors. players.html uses
+  classes `hi` / `lo` the same way.
+- Scouting back row is split into `Dball` (X8/V8, zone 1/9) and `BIC` (XP family, zone 5-8) in
+  `atk_zone_cat()` (aggregate.py) and the page's `SC_CATS`.
 - Rollback: the old dark (v1) files are in `archive/v1/` (git-ignored, local only) and in git history.
   To go back: copy `archive/v1/dashboard_template.html` -> `dashboard_template.html` and
   `archive/v1/players.html` -> `players.html`, rebuild, push.
@@ -86,6 +93,17 @@ LW, MCK, Pepp). `opponent_stats` skills count the scouted team only. `opp_rotati
 one row per attacked set `[file_idx, rot, setter, hitter, phase, pass_zone, passer, set_zone, combo, cat,
 eval, won]` (phase = pass grade or 'T'; set_zone = E end zone = where the setter set from) + `ph`
 (Pass & Hit per file). The page (`buildScoutSetting`) slices it by setter / rotation / pass quality.
+Opponent rotations use the SAME numbering as Loyola (R1 = setter in zone 1, R2 = zone 6, R3 = zone 5,
+R4 = zone 4, R5 = zone 3, R6 = zone 2): `get_opp_rotation()` finds the setter's zone from that side's lineup
+on each action (`file_setters()` = the file's main setter(s); with two setters on court the back-row one sets),
+then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in R4-R6, X6 in R1-R3.
+
+### X6 / X8 auto-correction (always on)
+X6 is impossible in R4-R6 and X8 in R1-R3, so `swap_right_side()` (aggregate.py) swaps every such code
+(X6 in R4-R6 -> X8, X8 in R1-R3 -> X6, start zone adjusted) for Loyola AND opponents, with no cap.
+It uses the same rotation the pages show: match files = coded setter zone (lineup as fallback, via
+`fix_right_side_typos()`), scout files = setter's lineup position. Fixes are listed in `combo_fixes`
+and printed when aggregate.py runs. Rotation boxes are labeled "Rotation 1" ... "Rotation 6".
 
 ### Coach-only virtual players (Jake Read 2.0)
 `VIRTUAL_PLAYERS` in `aggregate.py` adds `7L` = "Jake Read 2.0", a libero-only copy of #7 (Fall 2027 only):
