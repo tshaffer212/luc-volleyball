@@ -67,6 +67,14 @@
 
   /* Grid layouts */
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  /* Scouting: opponent list grid + full-screen report */
+  .scout-opp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  .scout-back { background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:7px 14px; font-size:13px; cursor:pointer; }
+  .scout-back:hover { border-color:var(--gold); }
+  .scout-big .card { padding:26px 30px; }
+  .scout-big .section-title { font-size:15px; }
+  .scout-big .data-table { font-size:14px !important; }
+  .scout-big .data-table th { font-size:12px; }
   .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
   .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
@@ -1249,15 +1257,12 @@
     </select></div>
   </div>
 
-  <div class="grid-2">
-    <div>
-      <div class="section-title" style="margin-top:0">Scouted Opponents</div>
-      <div id="scout-opp-list" class="grid-auto"></div>
-    </div>
-    <div id="scout-detail">
-      <div class="empty" style="margin-top:40px">Select an opponent to view scout data</div>
-    </div>
+  <!-- Opponent list (full width) → click one → the scout report takes the whole screen -->
+  <div id="scout-list-sec">
+    <div class="section-title" style="margin-top:0">Scouted Opponents <span style="font-size:11px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:400">— click an opponent to open the full-screen report</span></div>
+    <div id="scout-opp-list" class="scout-opp-grid"></div>
   </div>
+  <div id="scout-detail" class="scout-big" style="display:none"></div>
 </div>
 
 <script>
@@ -6595,14 +6600,27 @@ function renderScout() {
     </div>`;
   }
 
+  if (oppFilter !== 'all') selectedOpp = oppFilter;   // picking from the Opponent dropdown opens that report
+  scoutLayout();
   if (selectedOpp) renderScoutDetail(selectedOpp);
 }
 
+// List view ↔ full-screen report
+function scoutLayout() {
+  const open = !!selectedOpp && !!DATA.opponent_stats[selectedOpp];
+  document.getElementById('scout-list-sec').style.display = open ? 'none' : '';
+  document.getElementById('scout-detail').style.display   = open ? '' : 'none';
+}
 function selectOpp(name) {
   selectedOpp = name;
-  document.querySelectorAll('.opp-card').forEach(c => c.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  scoutLayout();
   renderScoutDetail(name);
+  window.scrollTo({ top: 0 });
+}
+function scoutBack() {
+  selectedOpp = null;
+  const f = document.getElementById('scout-opp-filter'); if (f) f.value = 'all';
+  renderScout();
 }
 
 function renderScoutDetail(name) {
@@ -6620,16 +6638,16 @@ function renderScoutDetail(name) {
   // ── helper: bar chart for set distribution ───────────────────────────────
   function distBar(byZone) {
     const total = (byZone.Left||0) + (byZone.Quick||0) + (byZone.Right||0) + (byZone.BR||0);
-    if (!total) return '<span style="color:var(--text-dim);font-size:11px">No set data</span>';
+    if (!total) return '<span style="color:var(--text-dim);font-size:14px">No set data</span>';
     const bar = (label, val, color) => {
       const pct = Math.round(val/total*100);
       if (!pct) return '';
-      return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
-        <div style="width:32px;font-size:10px;color:var(--text-muted)">${label}</div>
-        <div style="flex:1;height:10px;background:var(--surface3);border-radius:3px;overflow:hidden">
+      return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+        <div style="width:56px;font-size:14px;color:var(--text-muted)">${label}</div>
+        <div style="flex:1;height:16px;background:var(--surface3);border-radius:3px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
         </div>
-        <div style="width:28px;font-size:10px;text-align:right;color:var(--text-muted)">${pct}%</div>
+        <div style="width:46px;font-size:14px;text-align:right;color:var(--text-muted)">${pct}%</div>
       </div>`;
     };
     return `<div style="margin-top:4px">
@@ -6656,19 +6674,19 @@ function renderScoutDetail(name) {
     const rcv = rv.rcv || {att:0,in_sys_pct:0,fbso_pct:0};
     const set = rv.set || {att:0,by_zone:{}};
     const hasData = atk.att > 0 || rcv.att > 0;
-    if (!hasData) return `<div class="card-sm" style="opacity:0.4;min-height:120px">
-      <div style="font-weight:700;font-size:13px;color:var(--gold);margin-bottom:8px">R${r}</div>
-      <div style="color:var(--text-dim);font-size:11px">No data</div>
+    if (!hasData) return `<div class="card-sm" style="opacity:0.4;min-height:260px">
+      <div style="font-weight:700;font-size:22px;color:var(--gold);margin-bottom:8px">R${r}</div>
+      <div style="color:var(--text-dim);font-size:14px">No data</div>
     </div>`;
 
-    return `<div class="card-sm" style="min-height:180px">
+    return `<div class="card-sm" style="min-height:260px;padding:18px 20px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-weight:700;font-size:13px;color:var(--gold)">R${r}</span>
-        <span style="font-size:10px;color:var(--text-dim)">${atk.att} atk · ${rcv.att} rcv</span>
+        <span style="font-weight:700;font-size:22px;color:var(--gold)">R${r}</span>
+        <span style="font-size:14px;color:var(--text-dim)">${atk.att} atk · ${rcv.att} rcv</span>
       </div>
 
       <!-- Attack stats row -->
-      <div style="display:flex;gap:10px;margin-bottom:8px;padding:6px 8px;background:var(--surface3);border-radius:5px;font-size:11px">
+      <div style="display:flex;gap:22px;margin-bottom:12px;padding:10px 14px;background:var(--surface3);border-radius:6px;font-size:16px">
         <div><div style="color:var(--text-dim)">K%</div><div style="font-weight:600;color:var(--red)">${atk.k_pct}%</div></div>
         <div><div style="color:var(--text-dim)">Eff</div><div style="font-weight:600;color:${effColor(atk.eff)}">${atk.eff.toFixed(3)}</div></div>
         <div><div style="color:var(--text-dim)">K</div><div>${atk.k}</div></div>
@@ -6677,11 +6695,11 @@ function renderScoutDetail(name) {
       </div>
 
       <!-- Set distribution -->
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Set Dist</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Set Dist</div>
       ${distBar(set.by_zone)}
 
       <!-- Reception -->
-      ${rcv.att > 0 ? `<div style="display:flex;gap:10px;margin-top:8px;padding:5px 8px;background:rgba(254,188,24,0.06);border:1px solid rgba(254,188,24,0.12);border-radius:5px;font-size:11px">
+      ${rcv.att > 0 ? `<div style="display:flex;gap:22px;margin-top:12px;padding:10px 14px;background:rgba(254,188,24,0.06);border:1px solid rgba(254,188,24,0.12);border-radius:6px;font-size:16px">
         <div><div style="color:var(--text-dim)">In-Sys%</div><div style="font-weight:600">${rcv.in_sys_pct}%</div></div>
         <div><div style="color:var(--text-dim)">FBSO%</div><div style="font-weight:600;color:var(--gold)">${rcv.fbso_pct}%</div></div>
         <div><div style="color:var(--text-dim)">Rcv</div><div>${rcv.att}</div></div>
@@ -6711,9 +6729,12 @@ function renderScoutDetail(name) {
   container.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px">
-        <div>
-          <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">${name}</h2>
-          <p style="color:var(--text-muted);font-size:13px">${os.files} scouted file${os.files!==1?'s':''} · ${fmt(os.actions)} total actions</p>
+        <div style="display:flex;align-items:center;gap:16px">
+          <button class="scout-back" onclick="scoutBack()">← All opponents</button>
+          <div>
+          <h2 style="font-size:28px;font-weight:800;margin-bottom:4px">${name}</h2>
+          <p style="color:var(--text-muted);font-size:15px">${os.files} scouted file${os.files!==1?'s':''} · ${fmt(os.actions)} total actions</p>
+          </div>
         </div>
       </div>
 
@@ -6726,15 +6747,15 @@ function renderScoutDetail(name) {
           ['Efficiency', team.eff.toFixed(3),'(K−E−BLK)/ATT', effColor(team.eff)],
           ['In-Sys Rcv', team.in_sys_pct+'%','Reception in-system (# or +)', 'var(--green)'],
         ].map(([lbl,val,tip,col],i) => `
-          <div style="flex:1;padding:12px 14px;background:var(--surface2);${i?'border-left:1px solid var(--border)':''};text-align:center" title="${tip}">
-            <div style="font-size:18px;font-weight:700;color:${col}">${val}</div>
-            <div style="font-size:10px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.4px">${lbl}</div>
+          <div style="flex:1;padding:18px 14px;background:var(--surface2);${i?'border-left:1px solid var(--border)':''};text-align:center" title="${tip}">
+            <div style="font-size:32px;font-weight:800;color:${col}">${val}</div>
+            <div style="font-size:13px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:0.5px">${lbl}</div>
           </div>`).join('')}
       </div>` : ''}
 
       <!-- Rotation Grid (2×3: R4 R3 R2 / R5 R6 R1) -->
       <div class="section-title">Rotation Breakdown</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:26px">
         ${ROT_ORDER.map(r => rotCard(r)).join('')}
       </div>
 
@@ -6742,7 +6763,7 @@ function renderScoutDetail(name) {
       ${setterRows.length > 0 ? `
       <div class="section-title">Setter Breakdown</div>
       <div style="overflow-x:auto;margin-bottom:20px">
-        <table class="data-table" style="font-size:12px;min-width:560px">
+        <table class="data-table" style="min-width:560px">
           <thead><tr>
             <th>#</th><th>Name</th><th class="num">Sets</th><th class="num">aROT</th>
             <th class="num">R1%</th><th class="num">R2%</th><th class="num">R3%</th>
