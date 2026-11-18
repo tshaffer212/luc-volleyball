@@ -17,3 +17,6 @@ __pycache__/
 # Player portal: passwords must NEVER be committed
 private/
 /competition.csv
+
+# Old (v1) dark-theme dashboard kept locally for rollback (also in git history)
+archive/

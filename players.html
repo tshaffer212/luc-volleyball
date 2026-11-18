@@ -2,84 +2,178 @@
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Loyola Volleyball · Player Reports</title>
+<title>Loyola Volleyball, Player Reports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
 <style>
-:root{--maroon:#8D0034;--maroon-dark:#5c0023;--maroon-light:#b5004a;--gold:#FEBC18;--bg:#0f0f0f;--surface:#1a1a1a;--surface2:#242424;--border:#333;--text:#f0f0f0;--muted:#999;--dim:#666;--green:#4caf50;--red:#ef5350}
+/* -- Editorial "sports page" theme - light only ------------------------------- */
+:root{
+  --paper:#fbfaf7; --white:#fff; --ink:#1c1b19; --ink2:#2d2b27; --muted:#6b6760; --dim:#9a958c;
+  --rule:#d9d5cc; --rule2:#ebe7df; --tint:#f3f1ec;
+  --accent:#7a0026; --gold:#8a6500; --green:#2e6b3a; --red:#a3281f;
+  --serif:"Source Serif 4","Iowan Old Style","Charter","Georgia",serif;
+  --sans:"IBM Plex Sans",-apple-system,"Helvetica Neue",Arial,sans-serif;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,'Segoe UI',system-ui,sans-serif;font-size:13px}
-.wrap{max-width:1250px;margin:0 auto;padding:18px}
-.m{color:var(--muted);font-size:11px}.g{color:var(--green)}.r{color:var(--red)}.gold{color:var(--gold)}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.4;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button,select,input{font-family:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 32px 40px}
+.m{color:var(--muted);font-size:12px}.g{color:var(--green)}.r{color:var(--red)}.gold,.acc{color:var(--accent)}
 .n{text-align:right;font-variant-numeric:tabular-nums}
-/* login */
-#login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 0,#2a0012,#0f0f0f 70%);padding:20px}
-.lbox{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--gold);border-radius:12px;padding:26px}
-.lbox .logo{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:1px}
-.lbox label{display:block;font-size:11px;color:var(--muted);margin:16px 0 5px;text-transform:uppercase;letter-spacing:.6px}
-.lbox select,.lbox input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-size:15px}
-.lbox button{width:100%;margin-top:18px;background:var(--maroon);border:0;border-radius:6px;padding:11px;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+.kicker{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent)}
+
+/* -- Login -- */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper);padding:20px}
+.lbox{width:100%;max-width:380px;background:var(--white);border:1px solid var(--rule);border-top:3px solid var(--accent);padding:30px 28px 24px}
+.lbox .logo{font-family:var(--serif);font-size:32px;font-weight:700;letter-spacing:-.6px;line-height:1.05;margin-top:6px;color:var(--ink)}
+.lbox .sub{font-size:13px;color:var(--muted);margin-top:6px;padding-bottom:16px;border-bottom:1px solid var(--rule2)}
+.lbox label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:18px 0 6px}
+.lbox select,.lbox input{width:100%;background:var(--white);border:1px solid var(--rule);border-radius:2px;padding:10px 11px;color:var(--ink);font-size:15px;appearance:auto}
+.lbox select:focus,.lbox input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(122,0,38,.12)}
+.lbox button{width:100%;margin-top:22px;background:var(--accent);border:0;border-radius:2px;padding:12px;color:#fff;font-weight:600;font-size:15px;letter-spacing:.2px;cursor:pointer}
+.lbox button:hover{background:#63001f}
 .lbox button:disabled{opacity:.6;cursor:wait}
-#lerr{color:var(--red);font-size:12px;margin-top:10px;min-height:16px;text-align:center}
-/* app */
+#lerr{color:var(--red);font-size:13px;margin-top:12px;min-height:18px;text-align:center}
+.lbox .help-line{margin-top:6px;text-align:center;font-size:12px;color:var(--muted)}
+
+/* -- Masthead -- */
 #app{display:none}
-header{background:linear-gradient(135deg,var(--maroon-dark),var(--maroon) 55%,var(--maroon-light));border-bottom:3px solid var(--gold);border-radius:10px 10px 0 0;padding:14px 18px;display:flex;align-items:center;gap:16px}
-header .num{font-size:34px;font-weight:800;color:var(--gold)}header h2{font-size:20px}
-header button{margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.45);border-radius:6px;padding:6px 12px;color:#fff;cursor:pointer;font-size:12px}
-.filters{background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:12px 18px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
-.filters label.h{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:4px}
-.filters select{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-size:12px}
-.tg{display:inline-flex;gap:4px}.tg button,.btn{padding:5px 11px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface2);color:var(--text);cursor:pointer}
-.tg button.on,.btn.on{background:var(--maroon);border-color:var(--maroon);color:#fff}
-.dd{position:relative}.ddp{position:absolute;z-index:20;top:100%;left:0;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;max-height:340px;overflow:auto;width:290px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
-.ddp label{display:flex;gap:8px;align-items:center;padding:4px 2px;font-size:12px;cursor:pointer}.ddp .tag{font-size:10px;color:var(--muted);margin-left:auto}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px}.kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}.kpi .v{font-size:24px;font-weight:800;margin-top:2px}
-.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}.tabs button{padding:7px 13px;border-radius:6px;border:1px solid var(--border);font-size:12px;background:var(--surface2);color:var(--text);cursor:pointer}.tabs button.on{background:var(--maroon);border-color:var(--maroon)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
-h3{font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;display:flex;align-items:center;gap:8px}
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse}th{font-size:10px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px;border-bottom:1px solid var(--border);white-space:nowrap}th.n{text-align:right}th.c{text-align:center}
-td{padding:6px;border-bottom:1px solid #232323;white-space:nowrap}
-tr.tot td{border-top:2px solid var(--gold);font-weight:700;color:var(--gold)}tr.dim td{color:#aaa;font-style:italic}
-.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
-.brow{display:grid;grid-template-columns:150px 1fr 60px 64px;gap:8px;align-items:center;margin:7px 0}.btrack{height:14px;background:#262626;border-radius:3px;overflow:hidden}.bfill{height:100%;background:linear-gradient(90deg,var(--maroon),var(--gold))}.bv{font-weight:700;text-align:right}
-.rots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.rot{background:var(--surface2);border-radius:8px;padding:10px;text-align:center}.rl{font-size:11px;font-weight:700;color:var(--muted)}.rv{font-size:22px;font-weight:800}
-.empty{color:var(--muted);padding:14px;text-align:center}
-.help{background:#141b24;border:1px solid #23344a;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.55;color:#c8d6e5;margin-bottom:10px;display:none}.help b{color:#fff}
-.qb{width:18px;height:18px;border-radius:50%;border:1px solid var(--muted);background:transparent;color:var(--muted);font-size:11px;cursor:pointer;line-height:16px;padding:0}
-.mix{display:flex;height:8px;width:160px;border-radius:2px;overflow:hidden;background:#222}
-.foot{color:var(--dim);font-size:11px;text-align:center;margin:20px 0}
-@media(max-width:640px){.wrap{padding:10px}header .num{font-size:26px}.brow{grid-template-columns:90px 1fr 54px 54px}.g2{grid-template-columns:1fr}}
-@media print{body{background:#fff;color:#000}.filters,.tabs,header button,.qb,.foot{display:none!important}.card,.kpi{border-color:#bbb;background:#fff}header{border-radius:0}td,th{color:#000!important}}
+.mast{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;border-bottom:2px solid var(--ink);padding-bottom:12px}
+.mast h1{font-family:var(--serif);font-size:40px;font-weight:700;letter-spacing:-.8px;line-height:1.05;margin-top:6px}
+.mast h1 .num{font-family:var(--sans);font-size:15px;font-weight:600;color:var(--dim);letter-spacing:0;margin-right:10px;vertical-align:.55em}
+.mast-r{text-align:right;font-size:13px;color:var(--muted);line-height:1.6;flex:none}
+.txtbtn{background:none;border:0;padding:0;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.txtbtn:hover{color:#63001f}
+
+/* -- Nav (report tabs) -- */
+.tabs{display:flex;align-items:flex-end;gap:24px;border-bottom:1px solid var(--rule);margin:0 0 4px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:12px 0 10px;font-size:14px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:var(--ink);font-weight:600;border-bottom-color:var(--accent)}
+.tabs .acts{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);padding:12px 0 10px;white-space:nowrap}
+.tabs .acts button{border:0;padding:0;margin:0;font-size:12px;font-weight:600;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+
+/* -- Filters (quiet row) -- */
+.filters{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end;padding:12px 0 14px;border-bottom:1px solid var(--rule2);margin-bottom:22px}
+.filters label.h{font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px}
+.filters select{background:var(--white);border:1px solid var(--rule);border-radius:2px;padding:5px 8px;color:var(--ink);font-size:13px}
+.tg{display:inline-flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden;background:var(--white)}
+.tg button{padding:5px 11px;border:0;border-left:1px solid var(--rule);font-size:12.5px;background:var(--white);color:var(--ink2);cursor:pointer}
+.tg button:first-child{border-left:0}
+.tg button.on{background:var(--accent);color:#fff}
+.btn{padding:5px 11px;border:1px solid var(--rule);border-radius:2px;font-size:12.5px;background:var(--white);color:var(--ink2);cursor:pointer}
+.btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.dd{position:relative}
+.ddp{position:absolute;z-index:20;top:100%;left:0;margin-top:6px;background:var(--white);border:1px solid var(--rule);border-radius:2px;padding:10px;max-height:340px;overflow:auto;width:300px;box-shadow:0 8px 22px rgba(28,27,25,.10)}
+.ddp label{display:flex;gap:8px;align-items:center;padding:5px 2px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--rule2)}
+.ddp label:last-child{border-bottom:0}
+.ddp .tag{font-size:11px;color:var(--dim);margin-left:auto}
+
+/* -- Stat line (KPIs) -- */
+.kpis{display:flex;flex-wrap:wrap;margin:0 0 30px}
+.kpi{flex:1 1 0;min-width:130px;padding:0 18px;border-left:1px solid var(--rule)}
+.kpi:first-child{border-left:none;padding-left:0}
+.kpi .v{font-family:var(--serif);font-size:38px;font-weight:700;letter-spacing:-1px;line-height:1;font-variant-numeric:tabular-nums lining-nums}
+.kpi .l{font-size:12.5px;color:var(--ink2);margin-top:7px;font-weight:500}
+.kpi .m{font-size:11.5px;color:var(--muted);margin-top:2px}
+
+/* -- Sections -- */
+.card{margin:0 0 34px;min-width:0}
+h3{font-family:var(--sans);font-size:11.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink);border-bottom:1px solid var(--ink);padding-bottom:6px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+h3 .m{font-size:11.5px}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-size:11.5px;font-weight:600;color:var(--muted);text-align:left;padding:8px 8px 7px;border-bottom:1px solid var(--rule);white-space:nowrap;vertical-align:bottom}
+th.n{text-align:right} th.c{text-align:center}
+th:first-child,td:first-child{padding-left:0}
+td{padding:8px 8px;border-bottom:1px solid var(--rule2);white-space:nowrap}
+td b{font-weight:600}
+tr.tot td{border-top:1.5px solid var(--ink);border-bottom:none;font-weight:700;color:var(--ink)}
+tr.tot td b{font-weight:700}
+tr.dim td{color:var(--dim);font-style:italic}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:0 40px}
+.big{font-family:var(--serif);font-size:32px;font-weight:700;letter-spacing:-.6px;line-height:1.05;margin-top:3px}
+.bigs{display:flex;gap:30px;flex-wrap:wrap;margin:10px 0 14px}
+.bigs .m{font-size:12px}
+.note{margin-top:10px;font-size:13.5px;color:var(--ink2)}
+.foot-note{margin-top:8px;font-size:12px;color:var(--muted)}
+
+/* bars / tiles / key */
+.brow{display:grid;grid-template-columns:170px 1fr 64px 64px;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule2)}
+.btrack{height:6px;background:var(--rule2);overflow:hidden}
+.bfill{height:100%;background:var(--accent)}
+.bv{font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.rots{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--rule);border-left:1px solid var(--rule);margin-top:10px}
+.rot{border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:12px 10px;text-align:center;background:var(--white)}
+.rl{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--muted)}
+.rv{font-family:var(--serif);font-size:26px;font-weight:700;letter-spacing:-.5px;line-height:1.1;margin:2px 0}
+.rot .m{font-size:11px}
+.setkey{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 26px;margin-top:8px}
+.setkey div{font-size:13px;line-height:1.45;padding:3px 0;border-bottom:1px solid var(--rule2)}
+.mix{display:flex;height:6px;width:160px;overflow:hidden;background:var(--rule2)}
+.empty{color:var(--muted);padding:16px 0;font-family:var(--serif);font-style:italic;font-size:15px}
+.help{background:var(--tint);border-left:3px solid var(--accent);padding:10px 14px;font-size:13px;line-height:1.55;color:var(--ink2);margin:8px 0 12px;display:none}
+.help b{color:var(--ink)}
+.qb{width:18px;height:18px;border-radius:50%;border:1px solid var(--rule);background:var(--white);color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:16px;padding:0;letter-spacing:0}
+.qb:hover{border-color:var(--accent);color:var(--accent)}
+.phase{display:flex;flex-wrap:wrap;margin:0 0 18px}
+.foot{color:var(--dim);font-size:12px;text-align:left;margin:30px 0 0;padding-top:12px;border-top:1px solid var(--rule)}
+
+/* -- Phones -- */
+@media(max-width:760px){
+  .wrap{padding:18px 16px 30px}
+  .mast{flex-direction:column;align-items:flex-start;gap:8px}
+  .mast h1{font-size:30px}
+  .mast-r{text-align:left}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;row-gap:18px}
+  .kpi{padding:0 14px}
+  .kpi:nth-child(odd){border-left:none;padding-left:0}
+  .kpi .v{font-size:30px}
+  .g2{grid-template-columns:1fr}
+  .brow{grid-template-columns:110px 1fr 54px 54px;gap:8px}
+  .filters{gap:14px}
+  .tabs{gap:18px}
+  .big{font-size:27px}
+}
+@media print{.filters,.tabs,.mast .txtbtn,.qb,.foot{display:none!important}body{background:#fff}}
 </style></head>
 <body>
 
 <div id="login"><div class="lbox">
-  <div class="logo">LOYOLA VOLLEYBALL</div><div class="m">Player Reports</div>
-  <label for="lp">Player</label><select id="lp"><option value="">Loading…</option></select>
+  <div class="kicker">Player Reports</div>
+  <div class="logo">Loyola Volleyball</div>
+  <div class="sub">Loyola Men's Volleyball, your personal stats</div>
+  <label for="lp">Player</label><select id="lp"><option value="">Loading...</option></select>
   <label for="lpw">Password</label><input id="lpw" type="password" autocomplete="current-password" placeholder="xxxx-xxxx-xxxx">
   <button id="lbtn" onclick="signIn()">Sign in</button>
   <div id="lerr"></div>
-  <div class="m" style="margin-top:8px;text-align:center">Forgot your password? Ask Coach.</div>
+  <div class="help-line">Forgot your password? Ask Coach.</div>
 </div></div>
 
 <div id="app"><div class="wrap">
-  <header><div class="num" id="h-num"></div><div><h2 id="h-name"></h2><div style="font-size:12px;opacity:.85" id="h-sub"></div></div><button onclick="signOut()">Sign out</button></header>
+  <header class="mast">
+    <div><div class="kicker" id="h-kicker">Loyola Men's Volleyball</div><h1><span class="num" id="h-num"></span><span id="h-name"></span></h1></div>
+    <div class="mast-r"><div id="h-sub"></div><div id="h-upd"></div><button class="txtbtn" onclick="signOut()">Sign out</button></div>
+  </header>
+  <div class="tabs" id="tabs"></div>
   <div class="filters">
     <div><label class="h">Season</label><select id="f-season" onchange="setF('season',this.value)"></select></div>
-    <div><label class="h">Session Type</label><span class="tg" id="f-type"></span></div>
+    <div><label class="h">Session type</label><span class="tg" id="f-type"></span></div>
     <div class="dd"><label class="h">Sessions</label><button class="btn" id="f-sess-btn" onclick="toggleSess(event)"></button><div class="ddp" id="f-sess" style="display:none" onclick="event.stopPropagation()"></div></div>
     <div id="f-set-wrap"><label class="h">Set</label><select id="f-set" onchange="setF('set',this.value)"></select></div>
-    <div><label class="h">Pass Scale</label><span class="tg" id="f-scale"></span></div>
+    <div><label class="h">Pass scale</label><span class="tg" id="f-scale"></span></div>
   </div>
   <div class="kpis" id="kpis"></div>
-  <div class="tabs" id="tabs"></div>
   <div id="panel"></div>
   <div class="foot" id="foot"></div>
 </div></div>
 
 <script>
 'use strict';
-// ── Decrypt (matches build_player_portal.py) ─────────────────────────────────
+// -- Decrypt (matches build_player_portal.py) ---------------------------------
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 async function unlock(file, pw) {
   const salt = b64(file.salt), nonce = b64(file.nonce), ct = b64(file.ct), tag = b64(file.tag);
@@ -118,7 +212,7 @@ async function signIn(auto) {
   if (!id) { err.textContent = 'Select your name.'; return; }
   if (!pw) { err.textContent = 'Enter your password.'; return; }
   if (!window.crypto?.subtle || !window.DecompressionStream) { err.textContent = 'This browser is too old. Update Safari/Chrome and try again.'; return; }
-  btn.disabled = true; btn.textContent = 'Unlocking…'; err.textContent = '';
+  btn.disabled = true; btn.textContent = 'Unlocking...'; err.textContent = '';
   try {
     const f = await (await fetch(`player_data/${id}.json`, { cache: 'no-cache' })).json();
     PD = await unlock(f, pw);
@@ -133,7 +227,7 @@ async function signIn(auto) {
 function signOut() { PD = null; ss.del('luc_pp'); location.reload(); }
 document.getElementById('lpw').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
 
-// ── State ────────────────────────────────────────────────────────────────────
+// -- State --------------------------------------------------------------------
 const F = { season: null, type: 'match', sel: null, set: 'all', scale: '4', tab: 'servrcv', sdPhase: 'all' };
 const POS = { '1': 'Libero', '2': 'Outside Hitter', '3': 'Opposite', '4': 'Middle', '5': 'Setter' };
 const POSG = { '1': 'LIBEROS', '2': 'OUTSIDES', '3': 'OPPOSITES', '4': 'MIDDLES', '5': 'SETTERS' };
@@ -148,13 +242,14 @@ function startApp() {
   document.getElementById('h-num').textContent = '#' + num;
   document.getElementById('h-name').textContent = p.name;
   if (!PD.sessions.some(s => s.se === F.season && s.t === 'match')) F.type = 'both';
-  document.getElementById('foot').textContent = 'Data updated ' + PD.gen + ' · only your own stats are in this page';
+  document.getElementById('foot').textContent = 'Data updated ' + PD.gen + ', only your own stats are in this page';
+  document.getElementById('h-upd').textContent = 'Updated ' + PD.gen;
   document.addEventListener('click', () => { document.getElementById('f-sess').style.display = 'none'; });
   render();
 }
 function setF(k, v) { F[k] = v; if (k === 'season' || k === 'type') { F.sel = null; F.set = 'all'; } render(); }
 
-// ── Data selection + aggregation ─────────────────────────────────────────────
+// -- Data selection + aggregation ---------------------------------------------
 function inScope() { return PD.sessions.filter(s => (F.season === 'all' || s.se === F.season) && (F.type === 'both' || s.t === F.type)); }
 function selected() { return inScope().filter(s => !F.sel || F.sel.has(s.id)); }
 function addInto(dst, src) {
@@ -192,11 +287,18 @@ function aggregate() {
   return A;
 }
 
-// ── Formatting helpers ───────────────────────────────────────────────────────
-const pct = (x, n) => n ? (x / n * 100).toFixed(1) + '%' : '—';
+// -- Formatting helpers -------------------------------------------------------
+const pct = (x, n) => n ? (x / n * 100).toFixed(1) + '%' : '-';
 const effv = (k, e, b, a) => a ? (k - e - b) / a : null;
-const fE = v => v === null || v === undefined ? '—' : (v * 100).toFixed(1) + '%';
-const fS = v => v === null || v === undefined ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+// Efficiency, volleyball style: .340 / -.050 / 1.000 (formula stays (K - E - BLK) / Att).
+// signed=true is for differences (EOE, Eff change): +.034 / -.021.
+function fmtEff3(v, signed) {
+  if (v === null || v === undefined || !isFinite(v)) return '-';
+  const r = Math.round(v * 1000) / 1000, a = Math.abs(r);
+  const body = a >= 1 ? a.toFixed(3) : a.toFixed(3).replace(/^0/, '');
+  if (signed) return (r > 0 ? '+' : r < 0 ? '\u2212' : '') + body;
+  return (r < 0 ? '-' : '') + body;
+}
 const ec = v => v === null ? '' : v >= 0.30 ? 'g' : v < 0.10 ? 'r' : '';
 const evA = (ev, n) => ({ k: ev?.['#'] || 0, e: ev?.['='] || 0, b: ev?.['/'] || 0, a: n || 0 });
 function passPts(ev) { ev = ev || {}; return F.scale === '4' ? 4 * (ev['#'] || 0) + 3 * (ev['+'] || 0) + 2 * (ev['!'] || 0) + (ev['-'] || 0) + 0.5 * (ev['/'] || 0)
@@ -239,18 +341,18 @@ const SET_INFO = {
 const cname = c => (SET_INFO[c] || [])[0] || (PD.cn || {})[c] || '';
 const cdesc = c => (SET_INFO[c] || [])[1] || (PD.cn || {})[c] || '';
 const setCell = c => `<b title="${esc(cdesc(c))}">${c}</b> <span class="m">${esc(cname(c))}</span>`;          // row label
-const setHead = c => `<th class="n" title="${esc(cdesc(c))}">${c}<br><span style="text-transform:none;letter-spacing:0;color:#bbb">${esc(cname(c))}</span></th>`;  // column header
+const setHead = c => `<th class="n" title="${esc(cdesc(c))}">${c}<br><span style="font-weight:400;color:var(--dim)">${esc(cname(c))}</span></th>`;  // column header
 function setKey(codes) {                       // legend card so phones (no hover) still see what each code means
   const list = [...new Set(codes)].filter(c => c && c !== 'OVR' && cdesc(c));
   if (!list.length) return '';
-  return card('Set Type Key', `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px 18px">${list.map(c =>
-    `<div style="font-size:12px;line-height:1.4"><b class="gold">${c}</b> <b>${esc(cname(c))}</b> <span class="m" style="font-size:12px">— ${esc(cdesc(c))}</span></div>`).join('')}</div>`);
+  return card('Set Type Key', `<div class="setkey">${list.map(c =>
+    `<div><b class="acc">${c}</b> <b>${esc(cname(c))}</b> <span class="m" style="font-size:13px">- ${esc(cdesc(c))}</span></div>`).join('')}</div>`);
 }
 function atkRow(label, r, cls = '') {
   const e = effv(r.k, r.e, r.b ?? r.bk ?? 0, r.a);
-  return `<tr class="${cls}"><td>${label}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.b ?? r.bk ?? 0}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${pct(r.k, r.a)}</td></tr>`;
+  return `<tr class="${cls}"><td>${label}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.b ?? r.bk ?? 0}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fmtEff3(e)}</b></td><td class="n">${pct(r.k, r.a)}</td></tr>`;
 }
-const ATK_H = '<th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th><th class="n">K%</th>';
+const ATK_H = '<th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF</th><th class="n">K%</th>';
 const card = (title, body, extra = '') => `<div class="card"><h3>${title}${extra}</h3>${body}</div>`;
 const helpBtn = id => ` <button class="qb" onclick="const e=document.getElementById('${id}');e.style.display=e.style.display==='block'?'none':'block'">?</button>`;
 const tbl = (head, rows) => `<div class="tw"><table><tr>${head}</tr>${rows}</table></div>`;
@@ -259,7 +361,7 @@ function bucketLbl(b) {
   return L[b] || ({ fboth: 'Other first ball', transition: 'Transition', fbso: 'First ball' }[b]) || b;
 }
 
-// ── Filters UI ───────────────────────────────────────────────────────────────
+// -- Filters UI ---------------------------------------------------------------
 function renderFilters() {
   const p = PD.player;
   const sSel = document.getElementById('f-season');
@@ -267,17 +369,18 @@ function renderFilters() {
   sSel.value = F.season;
   const num = F.season === 'all' ? p.nums[PD.seasons[PD.seasons.length - 1]] : p.nums[F.season];
   document.getElementById('h-num').textContent = '#' + num;
-  document.getElementById('h-sub').textContent = (POS[p.pos] || '') + ' · ' + (F.season === 'all' ? 'All seasons' : F.season);
+  document.getElementById('h-sub').textContent = (POS[p.pos] || '') + ', ' + (F.season === 'all' ? 'All seasons' : F.season);
+  document.getElementById('h-kicker').textContent = "Loyola Men's Volleyball, " + (F.season === 'all' ? 'All seasons' : F.season);
   document.getElementById('f-type').innerHTML = [['match', 'Matches'], ['practice', 'Practices'], ['both', 'Both']]
     .map(([v, l]) => `<button class="${F.type === v ? 'on' : ''}" onclick="setF('type','${v}')">${l}</button>`).join('');
   document.getElementById('f-scale').innerHTML = [['4', '4-pt'], ['3', '3-pt']]
     .map(([v, l]) => `<button class="${F.scale === v ? 'on' : ''}" onclick="setF('scale','${v}')">${l}</button>`).join('');
   const sc = inScope(), n = F.sel ? sc.filter(s => F.sel.has(s.id)).length : sc.length;
   const noun = F.type === 'match' ? 'matches' : F.type === 'practice' ? 'practices' : 'sessions';
-  document.getElementById('f-sess-btn').innerHTML = (F.sel ? `${n} of ${sc.length} ${noun}` : `All ${sc.length} ${noun}`) + ' <span style="opacity:.6">▾</span>';
+  document.getElementById('f-sess-btn').innerHTML = (F.sel ? `${n} of ${sc.length} ${noun}` : `All ${sc.length} ${noun}`) + ' <span style="opacity:.6"></span>';
   const fmtD = d => new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   document.getElementById('f-sess').innerHTML = `<div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn" onclick="sessAll(true)">All</button><button class="btn" onclick="sessAll(false)">None</button></div>` +
-    sc.slice().reverse().map(s => `<label><input type="checkbox" ${!F.sel || F.sel.has(s.id) ? 'checked' : ''} onchange="sessToggle('${esc(s.id).replace(/'/g, "\\'")}',this.checked)"> ${fmtD(s.d)} · ${s.t === 'match' ? 'vs ' : ''}${esc(s.o)}<span class="tag">${s.t === 'match' ? 'Match' : 'Practice'}</span></label>`).join('');
+    sc.slice().reverse().map(s => `<label><input type="checkbox" ${!F.sel || F.sel.has(s.id) ? 'checked' : ''} onchange="sessToggle('${esc(s.id).replace(/'/g, "\\'")}',this.checked)"> ${fmtD(s.d)}, ${s.t === 'match' ? 'vs ' : ''}${esc(s.o)}<span class="tag">${s.t === 'match' ? 'Match' : 'Practice'}</span></label>`).join('');
   // Set filter (matches only)
   const sets = new Set(); selected().forEach(s => { if (s.t === 'match') Object.keys(s.s || {}).forEach(k => sets.add(+k)); });
   const showSet = sets.size > 0;
@@ -291,7 +394,7 @@ function sessToggle(id, on) { const all = inScope().map(s => s.id); if (!F.sel) 
 function sessAll(on) { F.sel = on ? null : new Set(); renderKeepOpen(); }
 function renderKeepOpen() { render(); document.getElementById('f-sess').style.display = 'block'; }
 
-// ── Main render ──────────────────────────────────────────────────────────────
+// -- Main render --------------------------------------------------------------
 let AG = null;
 function render() {
   renderFilters();
@@ -299,42 +402,42 @@ function render() {
   const sk = AG.sk, A = sk.A || {}, S = sk.S || {}, R = sk.R || {}, B = sk.B || {}, D = sk.D || {}, E = sk.E || {};
   const a = evA(A.ev, A.n), aE = effv(a.k, a.e, a.b, a.a);
   const k = [];
-  if (A.n) k.push(['Attack Eff', `<span class="${ec(aE)}">${fE(aE)}</span>`, `${A.n} att · K% ${pct(a.k, a.a)}`]);
+  if (A.n) k.push(['Attack efficiency', `<span class="${ec(aE)}">${fmtEff3(aE)}</span>`, `${A.n} att, kill ${pct(a.k, a.a)}`]);
   if (PD.player.setter && E.n) k.push(['Sets', E.n, `${(E.ev || {})['='] || 0} set errors`]);
-  if (S.n) k.push(['Serve Ace %', pct(S.ev['#'] || 0, S.n), `${S.ev['#'] || 0} aces / ${S.n} serves`]);
-  if (S.n) k.push(['Serve Error %', `<span class="r">${pct(S.ev['='] || 0, S.n)}</span>`, `${S.ev['='] || 0} errors`]);
-  if (R.n) { const pv = passAvg(R.ev, R.n); k.push(['Pass Avg', `<span class="${pac(pv)}">${pv.toFixed(2)}</span>`, `${R.n} passes · ${F.scale}-pt scale`]); }
-  if (B.n) k.push(['Block Kills', (B.ev || {})['#'] || 0, `${B.n} block touches`]);
+  if (S.n) k.push(['Ace rate', pct(S.ev['#'] || 0, S.n), `${S.ev['#'] || 0} aces, ${S.n} serves`]);
+  if (S.n) k.push(['Serve error rate', pct(S.ev['='] || 0, S.n), `${S.ev['='] || 0} errors`]);
+  if (R.n) { const pv = passAvg(R.ev, R.n); k.push(['Pass average', `<span class="${pac(pv)}">${pv.toFixed(2)}</span>`, `${R.n} passes, ${F.scale}-pt scale`]); }
+  if (B.n) k.push(['Block kills', (B.ev || {})['#'] || 0, `${B.n} block touches`]);
   if (D.n) k.push(['Digs', D.n - ((D.ev || {})['='] || 0), `${D.n} dig attempts`]);
-  document.getElementById('kpis').innerHTML = AG.n ? k.map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="m">${s}</div></div>`).join('') : '';
+  document.getElementById('kpis').innerHTML = AG.n ? k.map(([l, v, s]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div><div class="m">${s}</div></div>`).join('') : '';
   const TABS = [['servrcv', 'Serve & Receive'], ['attack', 'Attack by Set Type'], ['setter', 'Attack by Setter'], ['rot', 'Attack by Rotation'], ['blk', 'Block & Defense'], ['adv', 'Advanced']];
   if (PD.player.setter) TABS.splice(3, 0, ['dist', 'Setter Breakdown']);
   if (!TABS.some(t => t[0] === F.tab)) F.tab = 'servrcv';
   document.getElementById('tabs').innerHTML = TABS.map(([v, l]) => `<button data-tab="${v}" class="${F.tab === v ? 'on' : ''}" onclick="F.tab='${v}';render()">${l}</button>`).join('') +
-    `<button style="margin-left:auto" onclick="exportPortalPDF(false)" title="Save this report as a one-page PDF">⤓ PDF – this tab</button><button onclick="exportPortalPDF(true)" title="Every report, one page each">⤓ PDF – all reports</button>`;
+    `<span class="acts">Save PDF <button onclick="exportPortalPDF(false)" title="Save this report as a one-page PDF">This tab</button><button onclick="exportPortalPDF(true)" title="Every report, packed onto as few pages as possible">All reports</button></span>`;
   const P = document.getElementById('panel');
   if (!AG.n) { P.innerHTML = '<div class="card empty">No data for these filters.</div>'; return; }
   P.innerHTML = ({ servrcv: tabServe, attack: tabAttack, setter: tabSetter, dist: tabDist, rot: tabRot, blk: tabBlock, adv: tabAdv })[F.tab]();
 }
 
-// ── Serve & Receive ──────────────────────────────────────────────────────────
+// -- Serve & Receive ----------------------------------------------------------
 function tabServe() {
   const sk = AG.sk; let html = '';
   const srow = (lbl, r) => { if (!r || !r.n) return ''; const ev = r.ev || {}; const avg = (3 * (ev['#'] || 0) + 2 * (ev['+'] || 0) + 2 * (ev['/'] || 0) + (ev['-'] || 0)) / r.n;
     return `<tr><td>${lbl}</td><td class="n">${r.n}</td><td class="n g">${ev['#'] || 0}</td><td class="n">${ev['+'] || 0}</td><td class="n">${ev['/'] || 0}</td><td class="n">${ev['-'] || 0}</td><td class="n r">${ev['='] || 0}</td><td class="n"><b>${pct(ev['#'] || 0, r.n)}</b></td><td class="n r">${pct(ev['='] || 0, r.n)}</td><td class="n">${avg.toFixed(2)}</td></tr>`; };
   if (sk.S && sk.S.n) html += card('Serving', tbl('<th></th><th class="n">Att</th><th class="n">Ace</th><th class="n">Pos (+)</th><th class="n">Over (/)</th><th class="n">Neg (-)</th><th class="n">Err</th><th class="n">Ace%</th><th class="n">Err%</th><th class="n">Srv Avg</th>',
-    srow('All serves', sk.S) + srow('Float', sk.SM) + srow('Topspin / jump', sk.SQ)) + '<div class="m" style="margin-top:6px">Serve avg: ace 3 · positive/overpass 2 · negative 1 · error 0.</div>');
+    srow('All serves', sk.S) + srow('Float', sk.SM) + srow('Topspin / jump', sk.SQ)) + '<div class="foot-note">Serve avg: ace 3, positive/overpass 2, negative 1, error 0.</div>');
   const four = F.scale === '4';
   const cats = four ? ['perf', 'good', 'med', 'oos', 'over', 'err'] : ['perf', 'good', 'oos', 'over', 'err'];
-  const pv = four ? { perf: 4, good: 3, med: 2, oos: 1, over: '½', err: 0 } : { perf: 3, good: 2, oos: 1, over: '½', err: 0 };
+  const pv = four ? { perf: 4, good: 3, med: 2, oos: 1, over: '0.5', err: 0 } : { perf: 3, good: 2, oos: 1, over: '0.5', err: 0 };
   const CN = { perf: 'Perf', good: 'Good', med: 'Med', oos: 'OoS', over: 'Over', err: 'Err' };
   const catOf = r => { const c = r.cat ? { ...r.cat } : { perf: r.ev['#'] || 0, good: r.ev['+'] || 0, med: r.ev['!'] || 0, oos: r.ev['-'] || 0, over: r.ev['/'] || 0, err: r.ev['='] || 0 }; if (!four) { c.good = (c.good || 0) + (c.med || 0); c.med = 0; } return c; };
   const rrow = (lbl, r) => { if (!r || !r.n) return ''; const c = catOf(r); const av = passAvg(r.ev, r.n);
     return `<tr><td>${lbl}</td><td class="n">${r.n}</td>${cats.map(k => `<td class="n">${c[k] || 0}</td>`).join('')}<td class="n ${pac(av)}"><b>${av.toFixed(2)}</b></td><td class="n">${pct((c.perf || 0) + (c.good || 0), r.n)}</td><td class="n r">${pct(c.err || 0, r.n)}</td></tr>`; };
   if (sk.R && sk.R.n) {
-    html += card('Reception', tbl(`<th></th><th class="n">Att</th>${cats.map(k => `<th class="n">${CN[k]} · ${pv[k]}</th>`).join('')}<th class="n">Pass Avg</th><th class="n">Perf+Good%</th><th class="n">Err%</th>`,
+    html += card('Reception', tbl(`<th></th><th class="n">Att</th>${cats.map(k => `<th class="n">${CN[k]}, ${pv[k]}</th>`).join('')}<th class="n">Pass Avg</th><th class="n">Perf+Good%</th><th class="n">Err%</th>`,
       rrow('All passes', sk.R) + rrow('vs Float', sk.RM) + rrow('vs Topspin', sk.RQ)) +
-      (AG.fb[0] ? `<div style="margin-top:10px">First-ball sideout when you passed: <b class="gold">${pct(AG.fb[1], AG.fb[0])}</b> <span class="m">(${AG.fb[1]} kills on ${AG.fb[0]} passes)</span></div>` : ''));
+      (AG.fb[0] ? `<div class="note">First-ball sideout when you passed: <b class="gold">${pct(AG.fb[1], AG.fb[0])}</b> <span class="m">(${AG.fb[1]} kills on ${AG.fb[0]} passes)</span></div>` : ''));
     const zs = Object.entries(AG.rz).filter(([, v]) => v.n);
     if (zs.length) html += card('Passing by Zone', tbl('<th>Zone</th><th class="n">Att</th><th class="n">Pass Avg</th><th class="n">Perf%</th><th class="n">Err%</th>',
       zs.sort((a, b) => a[0] - b[0]).map(([z, v]) => { const av = passAvg(v.ev, v.n); return `<tr><td>Zone ${z}</td><td class="n">${v.n}</td><td class="n ${pac(av)}"><b>${av.toFixed(2)}</b></td><td class="n">${pct(v.ev['#'] || 0, v.n)}</td><td class="n r">${pct(v.ev['='] || 0, v.n)}</td></tr>`; }).join('')));
@@ -343,11 +446,11 @@ function tabServe() {
   const rk = ['1', '2', '3', '4', '5', '6'].filter(r => (rs[r] && rs[r].att) || (rr[r] && rr[r].att));
   if (rk.length) html += card('By Rotation', tbl('<th>Rotation</th><th class="n">Serves</th><th class="n">Ace</th><th class="n">Err</th><th class="n">Passes</th><th class="n">Pass Avg</th>',
     rk.map(r => { const s = rs[r] || {}, p = rr[r] || {}; const av = p.att ? catPts(four ? p : { ...p, good: (p.good || 0) + (p.med || 0), med: 0 }) / p.att : null;
-      return `<tr><td>R${r}</td><td class="n">${s.att || '—'}</td><td class="n g">${s.att ? s.ace : ''}</td><td class="n r">${s.att ? s.err : ''}</td><td class="n">${p.att || '—'}</td><td class="n ${pac(av)}">${av === null ? '—' : av.toFixed(2)}</td></tr>`; }).join('')) + '<div class="m" style="margin-top:6px">Matches only.</div>');
+      return `<tr><td>R${r}</td><td class="n">${s.att || '-'}</td><td class="n g">${s.att ? s.ace : ''}</td><td class="n r">${s.att ? s.err : ''}</td><td class="n">${p.att || '-'}</td><td class="n ${pac(av)}">${av === null ? '-' : av.toFixed(2)}</td></tr>`; }).join('')) + '<div class="foot-note">Matches only.</div>');
   return html || card('Serve & Receive', '<div class="empty">No serves or passes in these sessions.</div>');
 }
 
-// ── Attack by set type (+ by pass before the attack) ─────────────────────────
+// -- Attack by set type (+ by pass before the attack) -------------------------
 function tabAttack() {
   const A = AG.sk.A;
   if (!A || !A.n) return card('Attack by Set Type', '<div class="empty">No attacks in these sessions.</div>');
@@ -375,7 +478,7 @@ function hitterCells() {    // his attacks by situation from the touch log: sit 
   return out;
 }
 
-// ── Attack by setter (his own attacks only) ──────────────────────────────────
+// -- Attack by setter (his own attacks only) ----------------------------------
 function tabSetter() {
   const bs = AG.bs; const keys = Object.keys(bs).filter(k => bs[k].OVR && bs[k].OVR.a);
   if (!keys.length) return card('Attack by Setter', '<div class="empty">No attacks in these sessions.</div>');
@@ -384,74 +487,74 @@ function tabSetter() {
   const tot = { k: 0, e: 0, bk: 0, a: 0 }; keys.forEach(k => ['k', 'e', 'bk', 'a'].forEach(f => tot[f] += bs[k].OVR[f] || 0));
   const rows = real.map(k => atkRow(lab(k), bs[k].OVR)).join('') + ['OTHER', 'MISC'].filter(k => keys.includes(k)).map(k => atkRow(lab(k), bs[k].OVR, 'dim')).join('') + atkRow('TOTAL', tot, 'tot');
   const bars = real.map(k => { const r = bs[k].OVR, e = effv(r.k, r.e, r.bk, r.a);
-    return `<div class="brow"><div style="font-size:12px;overflow:hidden;text-overflow:ellipsis">${lab(k)}</div><div class="btrack"><div class="bfill" style="width:${Math.max(0, Math.min(1, (e || 0) / 0.6)) * 100}%"></div></div><div class="bv">${fE(e)}</div><div class="m n">${r.a} att</div></div>`; }).join('');
+    return `<div class="brow"><div style="font-size:12px;overflow:hidden;text-overflow:ellipsis">${lab(k)}</div><div class="btrack"><div class="bfill" style="width:${Math.max(0, Math.min(1, (e || 0) / 0.6)) * 100}%"></div></div><div class="bv">${fmtEff3(e)}</div><div class="m n">${r.a} att</div></div>`; }).join('');
   const combos = [...new Set(real.flatMap(k => Object.keys(bs[k]).filter(c => c !== 'OVR')))].sort((a, b) => real.reduce((s, k) => s + (bs[k][b]?.a || 0), 0) - real.reduce((s, k) => s + (bs[k][a]?.a || 0), 0));
-  const mx = `<div class="tw"><table><tr><th></th>${real.map(k => `<th colspan="5" class="c" style="border-left:2px solid #333">${lab(k)}</th>`).join('')}</tr>
-    <tr><th>Set type</th>${real.map(() => '<th class="n" style="border-left:2px solid #333">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF%</th>').join('')}</tr>
-    ${combos.map(c => `<tr><td>${setCell(c)}</td>${real.map(k => { const v = bs[k][c]; if (!v || !v.a) return '<td class="n m" colspan="5" style="border-left:2px solid #333">—</td>'; const e = effv(v.k, v.e, v.bk, v.a);
-      return `<td class="n" style="border-left:2px solid #333">${v.k}</td><td class="n">${v.e}</td><td class="n">${v.bk}</td><td class="n">${v.a}</td><td class="n ${ec(e)}">${fE(e)}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
-  return `<div class="g2">${card('Attack by Setter', tbl('<th>Setter</th>' + ATK_H, rows) + '<div class="m" style="margin-top:8px">Other = second-ball / out-of-system sets by non-setters. MISC = the setter couldn\'t be identified in the code.</div>')}${card('Efficiency by Setter', bars)}</div>` + card('Set Type × Setter', mx) + setKey(combos);
+  const mx = `<div class="tw"><table><tr><th></th>${real.map(k => `<th colspan="5" class="c" style="border-left:1px solid var(--rule)">${lab(k)}</th>`).join('')}</tr>
+    <tr><th>Set type</th>${real.map(() => '<th class="n" style="border-left:1px solid var(--rule)">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF</th>').join('')}</tr>
+    ${combos.map(c => `<tr><td>${setCell(c)}</td>${real.map(k => { const v = bs[k][c]; if (!v || !v.a) return '<td class="n m" colspan="5" style="border-left:1px solid var(--rule)">-</td>'; const e = effv(v.k, v.e, v.bk, v.a);
+      return `<td class="n" style="border-left:1px solid var(--rule)">${v.k}</td><td class="n">${v.e}</td><td class="n">${v.bk}</td><td class="n">${v.a}</td><td class="n ${ec(e)}">${fmtEff3(e)}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  return `<div class="g2">${card('Attack by Setter', tbl('<th>Setter</th>' + ATK_H, rows) + '<div class="foot-note">Other = second-ball / out-of-system sets by non-setters. MISC = the setter couldn\'t be identified in the code.</div>')}${card('Efficiency by Setter', bars)}</div>` + card('Set Type by Setter', mx) + setKey(combos);
 }
 
-// ── Setter breakdown (setters only: full distribution) ───────────────────────
+// -- Setter breakdown (setters only: full distribution) -----------------------
 function tabDist() {
   const sd = AG.sd; const phases = ['all', 'fbso', 'perf', 'good', 'med', 'oos', 'transition'].filter(p => Object.values(sd).some(h => h[p]));
   if (!Object.keys(sd).length) return card('Setter Breakdown', '<div class="empty">No sets in these sessions.</div>');
   if (!phases.includes(F.sdPhase)) F.sdPhase = 'all';
   const PL = { all: 'All', fbso: 'First ball', perf: bucketLbl('perf'), good: bucketLbl('good'), med: bucketLbl('med'), oos: bucketLbl('oos'), transition: 'Transition' };
-  const btns = `<div class="tg" style="margin-bottom:10px;flex-wrap:wrap">${phases.map(p => `<button class="${F.sdPhase === p ? 'on' : ''}" onclick="F.sdPhase='${p}';render()">${PL[p]}</button>`).join('')}</div>`;
+  const btns = `<div class="phase"><div class="tg" style="flex-wrap:wrap">${phases.map(p => `<button class="${F.sdPhase === p ? 'on' : ''}" onclick="F.sdPhase='${p}';render()">${PL[p]}</button>`).join('')}</div></div>`;
   const ph = F.sdPhase;
   const hit = Object.keys(sd).filter(h => h !== 'OVR' && sd[h][ph] && sd[h][ph].OVR && sd[h][ph].OVR.a).sort((a, b) => sd[b][ph].OVR.a - sd[a][ph].OVR.a);
   const tot = { k: 0, e: 0, bk: 0, a: 0 }; hit.forEach(h => ['k', 'e', 'bk', 'a'].forEach(f => tot[f] += sd[h][ph].OVR[f] || 0));
   const rows = hit.map(h => { const r = sd[h][ph].OVR, e = effv(r.k, r.e, r.bk, r.a);
-    return `<tr><td>${esc(h)}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.bk}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${pct(r.k, r.a)}</td><td class="n gold">${pct(r.a, tot.a)}</td></tr>`; }).join('') +
-    `<tr class="tot"><td>TOTAL</td><td class="n">${tot.k}</td><td class="n">${tot.e}</td><td class="n">${tot.bk}</td><td class="n">${tot.a}</td><td class="n">${fE(effv(tot.k, tot.e, tot.bk, tot.a))}</td><td class="n">${pct(tot.k, tot.a)}</td><td class="n">100%</td></tr>`;
+    return `<tr><td>${esc(h)}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.bk}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fmtEff3(e)}</b></td><td class="n">${pct(r.k, r.a)}</td><td class="n">${pct(r.a, tot.a)}</td></tr>`; }).join('') +
+    `<tr class="tot"><td>TOTAL</td><td class="n">${tot.k}</td><td class="n">${tot.e}</td><td class="n">${tot.bk}</td><td class="n">${tot.a}</td><td class="n">${fmtEff3(effv(tot.k, tot.e, tot.bk, tot.a))}</td><td class="n">${pct(tot.k, tot.a)}</td><td class="n">100%</td></tr>`;
   const combos = {}; hit.forEach(h => Object.entries(sd[h][ph]).forEach(([c, v]) => { if (c !== 'OVR') addInto(combos[c] || (combos[c] = {}), v); }));
-  const crow = Object.entries(combos).sort((a, b) => b[1].a - a[1].a).map(([c, v]) => atkRow(setCell(c), v) .replace('</tr>', `<td class="n gold">${pct(v.a, tot.a)}</td></tr>`)).join('');
+  const crow = Object.entries(combos).sort((a, b) => b[1].a - a[1].a).map(([c, v]) => atkRow(setCell(c), v) .replace('</tr>', `<td class="n">${pct(v.a, tot.a)}</td></tr>`)).join('');
   const cl = Object.keys(combos).sort((a, b) => combos[b].a - combos[a].a);
-  const mx = `<div class="tw"><table><tr><th>Hitter</th>${cl.map(setHead).join('')}</tr>${hit.map(h => `<tr><td>${esc(h)}</td>${cl.map(c => { const v = sd[h][ph][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  const mx = `<div class="tw"><table><tr><th>Hitter</th>${cl.map(setHead).join('')}</tr>${hit.map(h => `<tr><td>${esc(h)}</td>${cl.map(c => { const v = sd[h][ph][c]; if (!v || !v.a) return '<td class="n m">-</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fmtEff3(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
   return btns + `<div class="g2">${card('Distribution by Hitter', tbl('<th>Hitter</th>' + ATK_H + '<th class="n">Share</th>', rows))}${card('Distribution by Set Type', tbl('<th>Set type</th>' + ATK_H + '<th class="n">Share</th>', crow))}</div>` +
-    card('Hitter × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx) + setKey(cl);
+    card('Hitter by Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff, attempts</span>', mx) + setKey(cl);
 }
 
-// ── Rotation ─────────────────────────────────────────────────────────────────
+// -- Rotation -----------------------------------------------------------------
 function tabRot() {
   if (PD.player.setter) return tabRotSetter();
   const ra = AG.rot.a || {};
   const rk = ['1', '2', '3', '4', '5', '6'].filter(r => ra[r] && ra[r].OVR && ra[r].OVR.a);
   if (!rk.length) return card('Attack by Rotation', '<div class="empty">No rotation data (matches only).</div>');
-  const grid = ['4', '3', '2', '5', '6', '1'].map(r => { const v = (ra[r] || {}).OVR; if (!v || !v.a) return `<div class="rot"><div class="rl">R${r}</div><div class="rv m">—</div></div>`;
-    const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">R${r}</div><div class="rv ${ec(e)}">${fE(e)}</div><div class="m">${v.k}K · ${v.e}E · ${v.bk}BLK · ${v.a} att</div></div>`; }).join('');
+  const grid = ['4', '3', '2', '5', '6', '1'].map(r => { const v = (ra[r] || {}).OVR; if (!v || !v.a) return `<div class="rot"><div class="rl">R${r}</div><div class="rv m">-</div></div>`;
+    const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">R${r}</div><div class="rv ${ec(e)}">${fmtEff3(e)}</div><div class="m">${v.k}K, ${v.e}E, ${v.bk}BLK, ${v.a} att</div></div>`; }).join('');
   const rows = rk.map(r => atkRow('R' + r, ra[r].OVR)).join('');
   const cl = [...new Set(rk.flatMap(r => Object.keys(ra[r]).filter(c => c !== 'OVR')))].sort();
-  const mx = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(setHead).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => { const v = ra[r][c]; if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
-  return `<div class="g2">${card('Attack by Rotation', `<div class="rots">${grid}</div><div class="m" style="margin-top:8px">Laid out like the court: R4 · R3 · R2 front, R5 · R6 · R1 back.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
-    card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mx) + setKey(cl);
+  const mx = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(setHead).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => { const v = ra[r][c]; if (!v || !v.a) return '<td class="n m">-</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fmtEff3(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
+  return `<div class="g2">${card('Attack by Rotation', `<div class="rots">${grid}</div><div class="foot-note">Laid out like the court: R4, R3, R2 front, R5, R6, R1 back.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
+    card('Rotation by Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff, attempts</span>', mx) + setKey(cl);
 }
 
 // Setters: the team's attack by rotation on balls HE set
 function tabRotSetter() {
   const sr = AG.sr || {};
   const rk = ['1', '2', '3', '4', '5', '6'].filter(r => sr[r] && sr[r].c && sr[r].c.OVR && sr[r].c.OVR.a);
-  if (!rk.length) return card('Attack by Rotation — balls you set', '<div class="empty">No sets in matches for these filters (rotations are only coded in matches).</div>');
+  if (!rk.length) return card('Attack by Rotation - balls you set', '<div class="empty">No sets in matches for these filters (rotations are only coded in matches).</div>');
   const ov = r => sr[r].c.OVR;
-  const grid = ['4', '3', '2', '5', '6', '1'].map(r => { const v = sr[r] && sr[r].c.OVR; if (!v || !v.a) return `<div class="rot"><div class="rl">R${r}</div><div class="rv m">—</div></div>`;
-    const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">R${r}</div><div class="rv ${ec(e)}">${fE(e)}</div><div class="m">${v.k}K · ${v.e}E · ${v.bk}BLK · ${v.a} att</div></div>`; }).join('');
+  const grid = ['4', '3', '2', '5', '6', '1'].map(r => { const v = sr[r] && sr[r].c.OVR; if (!v || !v.a) return `<div class="rot"><div class="rl">R${r}</div><div class="rv m">-</div></div>`;
+    const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">R${r}</div><div class="rv ${ec(e)}">${fmtEff3(e)}</div><div class="m">${v.k}K, ${v.e}E, ${v.bk}BLK, ${v.a} att</div></div>`; }).join('');
   const tot = { k: 0, e: 0, bk: 0, a: 0 }; rk.forEach(r => ['k', 'e', 'bk', 'a'].forEach(f => tot[f] += ov(r)[f] || 0));
   const rows = rk.map(r => atkRow('R' + r, ov(r))).join('') + atkRow('TOTAL', tot, 'tot');
   const cl = [...new Set(rk.flatMap(r => Object.keys(sr[r].c).filter(c => c !== 'OVR')))]
     .sort((a, b) => rk.reduce((s, r) => s + (sr[r].c[b]?.a || 0), 0) - rk.reduce((s, r) => s + (sr[r].c[a]?.a || 0), 0));
   const hl = [...new Set(rk.flatMap(r => Object.keys(sr[r].h || {})))]
     .sort((a, b) => rk.reduce((s, r) => s + (sr[r].h[b]?.a || 0), 0) - rk.reduce((s, r) => s + (sr[r].h[a]?.a || 0), 0));
-  const cell = v => { if (!v || !v.a) return '<td class="n m">—</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fE(e)}</span> <span class="m">${v.a}</span></td>`; };
+  const cell = v => { if (!v || !v.a) return '<td class="n m">-</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e)}">${fmtEff3(e)}</span> <span class="m">${v.a}</span></td>`; };
   const mxC = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(setHead).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${cl.map(c => cell(sr[r].c[c])).join('')}</tr>`).join('')}</table></div>`;
   const mxH = `<div class="tw"><table><tr><th>Rotation</th>${hl.map(h => `<th class="n">${esc(h)}</th>`).join('')}</tr>${rk.map(r => `<tr><td>R${r}</td>${hl.map(h => cell((sr[r].h || {})[h])).join('')}</tr>`).join('')}</table></div>`;
-  return `<div class="g2">${card('Attack by Rotation — balls you set', `<div class="rots">${grid}</div><div class="m" style="margin-top:8px">Team attacks off your sets, by rotation. Laid out like the court: R4 · R3 · R2 front, R5 · R6 · R1 back. Matches only.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
-    card('Rotation × Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mxC) +
-    card('Rotation × Hitter <span class="m" style="text-transform:none;letter-spacing:0">eff% · attempts</span>', mxH) + setKey(cl);
+  return `<div class="g2">${card('Attack by Rotation - balls you set', `<div class="rots">${grid}</div><div class="foot-note">Team attacks off your sets, by rotation. Laid out like the court: R4, R3, R2 front, R5, R6, R1 back. Matches only.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
+    card('Rotation by Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff, attempts</span>', mxC) +
+    card('Rotation by Hitter <span class="m" style="text-transform:none;letter-spacing:0">eff, attempts</span>', mxH) + setKey(cl);
 }
 
-// ── Block & defense ──────────────────────────────────────────────────────────
+// -- Block & defense ----------------------------------------------------------
 function tabBlock() {
   const sk = AG.sk; const EV = ['#', '+', '!', '-', '/', '='];
   const L = { B: ['Block', { '#': 'Kill block', '+': 'Good touch', '!': 'Medium', '-': 'Poor touch', '/': 'Invasion / over', '=': 'Error' }],
@@ -463,12 +566,12 @@ function tabBlock() {
     const used = EV.filter(e => r.ev[e]);
     html += card(L[s][0], tbl('<th class="n">Total</th>' + used.map(e => `<th class="n">${L[s][1][e]} (${e})</th>`).join(''),
       `<tr><td class="n"><b>${r.n}</b></td>${used.map(e => `<td class="n ${e === '#' ? 'g' : e === '=' ? 'r' : ''}">${r.ev[e]} <span class="m">${pct(r.ev[e], r.n)}</span></td>`).join('')}</tr>`) +
-      (s === 'D' && AG.dk[1] ? `<div style="margin-top:10px">We scored a kill in <b class="gold">${pct(AG.dk[0], AG.dk[1])}</b> of the rallies after your dig <span class="m">(${AG.dk[0]} / ${AG.dk[1]})</span></div>` : ''));
+      (s === 'D' && AG.dk[1] ? `<div class="note">We scored a kill in <b class="gold">${pct(AG.dk[0], AG.dk[1])}</b> of the rallies after your dig <span class="m">(${AG.dk[0]} / ${AG.dk[1]})</span></div>` : ''));
   }
   return html || card('Block & Defense', '<div class="empty">No blocks or digs in these sessions.</div>');
 }
 
-// ── Advanced ─────────────────────────────────────────────────────────────────
+// -- Advanced -----------------------------------------------------------------
 const PA_SKILL = { S: 'Serve', R: 'Pass', A: 'Attack', E: 'Set', X: 'Set', B: 'Block', D: 'Dig' };
 const PA_COLS = ['Serve', 'Pass', 'Attack', 'Set', 'Block', 'Dig'], PA_M = 20, PA_SHARE = 0.25;
 function paNorm(key) {
@@ -508,7 +611,7 @@ function cardPA() {
     const T = paTables(pool);
     for (const [k, rec] of Object.entries(keys)) { paValue(T, k, rec[0], v); if (k[0] !== 'X') touches += rec[0]; }
   }
-  // Competition: practice drill results on the dates in view (wins above .500 = (W − L) / 2)
+  // Competition: practice drill results on the dates in view (wins above .500 = (W - L) / 2)
   const dates = new Set(selected().map(s => s.d)); let cw = 0, cl = 0;
   if (F.set === 'all') for (const [se, byDate] of Object.entries(PD.comp || {})) if (F.season === 'all' || se === F.season)
     for (const [d, r] of Object.entries(byDate || {})) if (dates.has(d)) { cw += r[0]; cl += r[1]; }
@@ -518,12 +621,12 @@ function cardPA() {
   const total = cols.reduce((a, c) => a + wv[c], 0), per = total / Math.max(1, AG.sets);
   const f = (x, d = 2) => (x >= 0 ? '+' : '') + x.toFixed(d), clr = x => Math.abs(x) < 0.005 ? 'm' : x > 0 ? 'g' : 'r';
   const posName = { OUTSIDES: 'outside', OPPOSITES: 'opposite', MIDDLES: 'middle', SETTERS: 'setter', LIBEROS: 'libero' }[PD.pa_grp] || 'position';
-  const help = `<div class="help" id="h-pa"><b>Points Added</b> measures how much your touches raised or lowered our chance of winning the rally compared with an average touch of the same skill (+1.0 ≈ one extra point for the team). <b>Setting</b> = the attack result off each of your sets vs the average attack off a set. <b>Competition</b> = practice drill results, (wins − losses) ÷ 2. Your <b>score</b> weights each category by how much it matters for a ${posName} (the % column). Small samples swing a lot.</div>`;
+  const help = `<div class="help" id="h-pa"><b>Points Added</b> measures how much your touches raised or lowered our chance of winning the rally compared with an average touch of the same skill (+1.0 about  one extra point for the team). <b>Setting</b> = the attack result off each of your sets vs the average attack off a set. <b>Competition</b> = practice drill results, (wins - losses) / 2. Your <b>score</b> weights each category by how much it matters for a ${posName} (the % column). Small samples swing a lot.</div>`;
   if (!touches && !cw && !cl) return card('Points Added' + helpBtn('h-pa'), help + '<div class="empty">No touches in these sessions.</div>');
-  return card('Points Added' + helpBtn('h-pa'), help + `<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px">
-      <div><div class="m">Score</div><div style="font-size:26px;font-weight:800" class="${clr(total)}">${f(total)}</div></div>
-      <div><div class="m">Per set</div><div style="font-size:26px;font-weight:800" class="${clr(per)}">${f(per, 3)}</div></div>
-      <div><div class="m">Sets · touches</div><div style="font-size:26px;font-weight:800">${AG.sets} · ${touches}</div></div></div>` +
+  return card('Points Added' + helpBtn('h-pa'), help + `<div class="bigs">
+      <div><div class="m">Score</div><div class="big ${clr(total)}">${f(total)}</div></div>
+      <div><div class="m">Per set</div><div class="big ${clr(per)}">${f(per, 3)}</div></div>
+      <div><div class="m">Sets, touches</div><div class="big">${AG.sets}, ${touches}</div></div></div>` +
     tbl('<th>Category</th><th class="n">Weight</th><th class="n">Raw points</th><th class="n">Weighted</th>',
       cols.map(c => `<tr><td>${PA_WLBL[c]}${c === 'Competition' ? ` <span class="m">(${cw}-${cl})</span>` : ''}</td><td class="n m">${Math.round(W[c] * 100)}%</td><td class="n ${clr(raw[c])}">${f(raw[c])}</td><td class="n ${clr(wv[c])}"><b>${f(wv[c])}</b></td></tr>`).join('') +
       `<tr class="tot"><td>SCORE</td><td class="n">100%</td><td></td><td class="n">${f(total)}</td></tr>`));
@@ -531,7 +634,7 @@ function cardPA() {
 
 function cardEOE() {
   const me = hitterCells(); const n = Object.values(me.cells).reduce((s, r) => s + r.a, 0);
-  const help = `<div class="help" id="h-eoe"><b>Expected</b> is what an average Loyola hitter would hit on exactly your mix of balls (the pass before the attack + the set type), using the whole team's results on each kind of ball. <b>EOE</b> = your actual efficiency − expected. Positive means you did better than the balls you got would predict. Efficiency is (K − E − BLK) / Att.</div>`;
+  const help = `<div class="help" id="h-eoe"><b>Expected</b> is what an average Loyola hitter would hit on exactly your mix of balls (the pass before the attack + the set type), using the whole team's results on each kind of ball. <b>EOE</b> = your actual efficiency - expected. Positive means you did better than the balls you got would predict. Efficiency is (K - E - BLK) / Att.</div>`;
   if (!n) return '';
   const norm = ph => (F.scale === '3' && ph === '!') ? '+' : ph; const z = () => ({ k: 0, e: 0, b: 0, a: 0 });
   const team = {}, phaseT = {}, tot = z();
@@ -545,16 +648,16 @@ function cardEOE() {
   const lbl = { '#': bucketLbl('perf'), '+': bucketLbl('good'), '!': bucketLbl('med'), '-': bucketLbl('oos'), o: 'Other first ball', T: 'Transition' };
   const GL = { pin: 'In-system pin', high: 'High ball', quick: 'Quick', bic: 'BIC', dball: 'D-ball', oth: 'Other' };
   const expOf = filt => { let s = 0, m = 0; for (const [sit, c] of Object.entries(me.cells)) if (filt(sit)) { s += c.a * teamEff(sit); m += c.a; } return m ? s / m : null; };
-  const row = (l, r, ex) => { const e = eff(r); return `<tr><td>${l}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n m">${fE(ex)}</td><td class="n ${e - ex >= 0 ? 'g' : 'r'}"><b>${(e - ex >= 0 ? '+' : '') + ((e - ex) * 100).toFixed(1)}</b></td></tr>`; };
+  const row = (l, r, ex) => { const e = eff(r); return `<tr><td>${l}</td><td class="n">${r.a}</td><td class="n ${ec(e)}"><b>${fmtEff3(e)}</b></td><td class="n m">${fmtEff3(ex)}</td><td class="n ${e - ex >= 0 ? 'g' : 'r'}"><b>${fmtEff3(e - ex, true)}</b></td></tr>`; };
   const H = '<th></th><th class="n">Att</th><th class="n">Your Eff</th><th class="n">Expected</th><th class="n">EOE</th>';
-  return card('Expected vs Actual Efficiency' + helpBtn('h-eoe'), help + `<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px">
-      <div><div class="m">Actual</div><div style="font-size:26px;font-weight:800">${fE(raw)}</div></div>
-      <div><div class="m">Expected</div><div style="font-size:26px;font-weight:800" class="m">${fE(exp)}</div></div>
-      <div><div class="m">EOE</div><div style="font-size:26px;font-weight:800" class="${eoe >= 0 ? 'g' : 'r'}">${(eoe >= 0 ? '+' : '') + (eoe * 100).toFixed(1)}</div></div>
-      <div><div class="m">Attempts</div><div style="font-size:26px;font-weight:800">${n}${n < 100 ? '<span class="m" style="font-size:12px"> · small sample</span>' : ''}</div></div></div>
+  return card('Expected vs Actual Efficiency' + helpBtn('h-eoe'), help + `<div class="bigs">
+      <div><div class="m">Actual</div><div class="big">${fmtEff3(raw)}</div></div>
+      <div><div class="m">Expected</div><div class="big" style="color:var(--muted)">${fmtEff3(exp)}</div></div>
+      <div><div class="m">EOE</div><div class="big ${eoe >= 0 ? 'g' : 'r'}">${fmtEff3(eoe, true)}</div></div>
+      <div><div class="m">Attempts</div><div class="big">${n}${n < 100 ? '<span class="m" style="font-size:12px;font-family:var(--sans);letter-spacing:0">, small sample</span>' : ''}</div></div></div>
     <div class="g2"><div>${tbl(H.replace('<th></th>', '<th>By pass</th>'), PH.map(p => row(lbl[p], me.ph[p], expOf(s => s.split('/')[0] === p))).join(''))}</div>
     <div>${tbl(H.replace('<th></th>', '<th>By set type</th>'), Object.keys(GL).filter(g => me.grp[g]).map(g => row(GL[g], me.grp[g], expOf(s => s.split('/')[1] === g))).join(''))}
-      <div class="m" style="margin-top:6px;line-height:1.5">In-system pin = X5 Go, X6 X · High ball = V5 Hut, V6 Red (and other V sets) · Quick = X1 Quick, X2 Back Quick, X7 Gap · BIC = XP Pipe · D-ball = X8 D</div></div></div>`);
+      <div class="foot-note" style="line-height:1.5">In-system pin = X5 Go, X6 X, High ball = V5 Hut, V6 Red (and other V sets), Quick = X1 Quick, X2 Back Quick, X7 Gap, BIC = XP Pipe, D-ball = X8 D</div></div></div>`);
 }
 function cardPassHit() {
   const ph = AG.ph; if (!ph || !(ph.ph && Object.keys(ph.ph).length)) return '';
@@ -562,12 +665,12 @@ function cardPassHit() {
   const sum = g => { const r = z(); for (const [ev, rec] of Object.entries(ph[g] || {})) { r.n += rec[0]; r.w += rec[1]; if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0]; } return r; };
   const a = sum('ph'), b = sum('np'); const pgN = Object.values(ph.pg || {}).reduce((s, x) => s + x, 0);
   const eff = r => r.n ? (r.k - r.e - r.b) / r.n : null;
-  const row = (l, r) => `<tr><td>${l}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.b}</td><td class="n">${r.n}</td><td class="n ${ec(eff(r))}"><b>${fE(eff(r))}</b></td><td class="n">${pct(r.k, r.n)}</td><td class="n">${pct(r.w, r.n)}</td><td class="n r">${pct(r.e + r.b, r.n)}</td></tr>`;
+  const row = (l, r) => `<tr><td>${l}</td><td class="n">${r.k}</td><td class="n">${r.e}</td><td class="n">${r.b}</td><td class="n">${r.n}</td><td class="n ${ec(eff(r))}"><b>${fmtEff3(eff(r))}</b></td><td class="n">${pct(r.k, r.n)}</td><td class="n">${pct(r.w, r.n)}</td><td class="n r">${pct(r.e + r.b, r.n)}</td></tr>`;
   const d = eff(a) !== null && eff(b) !== null ? eff(a) - eff(b) : null;
   const help = `<div class="help" id="h-ph">Serve-receive possessions only. <b>Passed &amp; hit</b> = you passed and then attacked the first set. <b>Didn't pass</b> = your first-ball attacks when someone else passed. FBSO% = kill on that first attack; SO% = we won the rally; Err% = (errors + blocked) / attempts.</div>`;
   return card('Pass &amp; Hit' + helpBtn('h-ph'), help + tbl('<th></th><th class="n">K</th><th class="n">E</th><th class="n">BLK</th><th class="n">ATT</th><th class="n">EFF</th><th class="n">FBSO%</th><th class="n">SO%</th><th class="n">Err%</th>',
     row('Passed &amp; hit', a) + (b.n ? row("Didn't pass", b) : '')) +
-    `<div style="margin-top:8px">${pgN ? `Pass avg on those possessions: <b class="gold">${passAvg(ph.pg, pgN).toFixed(2)}</b> · ` : ''}${d === null ? '' : `Δ Eff after passing: <b class="${d >= 0 ? 'g' : 'r'}">${(d >= 0 ? '+' : '') + (d * 100).toFixed(1)}</b>`}</div>`);
+    `<div class="note">${pgN ? `Pass avg on those possessions: <b class="gold">${passAvg(ph.pg, pgN).toFixed(2)}</b>, ` : ''}${d === null ? '' : `Eff change after passing: <b class="${d >= 0 ? 'g' : 'r'}">${fmtEff3(d, true)}</b>`}</div>`);
 }
 function cardSetterAdj() {
   if (!PD.player.setter || !AG.sbo || !Object.keys(AG.sbo).length) return '';
@@ -589,26 +692,26 @@ function cardSetterAdj() {
   const raw = eff(all), exp = used.reduce((s, k) => s + me[k].a * tEff[k], 0) / n, eoe = raw - exp;
   const std = used.reduce((s, k) => s + share[k] * (me[k].a ? eff(me[k]) : tEff[k]), 0);
   const adj = used.reduce((s, k) => s + share[k] * (((me[k].k - me[k].e - me[k].b) + M * tEff[k]) / (me[k].a + M)), 0);
-  const help = `<div class="help" id="h-sa">Every attack is credited to the setter whose set came right before it. <b>Expected</b> = what an average Loyola setter would produce from your exact mix of passes (team baseline per situation). <b>EOE</b> = Raw − Expected. <b>Standardized</b> re-weights your efficiency to the team's average pass mix; <b>Adjusted</b> also blends small samples toward the team baseline (≈${M} sets).</div>`;
-  const big = (l, v, c = '') => `<div><div class="m">${l}</div><div style="font-size:24px;font-weight:800" class="${c}">${v}</div></div>`;
-  return card('Setter Efficiency — Adjusted for Pass Quality' + helpBtn('h-sa'), help + `<div style="display:flex;gap:26px;flex-wrap:wrap;margin-bottom:12px">${big('Raw', fE(raw))}${big('Expected', fE(exp), 'm')}${big('EOE', (eoe >= 0 ? '+' : '') + (eoe * 100).toFixed(1), eoe >= 0 ? 'g' : 'r')}${big('Standardized', fE(std))}${big('Adjusted', fE(adj), 'gold')}${big('Sets', n)}</div>` +
+  const help = `<div class="help" id="h-sa">Every attack is credited to the setter whose set came right before it. <b>Expected</b> = what an average Loyola setter would produce from your exact mix of passes (team baseline per situation). <b>EOE</b> = Raw - Expected. <b>Standardized</b> re-weights your efficiency to the team's average pass mix; <b>Adjusted</b> also blends small samples toward the team baseline (about ${M} sets).</div>`;
+  const big = (l, v, c = '') => `<div><div class="m">${l}</div><div class="big ${c}"${c === 'm' ? ' style="color:var(--muted)"' : ''}>${v}</div></div>`;
+  return card('Setter Efficiency - Adjusted for Pass Quality' + helpBtn('h-sa'), help + `<div class="bigs">${big('Raw', fmtEff3(raw))}${big('Expected', fmtEff3(exp), 'm')}${big('EOE', fmtEff3(eoe, true), eoe >= 0 ? 'g' : 'r')}${big('Standardized', fmtEff3(std))}${big('Adjusted', fmtEff3(adj), 'gold')}${big('Sets', n)}</div>` +
     tbl('<th>Situation</th><th class="n">Your sets</th><th class="n">Your Eff</th><th class="n">Team Eff</th><th class="n">Your mix</th><th class="n">Team mix</th>',
-      used.map(k => `<tr><td>${bucketLbl(k)}</td><td class="n">${me[k].a}</td><td class="n ${ec(eff(me[k]))}"><b>${fE(eff(me[k]))}</b></td><td class="n m">${fE(tEff[k])}</td><td class="n">${pct(me[k].a, n)}</td><td class="n m">${pct(tm[k].a, tTot)}</td></tr>`).join('')));
+      used.map(k => `<tr><td>${bucketLbl(k)}</td><td class="n">${me[k].a}</td><td class="n ${ec(eff(me[k]))}"><b>${fmtEff3(eff(me[k]))}</b></td><td class="n m">${fmtEff3(tEff[k])}</td><td class="n">${pct(me[k].a, n)}</td><td class="n m">${pct(tm[k].a, tTot)}</td></tr>`).join('')));
 }
 function cardTrend() {
   const ms = Object.keys(AG.months).sort(); if (!ms.length) return '';
   const MN = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const rows = ms.map(m => { const x = AG.months[m], A = x.A || {}, R = x.R || {}, S = x.S || {}; const a = evA(A.ev, A.n), e = effv(a.k, a.e, a.b, a.a); const pv = passAvg(R.ev, R.n);
-    return `<tr><td>${MN[+m.slice(5)]} ${m.slice(0, 4)}</td><td class="n ${ec(e)}"><b>${fE(e)}</b></td><td class="n">${A.n || '—'}</td><td class="n ${pac(pv)}">${pv === null ? '—' : pv.toFixed(2)}</td><td class="n">${R.n || '—'}</td><td class="n">${S.n ? pct(S.ev['#'] || 0, S.n) : '—'}</td><td class="n r">${S.n ? pct(S.ev['='] || 0, S.n) : '—'}</td><td class="n">${S.n || '—'}</td></tr>`; }).join('');
+    return `<tr><td>${MN[+m.slice(5)]} ${m.slice(0, 4)}</td><td class="n ${ec(e)}"><b>${fmtEff3(e)}</b></td><td class="n">${A.n || '-'}</td><td class="n ${pac(pv)}">${pv === null ? '-' : pv.toFixed(2)}</td><td class="n">${R.n || '-'}</td><td class="n">${S.n ? pct(S.ev['#'] || 0, S.n) : '-'}</td><td class="n r">${S.n ? pct(S.ev['='] || 0, S.n) : '-'}</td><td class="n">${S.n || '-'}</td></tr>`; }).join('');
   return card('Trend by Month', tbl('<th>Month</th><th class="n">Atk Eff</th><th class="n">Att</th><th class="n">Pass Avg</th><th class="n">Passes</th><th class="n">Ace%</th><th class="n">Srv Err%</th><th class="n">Serves</th>', rows));
 }
 function tabAdv() { return cardPA() + cardEOE() + cardSetterAdj() + cardPassHit() + cardTrend(); }
 
 
-// ── PDF export (this tab or all reports) ─────────────────────────────────────
+// -- PDF export (this tab or all reports) -------------------------------------
 // One portrait Letter page per report on a white, print-friendly theme. Each report
 // is split into whole blocks (a table / card never breaks), laid out in the best of
-// 1–3 columns and scaled up or down to fill the page. Very wide reports are turned
+// 1-3 columns and scaled up or down to fill the page. Very wide reports are turned
 // sideways; leftover space goes to wider tables / roomier rows.
 const PDF_TABS = { servrcv: ['Serve & Receive', () => tabServe()], attack: ['Attack by Set Type', () => tabAttack()],
   setter: ['Attack by Setter', () => tabSetter()], dist: ['Setter Breakdown', () => tabDist()], rot: ['Attack by Rotation', () => tabRot()],
@@ -632,63 +735,82 @@ function exportPortalPDF(all) {
   const win = window.open('', '_blank', 'width=900,height=1000');
   if (!win) { alert('Please allow pop-ups to save the PDF.'); return; }
   win.document.open();
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(who)} — ${all ? 'All Reports' : esc(sections[0].title)}</title>
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(who)} - ${all ? 'All Reports' : esc(sections[0].title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
 <style>
-  :root{--maroon:#6b0020;--gold:#8a6500;--green:#1a7a2e;--red:#b3261e;--surface:#fff;--surface2:#f4f4f4;--border:#d6d6d6;--text:#1a1a1a;--muted:#666;--dim:#999}
+  :root{--ink:#1c1b19;--ink2:#2d2b27;--muted:#6b6760;--dim:#9a958c;--rule:#d9d5cc;--rule2:#ebe7df;--tint:#f5f3ee;--accent:#7a0026;--gold:#8a6500;--green:#2e6b3a;--red:#a3281f;
+        --serif:"Source Serif 4","Iowan Old Style","Charter","Georgia",serif;--sans:"IBM Plex Sans",-apple-system,"Helvetica Neue",Arial,sans-serif}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{background:#fff}
-  body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:11px;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:var(--sans);font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   @page{size:letter portrait;margin:.3in}
   .sheet{width:720px;height:960px;overflow:hidden;position:relative;page-break-after:always;break-after:page;margin:0 auto;background:#fff}
   .sheet:last-child{page-break-after:auto;break-after:auto}
-  .page{width:720px;height:960px;overflow:hidden;display:flex;flex-direction:column}
+  .page{width:720px;height:960px;overflow:hidden;display:flex;flex-direction:column;background:#fff}
   .sheet.rot .page{width:960px;height:720px;transform:translateY(960px) rotate(-90deg);transform-origin:top left}
-  @media screen{ body{background:#7a7a7a;padding:12px 0} .sheet{margin:0 auto 14px;box-shadow:0 2px 12px rgba(0,0,0,.45)} }
-  .hdr{background:#6b0020;color:#fff;padding:7px 12px;display:flex;justify-content:space-between;align-items:center;flex:none}
-  .t1{font-size:13px;font-weight:800;letter-spacing:.5px} .t2{font-size:11px;color:#FEBC18;font-weight:700;margin-top:2px} .dt{font-size:9px;opacity:.85}
-  .flt{padding:4px 12px;background:#f4f4f4;border-bottom:1px solid #ddd;font-size:8.5px;color:#333;display:flex;flex-wrap:wrap;gap:2px 14px;flex:none}
-  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;padding:7px 12px 0;flex:none}
-  .kpis .kpi{border:1px solid #e0e0e0;background:#f6f6f6;border-radius:6px;padding:5px 8px}
-  .kpis .l{font-size:7.5px;text-transform:uppercase;letter-spacing:.5px;color:#666} .kpis .v{font-size:15px;font-weight:800} .kpis .m{font-size:7.5px;color:#666}
-  .body{flex:1;min-height:0;overflow:hidden;padding:9px 12px 0}
+  @media screen{ body{background:#8a8780;padding:12px 0} .sheet{margin:0 auto 14px;box-shadow:0 2px 12px rgba(0,0,0,.3)} }
+  /* masthead: thin maroon line, serif name, ink rule */
+  .hdr{border-top:4px solid var(--accent);padding:8px 14px 7px;display:flex;justify-content:space-between;align-items:flex-end;flex:none;border-bottom:1.5px solid var(--ink);margin:0 0 0}
+  .t1{font-family:var(--serif);font-size:19px;font-weight:700;letter-spacing:-.3px;line-height:1.1;color:var(--ink)}
+  .t0{font-size:7.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
+  .t2{font-size:9.5px;color:var(--ink2);font-weight:600;margin-top:2px}
+  .dt{font-size:8px;color:var(--muted);text-align:right}
+  .flt{padding:4px 14px 5px;border-bottom:1px solid var(--rule2);font-size:8px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 14px;flex:none}
+  .flt b{color:var(--ink2);font-weight:600}
+  /* stat line */
+  .kpis{display:flex;padding:8px 14px 2px;flex:none}
+  .kpis .kpi{flex:1 1 0;padding:0 10px;border-left:1px solid var(--rule)} .kpis .kpi:first-child{border-left:none;padding-left:0}
+  .kpis .v{font-family:var(--serif);font-size:20px;font-weight:700;letter-spacing:-.4px;line-height:1} .kpis .l{font-size:7.5px;color:var(--ink2);margin-top:3px;font-weight:500} .kpis .m{font-size:7px;color:var(--muted)}
+  .body{flex:1;min-height:0;overflow:hidden;padding:10px 14px 0}
   .src{width:max-content}
   .fit{display:flex;align-items:flex-start;gap:14px;width:max-content;transform-origin:top left}
   .fit-col{display:flex;flex-direction:column;width:max-content}
   .fit.stretch .fit-col{flex:1 1 auto;min-width:0}
   .fit.stretch table{width:100%}
-  /* report pieces, light theme */
+  /* report pieces, editorial */
   .card{background:#fff;border:none;padding:0 0 10px;margin:0}
-  h3{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:#6b0020;border-bottom:1.5px solid #6b0020;padding-bottom:2px;margin:0 0 5px;display:flex;align-items:center;gap:6px}
+  h3{font-size:8.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink);border-bottom:1px solid var(--ink);padding-bottom:3px;margin:0 0 3px;display:flex;align-items:center;gap:6px}
   h3 .m{text-transform:none;letter-spacing:0;font-weight:400}
-  .m{color:#666;font-size:9px} .g{color:#1a7a2e} .r{color:#b3261e} .gold{color:#8a6500} .n{text-align:right;font-variant-numeric:tabular-nums}
+  .m{color:var(--muted);font-size:8.5px} .g{color:var(--green)} .r{color:var(--red)} .gold,.acc{color:var(--accent)} .n{text-align:right;font-variant-numeric:tabular-nums}
   .tw{overflow:visible}
   table{width:100%;border-collapse:collapse;font-size:9.5px}
-  th{font-size:8px;text-transform:uppercase;color:#555;text-align:left;padding:3px 6px;border-bottom:1px solid #bbb;background:#f1f1f1;white-space:nowrap}
+  th{font-size:7.5px;font-weight:600;color:var(--muted);text-align:left;padding:3px 6px;border-bottom:1px solid var(--rule);background:var(--tint);white-space:nowrap;vertical-align:bottom}
   th.n{text-align:right} th.c{text-align:center}
-  td{padding:3px 6px;border-bottom:1px solid #e6e6e6;white-space:nowrap}
+  td{padding:3px 6px;border-bottom:1px solid var(--rule2);white-space:nowrap}
+  td b{font-weight:600}
   .fit th,.fit td{padding-top:var(--py,3px)!important;padding-bottom:var(--py,3px)!important}
-  tr.tot td{border-top:2px solid #6b0020;font-weight:700;color:#6b0020;background:#faf3f5}
-  tr.dim td{color:#777;font-style:italic}
-  .brow{display:grid;grid-template-columns:150px 220px 60px 64px;gap:8px;align-items:center;margin:5px 0}
-  .btrack{height:11px;background:#ececec;border-radius:2px;overflow:hidden} .bfill{height:100%;background:linear-gradient(90deg,#6b0020,#c9a227)} .bv{font-weight:700;text-align:right}
-  .rots{display:grid;grid-template-columns:repeat(3,120px);gap:6px}
-  .rot{background:#f5f5f5;border:1px solid #e2e2e2;border-radius:6px;padding:6px;text-align:center} .rl{font-size:9px;font-weight:700;color:#666} .rv{font-size:17px;font-weight:800}
-  .svbar{display:flex;height:12px;width:380px;border-radius:2px;overflow:hidden;margin:6px 0} .seg{height:100%}
-  .leg{display:flex;gap:10px;flex-wrap:wrap;font-size:9px;color:#666} .leg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:3px}
-  .mix{display:flex;height:8px;width:160px;border-radius:2px;overflow:hidden;background:#ececec}
-  .empty{color:#888;padding:8px 0}
-  .sechd{font-size:13px;font-weight:800;color:#fff;background:#6b0020;padding:4px 9px;border-radius:3px;margin:0 0 8px;letter-spacing:.4px;text-transform:uppercase}
+  tr.tot td{border-top:1.2px solid var(--ink);border-bottom:none;font-weight:700;color:var(--ink);background:none}
+  tr.dim td{color:var(--dim);font-style:italic}
+  .brow{display:grid;grid-template-columns:150px 220px 60px 64px;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid var(--rule2)}
+  .btrack{height:5px;background:var(--rule2);overflow:hidden} .bfill{height:100%;background:var(--accent)} .bv{font-weight:600;text-align:right}
+  .rots{display:grid;grid-template-columns:repeat(3,120px);border-top:1px solid var(--rule);border-left:1px solid var(--rule);margin-top:5px}
+  .rot{border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:5px;text-align:center;background:#fff} .rl{font-size:7.5px;font-weight:700;letter-spacing:.8px;color:var(--muted)} .rv{font-family:var(--serif);font-size:16px;font-weight:700}
+  .setkey{display:grid;grid-template-columns:repeat(2,300px)!important;gap:2px 18px;margin-top:4px}
+  .setkey div{font-size:9px;line-height:1.4;padding:2px 0;border-bottom:1px solid var(--rule2)}
+  .mix{display:flex;height:5px;width:160px;overflow:hidden;background:var(--rule2)}
+  .big{font-family:var(--serif);font-size:20px;font-weight:700;letter-spacing:-.3px;line-height:1.05}
+  .bigs{display:flex;gap:18px;flex-wrap:wrap;margin:5px 0 7px}
+  .note{margin-top:5px;font-size:9.5px;color:var(--ink2)} .foot-note{margin-top:4px;font-size:8.5px;color:var(--muted)}
+  .empty{color:var(--muted);padding:6px 0;font-family:var(--serif);font-style:italic}
+  .sechd{font-family:var(--serif);font-size:14px;font-weight:700;color:var(--accent);padding:0 0 3px;margin:0 0 6px;border-bottom:2px solid var(--accent);letter-spacing:-.2px}
   #srcs{position:absolute;left:-99999px;top:0;width:3000px}
   #srcs .srcsec{width:max-content}
-  .help,.qb,button,select,input,.tg{display:none!important}
+  .help,.qb,button,select,input,.tg,.phase{display:none!important}
   .g2{display:block}
-  .card div[style*="auto-fit"]{grid-template-columns:repeat(2,300px)!important}   /* set-type key: fixed 2 columns (auto-fit would measure as one huge row) */
   b{font-weight:700}
 </style></head><body><div id="srcs">${srcs}</div>
 <script>
 var META = ${META};
 window.onload = function () {
-  var GAP = 14, MIN_MERGE = 0.85;   // reports share a page only if the text can stay ≥ 85% size
+  var F = document.fonts, fontsReady = Promise.resolve();
+  if (F && F.load) fontsReady = Promise.all([F.load('700 20px "Source Serif 4"'), F.load('400 11px "IBM Plex Sans"'), F.load('600 11px "IBM Plex Sans"'), F.load('700 11px "IBM Plex Sans"')])
+    .then(function () { return F.ready; }).catch(function () {});
+  var timeout = new Promise(function (res) { setTimeout(res, 3000); });   // never hang if the font CDN is unreachable
+  Promise.race([fontsReady, timeout]).then(layout);
+};
+function layout() {
+  var GAP = 14, MIN_MERGE = 0.85;   // reports share a page only if the text can stay >= 85% size
   function blocksOf(root) {        // whole tables / cards; a heading always sticks to what follows it
     var out = [], pend = null;
     (function walk(el) {
@@ -720,7 +842,7 @@ window.onload = function () {
   meas.style.cssText = 'position:absolute;left:-99999px;top:0;display:flex;flex-direction:column;align-items:flex-start';
   document.body.appendChild(meas);
   function sizeOf(b) { meas.appendChild(b); var z = { w: b.offsetWidth, h: b.offsetHeight + 10 }; meas.removeChild(b); return z; }
-  // Each report → blocks (plain, and with a small report-title bar for shared pages)
+  // Each report to blocks (plain, and with a small report-title bar for shared pages)
   var secs = Array.prototype.map.call(document.querySelectorAll('.srcsec'), function (el) {
     var raw = blocksOf(el), withHd = raw.map(function (b) { return b.cloneNode(true); });
     var hd = document.createElement('div'); hd.className = 'sechd'; hd.textContent = el.dataset.title;
@@ -730,11 +852,11 @@ window.onload = function () {
   document.getElementById('srcs').remove();
   function makeSheet(titles, first, label) {
     var sh = document.createElement('div'); sh.className = 'sheet';
-    sh.innerHTML = '<div class="page"><div class="hdr"><div><div class="t1"></div><div class="t2"></div></div><div class="dt"></div></div>' +
+    sh.innerHTML = '<div class="page"><div class="hdr"><div><div class="t0">Loyola Men&#39;s Volleyball, Player Report</div><div class="t1"></div><div class="t2"></div></div><div class="dt"></div></div>' +
       '<div class="flt"></div>' + (first && META.kpi ? '<div class="kpis"></div>' : '') + '<div class="body"></div></div>';
-    sh.querySelector('.t1').textContent = 'LUC VOLLEYBALL · ' + META.who;
-    sh.querySelector('.t2').textContent = titles.join(' · ');
-    sh.querySelector('.dt').textContent = 'Generated ' + META.dateStr + (label ? ' · ' + label : '');
+    sh.querySelector('.t1').textContent = META.who;
+    sh.querySelector('.t2').textContent = titles.join(', ');
+    sh.querySelector('.dt').textContent = 'Generated ' + META.dateStr + (label ? ', ' + label : '');
     sh.querySelector('.flt').innerHTML = META.filt;
     if (first && META.kpi) sh.querySelector('.kpis').innerHTML = META.kpi;
     document.body.appendChild(sh);
@@ -752,7 +874,7 @@ window.onload = function () {
   var avail = [true, false].map(function (first) {
     var t = makeSheet(['x'], first, ''); var r = { w: t.body.clientWidth - 30, h: t.body.clientHeight - 14 }; t.sheet.remove(); return r;
   });
-  // Put consecutive reports on one page while everything still prints at ≥ 85% text size
+  // Put consecutive reports on one page while everything still prints at >= 85% text size
   var groups = [], cur = [0];
   for (var i = 1; i < secs.length; i++) {
     var trial = cur.concat([i]), sz = [];
@@ -789,7 +911,7 @@ window.onload = function () {
   });
   meas.remove();
   if (!window.__noPrint) { setTimeout(function () { window.print(); }, 200); window.onafterprint = function () { window.close(); }; }
-};
+}
 <\/script></body></html>`);
   win.document.close();
 }

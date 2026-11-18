@@ -59,13 +59,17 @@ open('dashboard.html','w').write(t.replace('__DASHBOARD_DATA__', data))
 "
 ```
 
-### Editorial redesign (v2 preview, separate copy)
-`dashboard_template_v2.html` -> `dashboard-v2.html` (built by rebuild.py next to the live dashboard) and
-`players-v2.html` are the "editorial sports page" redesign: light paper background, ink text, maroon accent,
-Source Serif 4 + IBM Plex Sans (Google Fonts, system fallbacks), efficiency shown as .340 via `fmtEff3()` /
-`fmtEffPct3()`, ASCII-only text (no special symbols: use "-" and "," not em dashes or dots).
-Any feature change must be made in BOTH the live template and the v2 template until v2 replaces the live one.
-Verification harness: `node "<outputs>/v2_harness/render_all.js" dashboard_template_v2.html dashboard_data.json <outdir>`.
+### Design: editorial "sports page" (live since Nov 18, 2026)
+`dashboard_template.html` / `dashboard.html` and `players.html` use the editorial design: light paper
+background, ink text, maroon accent, Source Serif 4 + IBM Plex Sans (Google Fonts, system fallbacks),
+efficiency shown as .340 via `fmtEff3()` / `fmtEffPct3()`, ASCII-only text (no special symbols: use "-" and
+"," not em dashes or middle dots). `dashboard-v2.html` / `players-v2.html` are now just redirects to the live
+pages; `dashboard_template_v2.html` is retired (a stub).
+- Rollback: the old dark (v1) files are in `archive/v1/` (git-ignored, local only) and in git history.
+  To go back: copy `archive/v1/dashboard_template.html` -> `dashboard_template.html` and
+  `archive/v1/players.html` -> `players.html`, rebuild, push.
+- Verification harness: `node "<outputs>/v2_harness/render_all.js" dashboard_template.html dashboard_data.json <outdir>`
+  (renders every tab / report / PDF and flags JS errors, dark leftovers, efficiency shown as %, junk text).
 
 ### Points Added (weighted by position)
 Basic values only (each touch vs the average touch of that skill; no situation-adjusted mode). Setting =
