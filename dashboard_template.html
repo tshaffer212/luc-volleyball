@@ -4009,17 +4009,12 @@ function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
   // One portrait page per report: a compact header (report + filters) on every
   // page, sessions + KPI tiles on the first page, then the report itself scaled
   // up or down (best of 1–3 columns) so it fills that single page.
-  const pages = sections.map((sec, i) => `
-<div class="sheet"><div class="page">
-  <div class="pdf-hdr">
-    <div><div class="pdf-hdr-title">LUC VOLLEYBALL</div><div class="pdf-hdr-sub">${esc(sec.title)}</div></div>
-    <div class="pdf-date">Generated ${dateStr}${sections.length > 1 ? ` · Page ${i+1} of ${sections.length}` : ''}</div>
-  </div>
-  <div class="pdf-filters">${filters}</div>
-  ${i === 0 && sessionLine ? `<div class="pdf-sessions"><b>Sessions:</b> ${esc(sessionLine)}</div>` : ''}
-  ${i === 0 && kpiHTML ? `<div class="pdf-kpis">${kpiHTML}</div>` : ''}
-  <div class="page-body"><div class="fit-src">${sec.html}</div></div>
-</div></div>`).join('');
+  // Reports are handed to the print window as sources; it packs consecutive short reports
+  // onto one portrait page (text stays ≥ 85% size), gives a long report its own page, and
+  // scales each page to fill it (very wide single reports are turned sideways).
+  const srcs = sections.map(sec => `<div class="srcsec" data-title="${esc(sec.title)}">${sec.html}</div>`).join('');
+  const META = JSON.stringify({ filters, dateStr, kpi: kpiHTML || '',
+    sessions: sessionLine ? '<b>Sessions:</b> ' + esc(sessionLine) : '' }).replace(/</g, '\\u003c');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>LUC Volleyball — ${esc(docTitle)}</title>
@@ -4077,25 +4072,32 @@ function _writePdf(win, { sections, filters, sessionLine, kpiHTML, dateStr }) {
   .card{border:none!important;box-shadow:none!important;padding:0!important;background:none!important}
   @media print{ body{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
   @media screen{ body{background:#888} .sheet{margin:12px auto;box-shadow:0 2px 10px rgba(0,0,0,.4)} }
+  .sechd{font-size:12px;font-weight:800;color:#fff;background:#6b0020;padding:4px 9px;border-radius:3px;margin:0 0 8px;letter-spacing:.4px;text-transform:uppercase}
+  #srcs{position:absolute;left:-99999px;top:0;width:4000px}
+  #srcs .srcsec{width:max-content}
 </style></head><body>
-${pages}
+<div id="srcs">${srcs}</div>
 <script>
+  var META = ${META};
   window.onload = function() {
-    // Fit each report on ONE page, for both orientations. The report is broken
-    // into whole blocks (each table / chart / heading stays intact) that are
-    // measured ONCE; the best column count (1–3) and scale are then worked out
-    // from those sizes, and the final layout is built just once per orientation.
-    var GAP = 14, SIZES = { P: [720, 960] };
-    function blocksOf(root) {
-      var out = [];
+    var GAP = 14, MIN_MERGE = 0.85;
+    function blocksOf(root) {              // whole tables / charts; a heading sticks to what follows it
+      var out = [], pend = null;
       (function walk(el) {
+        if (el !== root && el.matches('button, select, input, script, style')) return;
         var n = el.querySelectorAll('table, img.pdf-chart').length;
-        if (el !== root && n <= 1) { out.push(el); return; }
-        Array.prototype.forEach.call(el.children, walk);
+        if (el !== root && n <= 1) {
+          if (/^H[1-6]$/.test(el.tagName) && !n) { pend = el; return; }
+          if (pend) { var w = document.createElement('div'); w.appendChild(pend.cloneNode(true)); w.appendChild(el.cloneNode(true)); out.push(w); pend = null; }
+          else out.push(el.cloneNode(true));
+          return;
+        }
+        Array.prototype.slice.call(el.children).forEach(walk);
       })(root);
+      if (pend) out.push(pend.cloneNode(true));
       return out;
     }
-    function plan(sizes, n) {                       // greedy, order-preserving column fill
+    function plan(sizes, n) {
       var total = 0; sizes.forEach(function(z){ total += z.h; });
       var target = total / n, cols = [[]], acc = 0;
       sizes.forEach(function(z, i) {
@@ -4103,43 +4105,70 @@ ${pages}
         cols[cols.length - 1].push(i); acc += z.h;
       });
       var W = 0, H = 0;
-      cols.forEach(function(c) {
-        var w = 0, h = 0; c.forEach(function(i){ w = Math.max(w, sizes[i].w); h += sizes[i].h; });
-        W += w; H = Math.max(H, h);
-      });
+      cols.forEach(function(c) { var w = 0, h = 0; c.forEach(function(i){ w = Math.max(w, sizes[i].w); h += sizes[i].h; }); W += w; H = Math.max(H, h); });
       return { cols: cols, W: W + GAP * (cols.length - 1), H: H };
     }
-    document.querySelectorAll('.page').forEach(function(page) {
-      var body = page.querySelector('.page-body'), src = body.querySelector('.fit-src');
-      var blocks = blocksOf(src);
-      // One measuring pass: all blocks side-by-side-free in a shrink-to-fit column
-      var meas = document.createElement('div');
-      meas.style.cssText = 'position:absolute;left:-99999px;top:0;display:flex;flex-direction:column;align-items:flex-start';
-      blocks.forEach(function(b){ meas.appendChild(b.cloneNode(true)); });
-      document.body.appendChild(meas);
-      var sizes = Array.prototype.map.call(meas.children, function(el) {
-        var cs = getComputedStyle(el);
-        return { w: el.offsetWidth + (parseFloat(cs.marginLeft)||0) + (parseFloat(cs.marginRight)||0),
-                 h: el.offsetHeight + (parseFloat(cs.marginTop)||0) + (parseFloat(cs.marginBottom)||0) + 8 };
-      });
-      document.body.removeChild(meas);
-      src.style.display = 'none';
-      function fitFor(W, H) {
-        page.style.width = W + 'px'; page.style.height = H + 'px';
-        var availW = body.clientWidth - 30, availH = body.clientHeight - 14, best = null;   // small safety margin
-        for (var n = 1; n <= Math.min(3, blocks.length); n++) {
-          var pl = plan(sizes, n);
-          var s = Math.min(2.2, availW / pl.W, availH / pl.H) * 0.98;   // scale UP too, so the report fills the page
-          if (!best || s > best.s + 0.02) best = { s: s, pl: pl, fill: pl.H * s / availH };
-        }
-        return best;
+    function bestFit(sizes, aW, aH) {
+      var best = null;
+      for (var n = 1; n <= Math.min(3, sizes.length); n++) {
+        var pl = plan(sizes, n), s = Math.min(2.2, aW / pl.W, aH / pl.H) * 0.98;   // scale UP too, so the report fills the page
+        if (!best || s > best.s + 0.02) best = { s: s, pl: pl, fill: pl.H * s / aH };
       }
-      var bL = fitFor(960, 720), bP = fitFor(720, 960);
-      // Turn the page sideways only for very wide reports: upright it would leave most of the
-      // page empty (width-limited), and sideways it prints clearly bigger.
-      var useL = bP.fill < 0.75 && bL.s > bP.s * 1.15;
+      return best;
+    }
+    var meas = document.createElement('div');
+    meas.style.cssText = 'position:absolute;left:-99999px;top:0;display:flex;flex-direction:column;align-items:flex-start';
+    document.body.appendChild(meas);
+    function sizeOf(b) {
+      meas.appendChild(b); var cs = getComputedStyle(b);
+      var z = { w: b.offsetWidth + (parseFloat(cs.marginLeft)||0) + (parseFloat(cs.marginRight)||0),
+                h: b.offsetHeight + (parseFloat(cs.marginTop)||0) + (parseFloat(cs.marginBottom)||0) + 8 };
+      meas.removeChild(b); return z;
+    }
+    var secs = Array.prototype.map.call(document.querySelectorAll('.srcsec'), function(el) {
+      var raw = blocksOf(el), withHd = raw.map(function(b){ return b.cloneNode(true); });
+      var hd = document.createElement('div'); hd.className = 'sechd'; hd.textContent = el.dataset.title;
+      if (withHd.length) { var w = document.createElement('div'); w.appendChild(hd); w.appendChild(withHd[0]); withHd[0] = w; } else withHd = [hd];
+      return { title: el.dataset.title, raw: raw, rawS: raw.map(sizeOf), hd: withHd, hdS: withHd.map(sizeOf) };
+    });
+    document.getElementById('srcs').remove();
+    function makeSheet(titles, first, label) {
+      var sh = document.createElement('div'); sh.className = 'sheet';
+      sh.innerHTML = '<div class="page"><div class="pdf-hdr"><div><div class="pdf-hdr-title">LUC VOLLEYBALL</div><div class="pdf-hdr-sub"></div></div><div class="pdf-date"></div></div>' +
+        '<div class="pdf-filters"></div>' + (first && META.sessions ? '<div class="pdf-sessions"></div>' : '') +
+        (first && META.kpi ? '<div class="pdf-kpis"></div>' : '') + '<div class="page-body"></div></div>';
+      sh.querySelector('.pdf-hdr-sub').textContent = titles.join(' · ');
+      sh.querySelector('.pdf-date').textContent = 'Generated ' + META.dateStr + (label ? ' · ' + label : '');
+      sh.querySelector('.pdf-filters').innerHTML = META.filters;
+      if (first && META.sessions) sh.querySelector('.pdf-sessions').innerHTML = META.sessions;
+      if (first && META.kpi) sh.querySelector('.pdf-kpis').innerHTML = META.kpi;
+      document.body.appendChild(sh);
+      return { sheet: sh, page: sh.querySelector('.page'), body: sh.querySelector('.page-body') };
+    }
+    var avail = [true, false].map(function(first) {
+      var t = makeSheet(['x'], first, ''); var r = { w: t.body.clientWidth - 30, h: t.body.clientHeight - 14 }; t.sheet.remove(); return r;
+    });
+    // Put consecutive reports on one page while everything still prints at ≥ 85% text size
+    var groups = [], cur = [0];
+    for (var i = 1; i < secs.length; i++) {
+      var trial = cur.concat([i]), sz = [];
+      trial.forEach(function(k){ sz = sz.concat(secs[k].hdS); });
+      var Av = avail[groups.length === 0 ? 0 : 1];
+      if (bestFit(sz, Av.w, Av.h).s >= MIN_MERGE) cur = trial; else { groups.push(cur); cur = [i]; }
+    }
+    groups.push(cur);
+    groups.forEach(function(g, gi) {
+      var shared = g.length > 1, blocks = [], sizes = [];
+      g.forEach(function(k){ blocks = blocks.concat(shared ? secs[k].hd : secs[k].raw); sizes = sizes.concat(shared ? secs[k].hdS : secs[k].rawS); });
+      var t = makeSheet(g.map(function(k){ return secs[k].title; }), gi === 0, groups.length > 1 ? 'Page ' + (gi + 1) + ' of ' + groups.length : '');
+      var page = t.page, body = t.body;
+      function fitFor(W, H) { page.style.width = W + 'px'; page.style.height = H + 'px'; return bestFit(sizes, body.clientWidth - 30, body.clientHeight - 14); }
+      var bP = fitFor(720, 960), bL = shared ? null : fitFor(960, 720);
+      // Turn the page sideways only for a single very wide report: upright it would be shrunk
+      // and leave most of the page empty, and sideways it prints clearly bigger.
+      var useL = !!bL && bP.s < 0.9 && bP.fill < 0.75 && bL.s > bP.s * 1.15;
       var best = useL ? bL : bP;
-      if (useL) { page.parentNode.classList.add('rot'); page.style.width = '960px'; page.style.height = '720px'; }
+      if (useL) { t.sheet.classList.add('rot'); page.style.width = '960px'; page.style.height = '720px'; }
       else { page.style.width = '720px'; page.style.height = '960px'; }
       var box = document.createElement('div'); box.className = 'fit';
       best.pl.cols.forEach(function(c) {
@@ -4149,20 +4178,14 @@ ${pages}
       });
       box.style.transform = 'scale(' + best.s.toFixed(4) + ')';
       body.appendChild(box);
-      // Tall reports stop growing at the bottom of the page — stretch the tables across the
-      // spare width instead, so there's no empty strip down the side.
-      var availW2 = body.clientWidth - 30;
-      if (box.offsetWidth * best.s < availW2 - 12) { box.classList.add('stretch'); box.style.width = (availW2 / best.s) + 'px'; }
-      // Wide tables can't grow any bigger without running off the side, so use the
-      // leftover height for roomier rows (easier to read, no half-empty page).
-      var availH2 = body.clientHeight - 14, lo = 3, hi = 18;
-      for (var it = 0; it < 10; it++) {
-        var mid = (lo + hi) / 2; box.style.setProperty('--py', mid + 'px');
-        if (box.offsetHeight * best.s <= availH2) lo = mid; else hi = mid;
-      }
+      // Tall reports: stretch tables across spare width. Wide reports: roomier rows for spare height.
+      var aW2 = body.clientWidth - 30, aH2 = body.clientHeight - 14;
+      if (box.offsetWidth * best.s < aW2 - 12) { box.classList.add('stretch'); box.style.width = (aW2 / best.s) + 'px'; }
+      var lo = 3, hi = 12;
+      for (var it = 0; it < 10; it++) { var mid = (lo + hi) / 2; box.style.setProperty('--py', mid + 'px'); if (box.offsetHeight * best.s <= aH2) lo = mid; else hi = mid; }
       box.style.setProperty('--py', lo + 'px');
-      src.remove();
     });
+    meas.remove();
     setTimeout(function(){ window.print(); }, 150);
     window.onafterprint = function(){ window.close(); };
   };
