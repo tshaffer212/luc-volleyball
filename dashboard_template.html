@@ -6537,9 +6537,7 @@ function _playerPdfHtml({ detailHTML, filters, title, dateStr }) {
   body{font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;font-size:10px;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   @page{size:letter portrait;margin:.3in}
   .pg{width:720px;height:960px;overflow:hidden;display:flex;flex-direction:column;margin:0 auto;background:#fff}
-  .pg-L{width:960px;height:720px;display:none}
-  @media print and (orientation: landscape){ .pg-P{display:none!important} .pg-L{display:flex!important} }
-  @media screen{ body{background:#7a7a7a;padding:14px 0} .pg{box-shadow:0 2px 12px rgba(0,0,0,.45);margin:0 auto 14px} .pg-L{display:flex} }
+  @media screen{ body{background:#7a7a7a;padding:14px 0} .pg{box-shadow:0 2px 12px rgba(0,0,0,.45);margin:0 auto 14px} }
 
   /* Header band */
   .band{flex:none;border-bottom:2px solid #6b0020}
@@ -6562,8 +6560,8 @@ function _playerPdfHtml({ detailHTML, filters, title, dateStr }) {
   /* Columns */
   .cols-area{flex:1;min-height:0;overflow:hidden;padding:8px 12px 0}
   .cols{display:flex;align-items:flex-start;gap:14px;transform-origin:top left}
-  .col{display:flex;flex-direction:column;gap:8px}
-  .blk{width:340px;break-inside:avoid}
+  .col{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .blk{width:340px;break-inside:avoid;overflow:hidden}
   .sec{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:#6b0020;border-bottom:1.5px solid #6b0020;padding-bottom:2px;margin-bottom:5px}
   .sec .pl-muted{font-weight:400;letter-spacing:0;text-transform:none;color:#777;font-size:8.5px}
   .cont{font-size:8px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px}
@@ -6633,24 +6631,25 @@ function _playerPdfHtml({ detailHTML, filters, title, dateStr }) {
     });
   });
 
-  // Measure each block once at the column width
-  var meas = document.createElement('div');
-  meas.style.cssText = 'position:absolute;left:-99999px;top:0';
-  document.body.appendChild(meas);
-  var sizes = blocks.map(function (b) { meas.appendChild(b); var h = b.offsetHeight + 8; meas.removeChild(b); return h; });
-  document.body.removeChild(meas);
-
-  function plan(n) {                       // order-preserving column fill, balanced by height
-    var total = sizes.reduce(function (a, b) { return a + b; }, 0), target = total / n, cols = [[]], acc = 0;
-    sizes.forEach(function (h, i) {
-      if (acc > 0 && acc + h / 2 > target && cols.length < n) { cols.push([]); acc = 0; }
-      cols[cols.length - 1].push(i); acc += h;
-    });
-    var H = 0; cols.forEach(function (c) { H = Math.max(H, c.reduce(function (a, i) { return a + sizes[i]; }, 0)); });
-    return { cols: cols, W: cols.length * 340 + (cols.length - 1) * 14, H: H };
+  // Fit to ONE portrait Letter page and FILL it: try 1–3 columns and the largest text size
+  // (zoom f) at which every block fits its column width and the tallest column fits the page.
+  function plan(sizes, n) {                    // best order-preserving split into n columns (minimises the tallest column)
+    var m = sizes.length; n = Math.min(n, m);
+    var pre = [0]; sizes.forEach(function (h) { pre.push(pre[pre.length - 1] + h); });
+    var INF = 1e15, dp = [], cut = [];
+    for (var k = 0; k <= n; k++) { dp.push([]); cut.push([]); for (var i = 0; i <= m; i++) { dp[k].push(INF); cut[k].push(0); } }
+    dp[0][0] = 0;
+    for (k = 1; k <= n; k++) for (i = 1; i <= m; i++) for (var j = k - 1; j < i; j++) {
+      var v = Math.max(dp[k - 1][j], pre[i] - pre[j]);
+      if (v < dp[k][i]) { dp[k][i] = v; cut[k][i] = j; }
+    }
+    var cols = [], end = m;
+    for (k = n; k >= 1; k--) { var st = cut[k][end], c = []; for (i = st; i < end; i++) c.push(i); cols.unshift(c); end = st; }
+    return { cols: cols.filter(function (c) { return c.length; }), H: dp[n][m] };
   }
-  function buildPage(cls, W, Hpage, ncols) {
-    var pg = document.createElement('div'); pg.className = 'pg ' + cls;
+  var GAP = 16;
+  function buildPage(W, Hpage) {
+    var pg = document.createElement('div'); pg.className = 'pg';
     pg.style.width = W + 'px'; pg.style.height = Hpage + 'px';
     var band = document.createElement('div'); band.className = 'band';
     band.innerHTML = '<div class="bar"><b>LUC VOLLEYBALL · PLAYER REPORT</b><span>Generated ${esc(dateStr)}</span></div>';
@@ -6662,34 +6661,66 @@ function _playerPdfHtml({ detailHTML, filters, title, dateStr }) {
       if (paBox) { var p = paBox.cloneNode(true); p.className = 'pa'; p.removeAttribute('style'); who.appendChild(p); }
       band.appendChild(who);
     }
-    var f = document.createElement('div'); f.className = 'filters'; f.innerHTML = ${JSON.stringify(filters).replace(/</g, '\\u003c')}; band.appendChild(f);
+    var fl = document.createElement('div'); fl.className = 'filters'; fl.innerHTML = ${JSON.stringify(filters).replace(/</g, '\\u003c')}; band.appendChild(fl);
     if (kpis) band.appendChild(kpis.cloneNode(true));
     var area = document.createElement('div'); area.className = 'cols-area';
     var foot = document.createElement('div'); foot.className = 'foot';
     foot.textContent = 'Efficiency = (K − E − BLK) / Att · Points Added weighted by position';
     pg.appendChild(band); pg.appendChild(area); pg.appendChild(foot);
     document.body.appendChild(pg);
-    var availW = area.clientWidth - 24, availH = area.clientHeight - 8, best = null;
-    ncols.forEach(function (n) {
+    var availW = area.clientWidth - 26, availH = area.clientHeight - 10;
+
+    var meas = document.createElement('div');
+    meas.style.cssText = 'position:absolute;left:-99999px;top:0';
+    document.body.appendChild(meas);
+    function measure(cw) {                     // heights at column width cw; null if any block is too wide
+      var out = [];
+      for (var i = 0; i < blocks.length; i++) {
+        var b = blocks[i]; b.style.width = cw + 'px'; meas.appendChild(b);
+        var tooWide = b.scrollWidth > cw + 1, h = b.offsetHeight + 10;
+        meas.removeChild(b);
+        if (tooWide) return null;
+        out.push(h);
+      }
+      return out;
+    }
+    function tryFit(n, f) {
+      var cw = (availW / f - GAP * (n - 1)) / n;
+      if (cw < 150) return null;
+      var sz = measure(cw); if (!sz) return null;
+      var pl = plan(sz, n);
+      return pl.H * f <= availH ? { n: n, f: f, cw: cw, pl: pl } : null;
+    }
+    var best = null;
+    [1, 2, 3].forEach(function (n) {
       if (n > blocks.length) return;
-      var pl = plan(n), s = Math.min(1, availW / pl.W, availH / pl.H);
-      if (!best || s > best.s + 0.02) best = { pl: pl, s: s };
+      var lo = 0.35, hi = 2.0, ok = null;
+      for (var it = 0; it < 14; it++) {        // largest zoom that still fits
+        var mid = (lo + hi) / 2, r = tryFit(n, mid);
+        if (r) { ok = r; lo = mid; } else hi = mid;
+      }
+      if (ok && (!best || ok.f > best.f + 0.02)) best = ok;
     });
+    document.body.removeChild(meas);
+    if (!best) best = { n: 2, f: 0.35, cw: (availW / 0.35 - GAP) / 2, pl: plan(blocks.map(function () { return 100; }), 2) };
+
     var cols = document.createElement('div'); cols.className = 'cols';
+    cols.style.gap = GAP + 'px';
+    cols.style.width = (availW / best.f) + 'px';
     best.pl.cols.forEach(function (c) {
       var col = document.createElement('div'); col.className = 'col';
       c.forEach(function (i, k) {
         var b = blocks[i].cloneNode(true);
+        b.style.width = best.cw + 'px';
         if (b.dataset.cont && k > 0) { var cl = b.querySelector(':scope > .cont'); if (cl) cl.remove(); }   // "(cont.)" only where a section continues at the top of a new column
         col.appendChild(b);
       });
       cols.appendChild(col);
     });
-    cols.style.transform = 'scale(' + best.s.toFixed(3) + ')';
+    cols.style.transform = 'scale(' + best.f.toFixed(3) + ')';
     area.appendChild(cols);
   }
-  buildPage('pg-P', 720, 960, [1, 2]);
-  buildPage('pg-L', 960, 720, [2, 3]);
+  buildPage(720, 960);
   if (!window.__noPrint) { setTimeout(function () { window.focus(); window.print(); }, 400); window.onafterprint = function () { window.close(); }; }
 })();
 <\/script></body></html>`;
