@@ -2306,6 +2306,25 @@ def main(raw_path, out_path):
                 sets_out.append([fi, sn, first, rot, won, [str(p) for p in (lu0 or [])], pf, pa_])
         return {'sets': sets_out, 'subs': subs_out}
 
+    def set_zone_of(e):
+        """Zone the setter set from (1-9, his own side) for a set (E) action. Best source = the exact spot
+        VolleyMetrics clicked for the set (xy_s, setter's side: net y=50, 3 m line ~36.8, 6 m ~23.65, his left
+        = small x). Fallback = the code: the single-digit form ('~~~3') holds it in code[9] (end_zone), the
+        two-digit form ('~~~24C') in code[10] (vm_end) - code[9] is something else there.
+        Checked: coords agree with code[9] on 99% of single-digit sets and with code[10] on 91% of two-digit sets."""
+        v = e.get('xy_s')
+        if isinstance(v, int) and v >= 0:
+            x, y = v % 100, v // 100
+            if 3 <= x <= 97 and 5 <= y <= 50:
+                col = 0 if x < 37.2 else (1 if x < 62.8 else 2)          # his left / middle / right
+                row = 0 if y >= 36.8 else (1 if y >= 23.65 else 2)       # front / middle / back
+                return [['4', '3', '2'], ['7', '8', '9'], ['5', '6', '1']][row][col]
+        ve = e.get('vm_end') or ''
+        if ve[:1].isdigit():
+            return ve[0]
+        z = str(e.get('end_zone') or '')
+        return z if z not in ('0', 'None') else ''
+
     def compute_scout_setting(sessions_for_opp):
         """
         Scouting: one compact row per opponent set that was attacked, so the page can
@@ -2367,12 +2386,12 @@ def main(raw_path, out_path):
                     rot = get_opp_rotation(a, opp_side, sl, setters_f)
                     combo = nxt.get('combo_code') or ''
                     cat = 'Dump' if combo in ('PP', 'P2', 'PR') else atk_zone_cat(nxt, rot)
-                    szone = str(a.get('end_zone') or '')
+                    szone = set_zone_of(a)
                     rows.append([fi, rot if rot and 1 <= rot <= 6 else 0, a.get('player_num') or '', nxt.get('player_num') or '',
                                  (rcv.get('evaluation') or '?') if first_ball else 'T',
                                  str(rcv.get('end_zone') or '') if first_ball else '',
                                  (rcv.get('player_num') or '') if first_ball else '',
-                                 szone if szone not in ('0', 'None') else '', combo, cat, ev, won])
+                                 szone, combo, cat, ev, won])
             # Pass & Hit for the opponent's players (same rules as Loyola's card)
             for sn, pl in compute_pass_hit(session.get('actions', []), opp_side).items():
                 for pn, v in pl.items():

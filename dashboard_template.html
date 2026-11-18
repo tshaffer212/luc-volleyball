@@ -7600,6 +7600,179 @@ ${pg.map(pn => _spPdfBlock(name, B, pn)).join('')}${pg.length < 2 ? '<div class=
   win.document.open(); win.document.write(html); win.document.close();
 }
 
+// =========================== SCOUTING: SETTER LOCATIONS TAB =======================
+// Their half of the court cut into the 9 DVW zones. Each zone shows where the ball went (Left / Quick /
+// Right / D-ball / BIC / Dump) on the sets their setter made FROM that zone.
+// Data: DATA.opp_rotation_stats[opp].setting.sets rows [fi, rot, setter, hitter, phase, pass_zone, passer,
+// set_zone, combo, cat, eval, won]; set_zone comes from the exact spot VolleyMetrics clicked for the set
+// (aggregate.py set_zone_of). Drawn like the other scouting charts: their side seen from Loyola's side,
+// net at the bottom, so their right (zones 2 / 9 / 1) is on the viewer's left.
+let scoutMap = { opp: null, setters: [], mode: 'each', rot: 'all', pass: 'all' };
+const SM_ROWS = [['1', '6', '5'], ['9', '8', '7'], ['2', '3', '4']];   // top (deep) to bottom (net), viewer left to right
+const SM_ZONE_NAME = { 1: 'right back', 6: 'middle back', 5: 'left back', 9: 'right, off the net', 8: 'middle, off the net', 7: 'left, off the net', 2: 'right front', 3: 'middle front', 4: 'left front' };
+const SM_CAT_SHORT = { Left: 'Left', Quick: 'Quick', Right: 'Right', Dball: 'D-ball', BIC: 'BIC', Dump: 'Dump' };
+
+function smPassOk(ph, p) {
+  if (p === 'all') return true;
+  if (p === 'fb') return ph !== 'T';
+  if (p === 'oos') return ph === '-' || ph === '/';
+  if (p === 'insys') return ph === '#' || ph === '+';
+  return ph === p;
+}
+function smBase(name) {
+  const st = DATA.opp_rotation_stats?.[name]?.setting;
+  if (!st || !st.sets?.length) return null;
+  const season = document.getElementById('scout-season-filter')?.value || 'all';
+  const rows = st.sets.filter(r => season === 'all' || st.files[r[0]]?.season === season);
+  const cnt = {}; rows.forEach(r => { if (r[2]) cnt[r[2]] = (cnt[r[2]] || 0) + 1; });
+  const setters = Object.entries(cnt).sort((a, b) => b[1] - a[1]);
+  return { st, rows, setters, names: st.names || {} };
+}
+function smFilter(rows, setters) {
+  const F = scoutMap;
+  return rows.filter(r => (setters === null || setters.includes(r[2])) && (F.rot === 'all' || String(r[1]) === String(F.rot)) && smPassOk(r[4], F.pass));
+}
+
+// One court. size = px width of the court (zones are square). Returns HTML.
+function smCourt(rows, size) {
+  const cell = size / 3, big = size >= 600, fs = big ? 13 : 12;
+  const tot = rows.length;
+  const byZ = {}; rows.forEach(r => { (byZ[r[7]] = byZ[r[7]] || []).push(r); });
+  const maxShare = Math.max(0.0001, ...Object.values(byZ).map(a => a.length / (tot || 1)));
+  const zoneBox = z => {
+    const a = byZ[z] || [], n = a.length, share = tot ? n / tot : 0;
+    const k = a.filter(r => r[10] === '#').length, e = a.filter(r => r[10] === '=').length, b = a.filter(r => r[10] === '/').length;
+    const eff = n ? (k - e - b) / n : null;
+    const tint = n ? (0.05 + 0.22 * share / maxShare).toFixed(3) : 0;
+    const bars = SC_CATS.map(c => {
+      const m = a.filter(r => r[9] === c).length, p = n ? m / n : 0;
+      return `<div style="display:flex;align-items:center;gap:6px;height:${big ? 21 : 17}px">
+        <span style="width:${big ? 46 : 40}px;color:var(--text-muted)">${SM_CAT_SHORT[c]}</span>
+        <span style="flex:1;height:${big ? 11 : 9}px;background:rgba(28,27,25,.07);border-radius:2px;overflow:hidden"><span style="display:block;height:100%;width:${(p * 100).toFixed(1)}%;background:${SC_CAT_CLR[c]}"></span></span>
+        <span style="width:${big ? 64 : 58}px;text-align:right;${m ? 'color:var(--text)' : 'color:var(--text-dim)'}">${m ? Math.round(p * 100) + '% (' + m + ')' : '-'}</span></div>`;
+    }).join('');
+    return `<div style="position:relative;width:${cell}px;height:${cell}px;box-sizing:border-box;border:1px solid #8c8577;margin:-0.5px;background:rgba(122,0,38,${tint});padding:${big ? 12 : 8}px ${big ? 12 : 9}px;font-size:${fs}px;line-height:1.2;overflow:hidden">
+      <div style="position:absolute;right:${big ? 10 : 7}px;top:${big ? 2 : 0}px;font-family:var(--serif,Georgia,serif);font-weight:700;font-size:${big ? 46 : 34}px;color:rgba(28,27,25,.13)">${z}</div>
+      <div style="font-weight:700;font-size:${fs + 1}px">Zone ${z} <span style="font-weight:400;color:var(--text-muted);font-size:${fs - 1}px">${SM_ZONE_NAME[z]}</span></div>
+      <div style="margin:2px 0 ${big ? 8 : 5}px;color:var(--text-muted)">${n ? `<b style="color:var(--text);font-size:${fs + 3}px">${n}</b> set${n === 1 ? '' : 's'}, ${Math.round(share * 100)}% of all` : 'No sets'}</div>
+      ${n ? bars + `<div style="margin-top:${big ? 6 : 3}px;color:var(--text-muted)">Eff off these sets <b style="color:${effTone(eff, n, null)}">${fmtEff3(eff)}</b>, K% ${Math.round(k / n * 100)}%</div>` : ''}
+    </div>`;
+  };
+  return `<div style="width:${size}px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-bottom:3px"><span>Their right side</span><span>Deep (their end line)</span><span>Their left side</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,${cell}px);border:2px solid #8c8577">${SM_ROWS.flat().map(zoneBox).join('')}</div>
+    <div style="height:6px;background:#1c1b19;margin-top:-1px"></div>
+    <div style="text-align:center;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-top:3px">Net - Loyola's side is below</div>
+  </div>`;
+}
+
+function smSummary(rows) {
+  const n = rows.length;
+  const parts = SC_CATS.map(c => { const m = rows.filter(r => r[9] === c).length; return m ? `<span style="white-space:nowrap"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${SC_CAT_CLR[c]};margin-right:4px"></span>${SM_CAT_SHORT[c]} ${Math.round(m / n * 100)}%</span>` : ''; }).filter(Boolean).join('&nbsp;&nbsp; ');
+  const k = rows.filter(r => r[10] === '#').length, e = rows.filter(r => r[10] === '=').length, b = rows.filter(r => r[10] === '/').length;
+  return `${n} sets - ${parts} - Eff ${fmtEff3(n ? (k - e - b) / n : null)}`;
+}
+
+function smGroups(B) {
+  if (scoutMap.mode === 'team')               // every set the team made, whoever set it
+    return [{ title: 'Whole team - all setters combined', rows: smFilter(B.rows, null) }];
+  const chosen = scoutMap.setters.filter(s => B.setters.some(([p]) => p === s));
+  if (!chosen.length) return [];
+  const nm = p => `#${p} ${B.names[p] || ''}`.trim();
+  if (scoutMap.mode === 'combined' || chosen.length === 1)
+    return [{ title: chosen.map(nm).join(' + '), rows: smFilter(B.rows, chosen) }];
+  return chosen.map(p => ({ title: nm(p), rows: smFilter(B.rows, [p]) }));
+}
+
+function smFilterLine() {
+  const F = scoutMap;
+  return `${F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot}, ${(SC_PASS.find(([v]) => v === F.pass) || [, 'All sets'])[1]}`;
+}
+
+function buildScoutSetterMap(name) {
+  const B = smBase(name);
+  if (!B) return '<div class="empty">No set data for this opponent.</div>';
+  if (scoutMap.opp !== name) {
+    const top = B.setters[0]?.[1] || 0;
+    scoutMap = { opp: name, setters: B.setters.filter(([, c]) => c >= Math.max(10, 0.3 * top)).map(([p]) => p), mode: 'each', rot: 'all', pass: 'all' };
+  }
+  const F = scoutMap;
+  const lab = t => `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${t}</div>`;
+  const setterBoxes = B.setters.map(([p, c]) => `<label style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:${F.setters.includes(p) ? 'var(--surface2)' : 'transparent'}">
+      <input type="checkbox" ${F.setters.includes(p) ? 'checked' : ''} onchange="smToggle('${p}', this.checked)"><b>#${p} ${B.names[p] || ''}</b><span style="color:var(--text-muted);font-size:12px">${c} sets</span></label>`).join('');
+  const chip = (k, v, l) => `<button onclick="setSM('${k}','${v}')" style="padding:6px 12px;border-radius:5px;border:1px solid var(--border);cursor:pointer;font-size:13px;background:${String(F[k]) === String(v) ? 'var(--maroon)' : 'var(--surface2)'};color:${String(F[k]) === String(v) ? '#fff' : 'var(--text)'}">${l}</button>`;
+  const groups = smGroups(B);
+  const maps = groups.map(g => `<div class="card-sm" style="padding:18px 20px;margin-bottom:22px;border-top:3px solid var(--maroon)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <div style="font-family:var(--serif,Georgia,serif);font-size:22px;font-weight:700">${g.title}</div>
+        <div style="font-size:12px;color:var(--text-muted)">${smFilterLine()}</div></div>
+      <div style="font-size:13px;margin-bottom:12px">${g.rows.length ? smSummary(g.rows) : 'No sets with these filters.'}</div>
+      ${g.rows.length ? `<div style="display:flex;justify-content:center;overflow-x:auto">${smCourt(g.rows, 720)}</div>` : ''}
+    </div>`).join('');
+  return `
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Where their setter set the ball from, and where he sent it from each spot. Each box is one zone of their court (numbered like the DVW files); the darker the box, the more often he sets from there. Bars = share of his sets from that zone that went Left, Quick, Right, D-ball, BIC or were a setter dump.</div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;padding:14px 16px;background:var(--surface2);border-radius:8px">
+      <div>${lab('Setters')}<div style="display:flex;gap:6px;flex-wrap:wrap">${setterBoxes}</div></div>
+      <div>${lab('Show')}<div style="display:flex;gap:5px">${chip('mode', 'each', 'Each setter')}${chip('mode', 'combined', 'Checked setters combined')}${chip('mode', 'team', 'Whole team (all setters)')}</div></div>
+      <div>${lab('Rotation')}<select onchange="setSM('rot',this.value)" style="font-size:14px;padding:6px 10px">${[['all', 'All rotations'], ...[1, 2, 3, 4, 5, 6].map(r => [r, 'Rotation ' + r])].map(([v, l]) => `<option value="${v}" ${String(F.rot) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div>${lab('Pass before the set')}<div style="display:flex;gap:5px;flex-wrap:wrap">${SC_PASS.map(([v, l]) => chip('pass', v, l)).join('')}</div></div>
+      <div style="margin-left:auto"><button class="scout-back" onclick="exportSetterMapPDF()" ${groups.length ? '' : 'disabled style="opacity:.5;cursor:default"'}>Export to PDF (1 page per map)</button></div>
+    </div>
+    ${scColorKey()}
+    ${F.mode === 'team' ? '<div style="font-size:12px;color:var(--text-muted);margin:-4px 0 10px">Whole team: every set they made, by any setter (the setter checklist is ignored).</div>' : ''}
+    ${maps || '<div class="empty" style="padding:30px 0">Check at least one setter.</div>'}`;
+}
+
+function smRefresh() {
+  const el = document.getElementById('scout-view-setmap');
+  if (el && selectedOpp) el.innerHTML = buildScoutSetterMap(selectedOpp);
+}
+function smToggle(p, on) {
+  const s = scoutMap.setters.filter(x => x !== p); if (on) s.push(p);
+  scoutMap.setters = s; smRefresh();
+}
+function setSM(k, v) { scoutMap[k] = v; smRefresh(); }
+
+function exportSetterMapPDF() {
+  const name = scoutMap.opp; const B = smBase(name); if (!B) return;
+  const groups = smGroups(B); if (!groups.length) return;
+  const season = document.getElementById('scout-season-filter')?.value || 'all';
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const key = SC_CATS.map(c => `<span style="white-space:nowrap"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${SC_CAT_CLR[c]};margin-right:4px"></span><b>${SC_CAT_LBL[c]}</b> ${SC_CAT_CODES[c].join(', ')}</span>`).join('&nbsp;&nbsp; ');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${name} - Setter locations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--text:#1c1b19;--text-muted:#6b6760;--text-dim:#9a958c;--border:#d9d5cc;--surface2:#f4f2ed;--maroon:#7a0026;--hi:#2e6b3a;--lo:#a3281f;--serif:"Source Serif 4",Georgia,serif}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"IBM Plex Sans",-apple-system,Arial,sans-serif;color:var(--text);-webkit-print-color-adjust:exact;print-color-adjust:exact;font-variant-numeric:tabular-nums}
+  @page{size:letter portrait;margin:.3in}
+  .pg{width:720px;height:960px;overflow:hidden;display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto;page-break-after:always;break-after:page}
+  .pg:last-child{page-break-after:auto;break-after:auto}
+  @media screen{body{background:#8a8780;padding:14px 0}.pg{background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.35);margin:0 auto 14px}}
+  .top{width:100%;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--text);padding:4px 2px}
+  .top b{font-size:9px;letter-spacing:1.3px;text-transform:uppercase;color:var(--maroon)}
+  .top span{font-size:8.5px;color:var(--text-muted)}
+  .ttl{width:100%;display:flex;justify-content:space-between;align-items:baseline}
+  .ttl b{font-family:var(--serif);font-size:24px}
+  .sum{width:100%;font-size:11px}
+  .key{width:100%;font-size:9px;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:auto}
+</style></head><body>
+${groups.map((g, i) => `<div class="pg"><div class="top"><b>${name} - Setter locations</b><span>${season === 'all' ? 'All seasons' : season} - ${smFilterLine()} - ${dateStr} - Page ${i + 1} of ${groups.length}</span></div>
+  <div class="ttl"><b>${g.title}</b><span style="font-size:10px;color:var(--text-muted)">Their court, seen from Loyola's side (net at the bottom). Darker box = sets from there more often.</span></div>
+  <div class="sum">${g.rows.length ? smSummary(g.rows) : 'No sets with these filters.'}</div>
+  ${g.rows.length ? smCourt(g.rows, 690) : ''}
+  <div class="key">${key}</div></div>`).join('')}
+<script>
+(function(){ var ready = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+  Promise.race([ready, new Promise(function (r) { setTimeout(r, 2500); })]).then(function () {
+    if (!window.__noPrint) { setTimeout(function () { window.focus(); window.print(); }, 400); window.onafterprint = function () { window.close(); }; } }); })();
+<\/script></body></html>`;
+  const win = window.open('', '_blank', 'width=900,height=1000');
+  if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+}
+
 function buildScoutSetting(name) {
   const st = DATA.opp_rotation_stats?.[name]?.setting;
   if (!st || !st.sets?.length) return '<div class="empty">No set to attack data for this opponent.</div>';
@@ -7922,10 +8095,11 @@ function renderScoutDetail(name) {
 
       <!-- Team report / Player scouting switch -->
       <div style="display:flex;gap:0;margin-bottom:18px;border:1px solid var(--text);border-radius:4px;overflow:hidden;width:max-content">
-        ${[['team', 'Team report'], ['players', 'Player scouting']].map(([v, l]) => `<button onclick="setScoutView('${v}')" style="padding:8px 18px;font-size:14px;font-weight:600;border:none;cursor:pointer;background:${scoutView === v ? 'var(--maroon)' : 'transparent'};color:${scoutView === v ? '#fff' : 'var(--text)'}">${l}</button>`).join('')}
+        ${[['team', 'Team report'], ['players', 'Player scouting'], ['setmap', 'Setter locations']].map(([v, l]) => `<button onclick="setScoutView('${v}')" style="padding:8px 18px;font-size:14px;font-weight:600;border:none;cursor:pointer;background:${scoutView === v ? 'var(--maroon)' : 'transparent'};color:${scoutView === v ? '#fff' : 'var(--text)'}">${l}</button>`).join('')}
       </div>
       <div id="scout-view-players" style="display:${scoutView === 'players' ? '' : 'none'}">${scoutView === 'players' ? buildScoutPlayers(name) : ''}</div>
-      <div id="scout-view-team" style="display:${scoutView === 'players' ? 'none' : ''}">
+      <div id="scout-view-setmap" style="display:${scoutView === 'setmap' ? '' : 'none'}">${scoutView === 'setmap' ? buildScoutSetterMap(name) : ''}</div>
+      <div id="scout-view-team" style="display:${scoutView === 'team' ? '' : 'none'}">
 
       <!-- Team Metrics Strip -->
       ${team ? `<div style="display:flex;gap:0;margin-bottom:20px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
@@ -7977,7 +8151,7 @@ function renderScoutDetail(name) {
     </div>
   `;
 
-  if (scoutView !== 'players' && A?.combos && Object.keys(A.combos).length > 0) {
+  if (scoutView === 'team' && A?.combos && Object.keys(A.combos).length > 0) {
     const cm = {};
     Object.entries(A.combos).forEach(([k, v]) => { const c = scCombo(k); const o = cm[c] || (cm[c] = { attempts: 0, evals: {} });
       o.attempts += v.attempts || 0; Object.entries(v.evals || {}).forEach(([e, n]) => { o.evals[e] = (o.evals[e] || 0) + n; }); });

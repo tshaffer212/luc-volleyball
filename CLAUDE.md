@@ -129,6 +129,14 @@ rating on the dashboard's `rcvPassScale`, error %) split all serves / vs jump sp
 rules as the Reports card; atk rows carry passer + rally won), and two charts (`spCourt()`).
 "Export checked to PDF (2 per page)" = `exportScoutPlayersPDF()`.
 - Data: `opp_rotation_stats[opp].players` from `compute_scout_players()` (see its docstring for row layouts).
+- Third view "Setter locations" (`buildScoutSetterMap()`, state `scoutMap`): their half court as the 9 DVW
+  zones (seen from Loyola's side, net at the bottom: 1 6 5 / 9 8 7 / 2 3 4), each zone = the set distribution
+  (Left / Quick / Right / D-ball / BIC / Dump) of sets made FROM that zone, sets + share, Eff off those sets;
+  box shade = how often he sets from there. Setter checklist; Show = each setter / checked setters combined /
+  whole team (`mode: 'team'`, every set by any setter, checklist ignored); rotation and pass
+  filters; `exportSetterMapPDF()` = one full page per map. Set zone = `set_zone_of()` in aggregate.py (exact
+  set spot `xy_s`, else code: code[9] for '~~~3' style, code[10] for '~~~24C' style). This also fixed
+  setting.sets set_zone (r[7]) for ~1,600 sets that had read the wrong character.
 - Lines are drawn from the exact court spots VolleyMetrics clicked: `parse_dvw.py` stores DVW fields 4/5/6 as
   `xy_s` / `xy_m` / `xy_e` (int 'yyxx', x = v % 100, y = v // 100) and the coded landing zone as `vm_end`.
   Every attack / serve is stored from the hitter's (server's) side: net y=50, far baseline ~89.5, sidelines
