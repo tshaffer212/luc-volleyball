@@ -195,6 +195,12 @@ rotation on balls they set (`match_rot_stats.setter_rot` from `aggregate.py`) in
 - New roster players get a password automatically; existing ones never change.
   Reset one: `python3 build_player_portal.py --reset "Player Name"`.
 - Push `players.html` and `player_data/` alongside `dashboard.html`.
+- Practices in the portal's pass-quality filters (Setter Breakdown / Attack by Setter phases): practice files have
+  no rally markers, so aggregate.py cuts them into rallies (`practice_rallies()`: new rally at each serve and
+  after each rally-ending action) and runs the same setter -> hitter -> bucket logic as matches. The result goes
+  to `portal_extra.json` (`setter_atk_q`, git-ignored, NOT in dashboard_data so dashboard.html stays small);
+  build_player_portal.py uses it instead of the bucket-less `setter_attacks` for practices. The coach
+  dashboard's Reports setter breakdown still uses match data only (match_rot_stats).
 - Opponent scouting in the portal ("My stats | Opponent scouting" switch): the coach dashboard's whole scouting
   section (Team report, Player scouting, Setter locations, Red zone, PDFs) runs in an iframe.
   `build_player_portal.py` writes `player_data/scouting.json` (scouting-only copy of dashboard_data via

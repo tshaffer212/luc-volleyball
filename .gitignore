@@ -1,6 +1,7 @@
 # Large data files — never commit these
 volleyball_data.json
 dashboard_data.json
+portal_extra.json
 
 # macOS
 .DS_Store

@@ -356,6 +356,19 @@ def compute_setter_tab(actions, loyola_side):
 PA_ATK_GROUP = {'X5':'pin','X6':'pin','V5':'high','V6':'high','V8':'high','VP':'high',
                 'X1':'quick','X2':'quick','X7':'quick','XP':'bic','X8':'dball'}
 
+def practice_rallies(actions):
+    """Practice files have no rally markers (the whole session is one 'rally'), so cut the stream into
+    rallies: a new one starts at every serve and after every rally-ending action (kill, ace, error, block
+    kill, blocked attack). Returns copies of the actions with rally_seq set to that rally."""
+    out, k, prev_end = [], 0, False
+    for a in actions:
+        if out and (prev_end or a.get('skill_code') == 'S'):
+            k += 1
+        out.append(dict(a, rally_seq=k))
+        prev_end = bool(_pa_terminal(a))
+    return out
+
+
 def _pa_terminal(a):
     """+1 = this action's team wins the rally, -1 = loses, 0 = rally continues."""
     sk, ev = a.get('skill_code'), a.get('evaluation', '')
@@ -1358,7 +1371,11 @@ def main(raw_path, out_path):
         ca = compute_call_attacks(acts, ls)
         sa = compute_setter_player_attacks(acts, ls)
         rot_stats = compute_match_rotation_stats(acts, ls) if s.get('type') == 'match' else None
-        session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca, 'setter_atk': sa, 'rot_stats': rot_stats}
+        # Practices: the same setter -> hitter -> pass-quality buckets (all / fbso / perf / good / med / oos /
+        # transition) as matches, so the player portal's phase filters count practice sets too
+        # (no rotation tables for practices - only setter_atk is kept).
+        sa_q = compute_match_rotation_stats(practice_rallies(acts), ls).get('setter_atk') if s.get('type') != 'match' else None
+        session_rally[sid] = {'dig': dig, 'fbso': fbso, 'call_atk': ca, 'setter_atk': sa, 'rot_stats': rot_stats, 'setter_atk_q': sa_q}
         # Accumulate setter-call → attack outcome per season
         for k_code, combos in ca.items():
             for atk_cc, cv in combos.items():
@@ -2621,6 +2638,13 @@ def main(raw_path, out_path):
         os.path.join(os.path.dirname(os.path.abspath(out_path)), COMPETITION_CSV),
         output['sessions'], output['players_by_season'])
     add_virtual_players(output, sets_out)
+
+    # Player portal only (kept out of dashboard.html): practice setter -> hitter -> pass-quality buckets
+    extra_path = os.path.join(os.path.dirname(os.path.abspath(out_path)), 'portal_extra.json')
+    sid_by_key = {f"{x['season']}|{x['file']}": x['id'] for x in output['sessions'] if x.get('season') and x.get('file')}
+    with open(extra_path, 'w') as f:
+        json.dump({'setter_atk_q': {sid_by_key.get(k, k): v['setter_atk_q'] for k, v in session_rally.items() if v.get('setter_atk_q')}},
+                  f, separators=(',', ':'))
 
     sets_path = os.path.join(os.path.dirname(os.path.abspath(out_path)), 'dashboard_sets.json')
     with open(sets_path, 'w') as f:

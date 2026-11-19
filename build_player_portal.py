@@ -35,6 +35,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DASH = HERE / 'dashboard_data.json'
 SETS = HERE / 'dashboard_sets.json'
+EXTRA = HERE / 'portal_extra.json'      # from aggregate.py: practice setter_atk with pass-quality buckets
 OUT = HERE / 'player_data'
 PRIV = HERE / 'private'
 PWF = PRIV / 'player_passwords.json'
@@ -231,6 +232,7 @@ def main():
 
     d = json.load(open(DASH))
     sets_data = json.load(open(SETS)) if SETS.exists() else {}
+    prac_q = (json.load(open(EXTRA)) if EXTRA.exists() else {}).get('setter_atk_q', {})
     pbs = d['players_by_season']
     VIRT = set(d.get('virtual_players') or {})   # coach-only copies: no login, not in any team pool
     order = [s for s in ['Spring 2025', 'Fall 2025', 'Spring 2026', 'Fall 2026', 'Spring 2027', 'Fall 2027',
@@ -323,6 +325,8 @@ def main():
             mrs = s.get('match_rot_stats') or {}
             is_match = s['type'] == 'match'
             setter_atk = mrs.get('setter_atk') if is_match and mrs.get('setter_atk') is not None else None
+            if not is_match and prac_q.get(s['id']):
+                setter_atk = prac_q[s['id']]        # practices: same pass-quality buckets as matches
             prac_sa = s.get('setter_attacks') if setter_atk is None else None
             appears = bool(ps) or any(P in (pl or {}) for pl in (s.get('pts_added') or {}).values())
             if not appears and not (is_setter and ((setter_atk or {}).get(P) or (prac_sa or {}).get(P))):
