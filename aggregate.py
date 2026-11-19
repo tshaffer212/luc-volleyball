@@ -1225,11 +1225,41 @@ def add_virtual_players(output, sets_out):
     output['virtual_players'] = vmeta
 
 
+# Name spelling fixes: rosters typed wrong in the DVW files. Applied to every roster and action as soon as
+# the data is loaded, so the dashboard, reports, PDFs and player portal all show the right spelling.
+# (Renaming a current player also moves his portal password: rename his key in private/player_passwords.json.)
+NAME_FIXES = {'Stainslaw': 'Stanislaw'}
+
+def fix_names(raw):
+    if not NAME_FIXES:
+        return
+    def fx(v):
+        if isinstance(v, str):
+            for bad, good in NAME_FIXES.items():
+                v = v.replace(bad, good)
+        return v
+    def fix_roster(pl):
+        for p in (pl or {}).values():
+            if isinstance(p, dict):
+                for f in ('name', 'first_name', 'last_name'):
+                    if f in p:
+                        p[f] = fx(p[f])
+    fix_roster(raw.get('players'))
+    for s in raw.get('sessions', []) + raw.get('scout_sessions', []):
+        for key in ('players', 'home_players', 'away_players'):
+            fix_roster(s.get(key))
+        for a in s.get('actions', []):
+            for f in ('player_name', 'player_first', 'player_last'):
+                if a.get(f):
+                    a[f] = fx(a[f])
+
+
 def main(raw_path, out_path):
     print(f"Loading {raw_path} ...", file=sys.stderr)
     with open(raw_path) as f:
         raw = json.load(f)
 
+    fix_names(raw)
     sessions_raw = raw.get('sessions', [])
     scouts_raw   = raw.get('scout_sessions', [])
 

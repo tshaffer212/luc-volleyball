@@ -36,6 +36,15 @@ Whenever a table or row displays Kills (K), Errors (E), and Attempts (Att) toget
 
 ---
 
+## Name spelling fixes
+
+DVW rosters sometimes misspell names. `NAME_FIXES` in aggregate.py (`fix_names()`, run right after loading
+volleyball_data.json) corrects every roster and action, so all pages and the portal use the fixed spelling.
+Current: Stainslaw -> Stanislaw (#9 Chacinski). When renaming a current player, also rename his key in
+`private/player_passwords.json` so he keeps the same portal password (his portal file id changes with the name).
+
+---
+
 ## Data Pipeline
 
 ```
