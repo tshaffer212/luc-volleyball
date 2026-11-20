@@ -204,6 +204,11 @@ rotation on balls they set (`match_rot_stats.setter_rot` from `aggregate.py`) in
 - New roster players get a password automatically; existing ones never change.
   Reset one: `python3 build_player_portal.py --reset "Player Name"`.
 - Push `players.html` and `player_data/` alongside `dashboard.html`.
+- Sections follow what the player really does (`roleTotals()` / `does(skill)` in players.html: his season totals,
+  matches + practices, all sessions; needs 30 attacks / passes / serves, 15 blocks / digs / free balls). No
+  "Attack" tabs or "Expected vs Actual" (own swings) for setters / liberos, no Reception or Pass & Hit for
+  non-passers, no block card for players who barely block; KPI tiles and Trend by Month columns follow the same
+  rule (empty months dropped, setters get a Sets column). Rotation tables say they are matches only.
 - Practices in the portal's pass-quality filters (Setter Breakdown / Attack by Setter phases): practice files have
   no rally markers, so aggregate.py cuts them into rallies (`practice_rallies()`: new rally at each serve and
   after each rally-ending action) and runs the same setter -> hitter -> bucket logic as matches. The result goes

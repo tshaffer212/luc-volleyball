@@ -318,7 +318,7 @@ function aggregate() {
       if (x.sd) { const sd = {}; for (const [h, ph] of Object.entries(keyed(x.sd, s.se))) sd[h] = ph; addInto(A.sd, sd); }
       if (x.sr) { const o = {}; for (const [r, v] of Object.entries(x.sr)) o[r] = { c: v.c, h: keyed(v.h, s.se) }; addInto(A.sr, o); }
       addInto(A.sbt, x.sbt); addInto(A.sbo, x.sbo);
-      const mk = s.d.slice(0, 7); addInto(A.months[mk] || (A.months[mk] = {}), { A: x.sk?.A, R: x.sk?.R, S: x.sk?.S });
+      const mk = s.d.slice(0, 7); addInto(A.months[mk] || (A.months[mk] = {}), { A: x.sk?.A, R: x.sk?.R, S: x.sk?.S, E: x.sk?.E });
     }
     // sets played (for per-set numbers)
     if (s.t === 'match' && F.set === 'all') A.sets += Object.values(s.s || {}).filter(x => hasTouch(x.pa)).length || (hasTouch(s.a.pa) ? 1 : 0);
@@ -436,25 +436,44 @@ function sessToggle(id, on) { const all = inScope().map(s => s.id); if (!F.sel) 
 function sessAll(on) { F.sel = on ? null : new Set(); renderKeepOpen(); }
 function renderKeepOpen() { render(); document.getElementById('f-sess').style.display = 'block'; }
 
+// -- What this player actually does --------------------------------------------
+// A section only shows when he does that skill for real this season (matches + practices, every session),
+// so a setter doesn't get an "attack" report built on 8 swings or a middle a passing report on 5 passes.
+// Season totals (not the current filters) keep tabs from appearing / disappearing as filters change.
+const ROLE_MIN = { B: 15, D: 15, F: 15 };   // blocks / digs / free balls are rarer touches; everything else needs 30
+let RT = {};
+function roleTotals() {
+  const t = {};
+  for (const s of PD.sessions) {
+    if (F.season !== 'all' && s.se !== F.season) continue;
+    for (const [k, v] of Object.entries((s.a && s.a.sk) || {})) t[k] = (t[k] || 0) + (v.n || 0);
+  }
+  return t;
+}
+const does = k => (RT[k] || 0) >= (ROLE_MIN[k] || 30);
+
 // -- Main render --------------------------------------------------------------
 let AG = null;
 function render() {
   renderFilters();
+  RT = roleTotals();
   AG = aggregate();
   const sk = AG.sk, A = sk.A || {}, S = sk.S || {}, R = sk.R || {}, B = sk.B || {}, D = sk.D || {}, E = sk.E || {};
   const a = evA(A.ev, A.n), aE = effv(a.k, a.e, a.b, a.a);
   const k = [];
-  if (A.n) k.push(['Attack efficiency', `<span class="${ec(aE, A.n)}">${fmtEff3(aE)}</span>`, `${A.n} att, kill ${pct(a.k, a.a)}`]);
+  if (A.n && does('A')) k.push(['Attack efficiency', `<span class="${ec(aE, A.n)}">${fmtEff3(aE)}</span>`, `${A.n} att, kill ${pct(a.k, a.a)}`]);
   if (PD.player.setter && E.n) k.push(['Sets', E.n, `${(E.ev || {})['='] || 0} set errors`]);
-  if (S.n) k.push(['Ace rate', pct(S.ev['#'] || 0, S.n), `${S.ev['#'] || 0} aces, ${S.n} serves`]);
-  if (S.n) k.push(['Serve error rate', pct(S.ev['='] || 0, S.n), `${S.ev['='] || 0} errors`]);
-  if (R.n) { const pv = passAvg(R.ev, R.n); k.push(['Pass average', `<span class="${pac(pv)}">${pv.toFixed(2)}</span>`, `${R.n} passes, ${F.scale}-pt scale`]); }
-  if (B.n) k.push(['Block kills', (B.ev || {})['#'] || 0, `${B.n} block touches`]);
-  if (D.n) k.push(['Digs', D.n - ((D.ev || {})['='] || 0), `${D.n} dig attempts`]);
+  if (S.n && does('S')) k.push(['Ace rate', pct(S.ev['#'] || 0, S.n), `${S.ev['#'] || 0} aces, ${S.n} serves`]);
+  if (S.n && does('S')) k.push(['Serve error rate', pct(S.ev['='] || 0, S.n), `${S.ev['='] || 0} errors`]);
+  if (R.n && does('R')) { const pv = passAvg(R.ev, R.n); k.push(['Pass average', `<span class="${pac(pv)}">${pv.toFixed(2)}</span>`, `${R.n} passes, ${F.scale}-pt scale`]); }
+  if (B.n && does('B')) k.push(['Block kills', (B.ev || {})['#'] || 0, `${B.n} block touches`]);
+  if (D.n && does('D')) k.push(['Digs', D.n - ((D.ev || {})['='] || 0), `${D.n} dig attempts`]);
   document.getElementById('kpis').innerHTML = AG.n ? k.map(([l, v, s]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div><div class="m">${s}</div></div>`).join('') : '';
-  const TABS = [['servrcv', 'Serve & Receive'], ['attack', 'Attack by Set Type'], ['setter', 'Attack by Setter'], ['rot', 'Attack by Rotation'], ['blk', 'Block & Defense'], ['adv', 'Advanced']];
-  if (PD.player.setter) TABS.splice(3, 0, ['dist', 'Setter Breakdown']);
-  if (!TABS.some(t => t[0] === F.tab)) F.tab = 'servrcv';
+  const TABS = [['servrcv', 'Serve & Receive'], ['attack', 'Attack by Set Type'], ['setter', 'Attack by Setter'], ['rot', 'Attack by Rotation'], ['blk', 'Block & Defense'], ['adv', 'Advanced']]
+    .filter(([v]) => v === 'servrcv' ? (does('S') || does('R')) : (v === 'attack' || v === 'setter') ? does('A')
+      : v === 'rot' ? (PD.player.setter || does('A')) : v === 'blk' ? (does('B') || does('D') || does('F')) : true);
+  if (PD.player.setter) TABS.splice(TABS.findIndex(t => t[0] === 'rot'), 0, ['dist', 'Setter Breakdown']);
+  if (!TABS.some(t => t[0] === F.tab)) F.tab = TABS[0][0];
   document.getElementById('tabs').innerHTML = TABS.map(([v, l]) => `<button data-tab="${v}" class="${F.tab === v ? 'on' : ''}" onclick="F.tab='${v}';render()">${l}</button>`).join('') +
     `<span class="acts">Save PDF <button onclick="exportPortalPDF(false)" title="Save this report as a one-page PDF">This tab</button><button onclick="exportPortalPDF(true)" title="Every report, packed onto as few pages as possible">All reports</button></span>`;
   const P = document.getElementById('panel');
@@ -467,7 +486,7 @@ function tabServe() {
   const sk = AG.sk; let html = '';
   const srow = (lbl, r) => { if (!r || !r.n) return ''; const ev = r.ev || {}; const avg = (3 * (ev['#'] || 0) + 2 * (ev['+'] || 0) + 2 * (ev['/'] || 0) + (ev['-'] || 0)) / r.n;
     return `<tr><td>${lbl}</td><td class="n">${r.n}</td><td class="n g">${ev['#'] || 0}</td><td class="n">${ev['+'] || 0}</td><td class="n">${ev['/'] || 0}</td><td class="n">${ev['-'] || 0}</td><td class="n r">${ev['='] || 0}</td><td class="n"><b>${pct(ev['#'] || 0, r.n)}</b></td><td class="n r">${pct(ev['='] || 0, r.n)}</td><td class="n">${avg.toFixed(2)}</td></tr>`; };
-  if (sk.S && sk.S.n) html += card('Serving', tbl('<th></th><th class="n">Att</th><th class="n">Ace</th><th class="n">Pos (+)</th><th class="n">Over (/)</th><th class="n">Neg (-)</th><th class="n">Err</th><th class="n">Ace%</th><th class="n">Err%</th><th class="n">Srv Avg</th>',
+  if (sk.S && sk.S.n && does('S')) html += card('Serving', tbl('<th></th><th class="n">Att</th><th class="n">Ace</th><th class="n">Pos (+)</th><th class="n">Over (/)</th><th class="n">Neg (-)</th><th class="n">Err</th><th class="n">Ace%</th><th class="n">Err%</th><th class="n">Srv Avg</th>',
     srow('All serves', sk.S) + srow('Float', sk.SM) + srow('Topspin / jump', sk.SQ)) + '<div class="foot-note">Serve avg: ace 3, positive/overpass 2, negative 1, error 0.</div>');
   const four = F.scale === '4';
   const cats = four ? ['perf', 'good', 'med', 'oos', 'over', 'err'] : ['perf', 'good', 'oos', 'over', 'err'];
@@ -476,17 +495,17 @@ function tabServe() {
   const catOf = r => { const c = r.cat ? { ...r.cat } : { perf: r.ev['#'] || 0, good: r.ev['+'] || 0, med: r.ev['!'] || 0, oos: r.ev['-'] || 0, over: r.ev['/'] || 0, err: r.ev['='] || 0 }; if (!four) { c.good = (c.good || 0) + (c.med || 0); c.med = 0; } return c; };
   const rrow = (lbl, r) => { if (!r || !r.n) return ''; const c = catOf(r); const av = passAvg(r.ev, r.n);
     return `<tr><td>${lbl}</td><td class="n">${r.n}</td>${cats.map(k => `<td class="n">${c[k] || 0}</td>`).join('')}<td class="n ${pac(av)}"><b>${av.toFixed(2)}</b></td><td class="n">${pct((c.perf || 0) + (c.good || 0), r.n)}</td><td class="n r">${pct(c.err || 0, r.n)}</td></tr>`; };
-  if (sk.R && sk.R.n) {
+  if (sk.R && sk.R.n && does('R')) {
     html += card('Reception', tbl(`<th></th><th class="n">Att</th>${cats.map(k => `<th class="n">${CN[k]}, ${pv[k]}</th>`).join('')}<th class="n">Pass Avg</th><th class="n">Perf+Good%</th><th class="n">Err%</th>`,
       rrow('All passes', sk.R) + rrow('vs Float', sk.RM) + rrow('vs Topspin', sk.RQ)) +
       (AG.fb[0] ? `<div class="note">First-ball sideout when you passed: <b class="gold">${pct(AG.fb[1], AG.fb[0])}</b> <span class="m">(${AG.fb[1]} kills on ${AG.fb[0]} passes)</span></div>` : ''));
     const zs = Object.entries(AG.rz).filter(([, v]) => v.n);
     if (zs.length) html += card('Passing by Zone', tbl('<th>Zone</th><th class="n">Att</th><th class="n">Pass Avg</th><th class="n">Perf%</th><th class="n">Err%</th>',
       zs.sort((a, b) => a[0] - b[0]).map(([z, v]) => { const av = passAvg(v.ev, v.n); return `<tr><td>Zone ${z}</td><td class="n">${v.n}</td><td class="n ${pac(av)}"><b>${av.toFixed(2)}</b></td><td class="n">${pct(v.ev['#'] || 0, v.n)}</td><td class="n r">${pct(v.ev['='] || 0, v.n)}</td></tr>`; }).join('')));
-  } else html += card('Reception', '<div class="empty">No receptions in these sessions.</div>');
+  } else if (does('R')) html += card('Reception', '<div class="empty">No receptions in these sessions.</div>');
   const rs = AG.rot.s || {}, rr = AG.rot.r || {};
   const rk = ['1', '2', '3', '4', '5', '6'].filter(r => (rs[r] && rs[r].att) || (rr[r] && rr[r].att));
-  if (rk.length) html += card('By Rotation', tbl('<th>Rotation</th><th class="n">Serves</th><th class="n">Ace</th><th class="n">Err</th><th class="n">Passes</th><th class="n">Pass Avg</th>',
+  if (rk.length) html += card('By Rotation <span class="m" style="text-transform:none;letter-spacing:0">matches only (rotations are not coded in practices)</span>', tbl('<th>Rotation</th><th class="n">Serves</th><th class="n">Ace</th><th class="n">Err</th><th class="n">Passes</th><th class="n">Pass Avg</th>',
     rk.map(r => { const s = rs[r] || {}, p = rr[r] || {}; const av = p.att ? catPts(four ? p : { ...p, good: (p.good || 0) + (p.med || 0), med: 0 }) / p.att : null;
       return `<tr><td>Rotation ${r}</td><td class="n">${s.att || '-'}</td><td class="n g">${s.att ? s.ace : ''}</td><td class="n r">${s.att ? s.err : ''}</td><td class="n">${p.att || '-'}</td><td class="n ${pac(av)}">${av === null ? '-' : av.toFixed(2)}</td></tr>`; }).join('')) + '<div class="foot-note">Matches only.</div>');
   return html || card('Serve & Receive', '<div class="empty">No serves or passes in these sessions.</div>');
@@ -565,12 +584,14 @@ function tabRot() {
   const ra = AG.rot.a || {};
   const rk = ['1', '2', '3', '4', '5', '6'].filter(r => ra[r] && ra[r].OVR && ra[r].OVR.a);
   if (!rk.length) return card('Attack by Rotation', '<div class="empty">No rotation data (matches only).</div>');
+  const rotN = rk.reduce((t, r) => t + ra[r].OVR.a, 0), allN = (AG.sk.A || {}).n || 0;
+  const rotNote = `<div class="foot-note">Matches only: rotations are not coded in practices, so this uses ${rotN} of your ${allN} attacks in these filters.</div>`;
   const grid = ['4', '3', '2', '5', '6', '1'].map(r => { const v = (ra[r] || {}).OVR; if (!v || !v.a) return `<div class="rot"><div class="rl">Rotation ${r}</div><div class="rv m">-</div></div>`;
     const e = effv(v.k, v.e, v.bk, v.a); return `<div class="rot"><div class="rl">Rotation ${r}</div><div class="rv ${ec(e, v.a)}">${fmtEff3(e)}</div><div class="m">${v.k}K, ${v.e}E, ${v.bk}BLK, ${v.a} att</div></div>`; }).join('');
   const rows = rk.map(r => atkRow('Rotation ' + r, ra[r].OVR)).join('');
   const cl = [...new Set(rk.flatMap(r => Object.keys(ra[r]).filter(c => c !== 'OVR')))].sort();
   const mx = `<div class="tw"><table><tr><th>Rotation</th>${cl.map(setHead).join('')}</tr>${rk.map(r => `<tr><td>Rotation ${r}</td>${cl.map(c => { const v = ra[r][c]; if (!v || !v.a) return '<td class="n m">-</td>'; const e = effv(v.k, v.e, v.bk, v.a); return `<td class="n"><span class="${ec(e, v.a)}">${fmtEff3(e)}</span> <span class="m">${v.a}</span></td>`; }).join('')}</tr>`).join('')}</table></div>`;
-  return `<div class="g2">${card('Attack by Rotation', `<div class="rots">${grid}</div><div class="foot-note">Laid out like the court: R4, R3, R2 front, R5, R6, R1 back.</div>`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
+  return `<div class="g2">${card('Attack by Rotation', `<div class="rots">${grid}</div><div class="foot-note">Laid out like the court: R4, R3, R2 front, R5, R6, R1 back.</div>${rotNote}`)}${card('By Rotation', tbl('<th></th>' + ATK_H, rows))}</div>` +
     card('Rotation by Set Type <span class="m" style="text-transform:none;letter-spacing:0">eff, attempts</span>', mx) + setKey(cl);
 }
 
@@ -604,7 +625,7 @@ function tabBlock() {
               F: ['Free ball', { '#': 'Perfect', '+': 'Good', '!': 'Medium', '-': 'Poor', '/': 'Overpass', '=': 'Error' }] };
   let html = '';
   for (const s of ['B', 'D', 'F']) {
-    const r = sk[s]; if (!r || !r.n) continue;
+    const r = sk[s]; if (!r || !r.n || !does(s)) continue;
     const used = EV.filter(e => r.ev[e]);
     html += card(L[s][0], tbl('<th class="n">Total</th>' + used.map(e => `<th class="n">${L[s][1][e]} (${e})</th>`).join(''),
       `<tr><td class="n"><b>${r.n}</b></td>${used.map(e => `<td class="n ${e === '#' ? 'g' : e === '=' ? 'r' : ''}">${r.ev[e]} <span class="m">${pct(r.ev[e], r.n)}</span></td>`).join('')}</tr>`) +
@@ -675,6 +696,7 @@ function cardPA() {
 }
 
 function cardEOE() {
+  if (!does('A')) return '';
   const me = hitterCells(); const n = Object.values(me.cells).reduce((s, r) => s + r.a, 0);
   const help = `<div class="help" id="h-eoe"><b>Expected</b> is what an average Loyola hitter would hit on exactly your mix of balls (the pass before the attack + the set type), using the whole team's results on each kind of ball. <b>EOE</b> = your actual efficiency - expected. Positive means you did better than the balls you got would predict. Efficiency is (K - E - BLK) / Att.</div>`;
   if (!n) return '';
@@ -692,7 +714,7 @@ function cardEOE() {
   const expOf = filt => { let s = 0, m = 0; for (const [sit, c] of Object.entries(me.cells)) if (filt(sit)) { s += c.a * teamEff(sit); m += c.a; } return m ? s / m : null; };
   const row = (l, r, ex) => { const e = eff(r); return `<tr><td>${l}</td><td class="n">${r.a}</td><td class="n ${ec(e, r.a)}"><b>${fmtEff3(e)}</b></td><td class="n m">${fmtEff3(ex)}</td><td class="n ${e - ex >= 0 ? 'g' : 'r'}"><b>${fmtEff3(e - ex, true)}</b></td></tr>`; };
   const H = '<th></th><th class="n">Att</th><th class="n">Your Eff</th><th class="n">Expected</th><th class="n">EOE</th>';
-  return card('Expected vs Actual Efficiency' + helpBtn('h-eoe'), help + `<div class="bigs">
+  return card('Expected vs Actual Efficiency <span class="m" style="text-transform:none;letter-spacing:0">your own attacks</span>' + helpBtn('h-eoe'), help + `<div class="bigs">
       <div><div class="m">Actual</div><div class="big">${fmtEff3(raw)}</div></div>
       <div><div class="m">Expected</div><div class="big" style="color:var(--muted)">${fmtEff3(exp)}</div></div>
       <div><div class="m">EOE</div><div class="big ${Math.abs(eoe) >= 0.05 ? (eoe > 0 ? 'hi' : 'lo') : ''}">${fmtEff3(eoe, true)}</div></div>
@@ -702,6 +724,7 @@ function cardEOE() {
       <div class="foot-note" style="line-height:1.5">In-system pin = X5 Go, X6 X, High ball = V5 Hut, V6 Red (and other V sets), Quick = X1 Quick, X2 Back Quick, X7 Gap, BIC = XP Pipe, D-ball = X8 D</div></div></div>`);
 }
 function cardPassHit() {
+  if (!does('R') || !does('A')) return '';            // only for players who both pass and hit
   const ph = AG.ph; if (!ph || !(ph.ph && Object.keys(ph.ph).length)) return '';
   const z = () => ({ n: 0, k: 0, e: 0, b: 0, w: 0 });
   const sum = g => { const r = z(); for (const [ev, rec] of Object.entries(ph[g] || {})) { r.n += rec[0]; r.w += rec[1]; if (ev === '#') r.k += rec[0]; else if (ev === '=') r.e += rec[0]; else if (ev === '/') r.b += rec[0]; } return r; };
@@ -736,16 +759,28 @@ function cardSetterAdj() {
   const adj = used.reduce((s, k) => s + share[k] * (((me[k].k - me[k].e - me[k].b) + M * tEff[k]) / (me[k].a + M)), 0);
   const help = `<div class="help" id="h-sa">Every attack is credited to the setter whose set came right before it. <b>Expected</b> = what an average Loyola setter would produce from your exact mix of passes (team baseline per situation). <b>EOE</b> = Raw - Expected. <b>Standardized</b> re-weights your efficiency to the team's average pass mix; <b>Adjusted</b> also blends small samples toward the team baseline (about ${M} sets).</div>`;
   const big = (l, v, c = '') => `<div><div class="m">${l}</div><div class="big ${c}"${c === 'm' ? ' style="color:var(--muted)"' : ''}>${v}</div></div>`;
-  return card('Setter Efficiency - Adjusted for Pass Quality' + helpBtn('h-sa'), help + `<div class="bigs">${big('Raw', fmtEff3(raw))}${big('Expected', fmtEff3(exp), 'm')}${big('EOE', fmtEff3(eoe, true), eoe >= 0 ? 'g' : 'r')}${big('Standardized', fmtEff3(std))}${big('Adjusted', fmtEff3(adj), 'gold')}${big('Sets', n)}</div>` +
+  return card('Setter Efficiency - Adjusted for Pass Quality <span class="m" style="text-transform:none;letter-spacing:0">the team\'s attacks off your sets</span>' + helpBtn('h-sa'), help + `<div class="bigs">${big('Raw', fmtEff3(raw))}${big('Expected', fmtEff3(exp), 'm')}${big('EOE', fmtEff3(eoe, true), eoe >= 0 ? 'g' : 'r')}${big('Standardized', fmtEff3(std))}${big('Adjusted', fmtEff3(adj), 'gold')}${big('Sets', n)}</div>` +
     tbl('<th>Situation</th><th class="n">Your sets</th><th class="n">Your Eff</th><th class="n">Team Eff</th><th class="n">Your mix</th><th class="n">Team mix</th>',
       used.map(k => `<tr><td>${bucketLbl(k)}</td><td class="n">${me[k].a}</td><td class="n ${ec(eff(me[k]), me[k].a)}"><b>${fmtEff3(eff(me[k]))}</b></td><td class="n m">${fmtEff3(tEff[k])}</td><td class="n">${pct(me[k].a, n)}</td><td class="n m">${pct(tm[k].a, tTot)}</td></tr>`).join('')));
 }
 function cardTrend() {
   const ms = Object.keys(AG.months).sort(); if (!ms.length) return '';
   const MN = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const rows = ms.map(m => { const x = AG.months[m], A = x.A || {}, R = x.R || {}, S = x.S || {}; const a = evA(A.ev, A.n), e = effv(a.k, a.e, a.b, a.a); const pv = passAvg(R.ev, R.n);
-    return `<tr><td>${MN[+m.slice(5)]} ${m.slice(0, 4)}</td><td class="n ${ec(e, A.n)}"><b>${fmtEff3(e)}</b></td><td class="n">${A.n || '-'}</td><td class="n ${pac(pv)}">${pv === null ? '-' : pv.toFixed(2)}</td><td class="n">${R.n || '-'}</td><td class="n">${S.n ? pct(S.ev['#'] || 0, S.n) : '-'}</td><td class="n r">${S.n ? pct(S.ev['='] || 0, S.n) : '-'}</td><td class="n">${S.n || '-'}</td></tr>`; }).join('');
-  return card('Trend by Month', tbl('<th>Month</th><th class="n">Atk Eff</th><th class="n">Att</th><th class="n">Pass Avg</th><th class="n">Passes</th><th class="n">Ace%</th><th class="n">Srv Err%</th><th class="n">Serves</th>', rows));
+  // only the skills he really does; months with nothing in those columns are left out
+  const cols = [];
+  if (does('A')) cols.push(['Atk Eff', x => { const A = x.A || {}; if (!A.n) return null; const a = evA(A.ev, A.n), e = effv(a.k, a.e, a.b, a.a); return `<b class="${ec(e, A.n)}">${fmtEff3(e)}</b>`; }],
+                          ['Att', x => (x.A || {}).n || null]);
+  if (PD.player.setter && does('E')) cols.push(['Sets', x => (x.E || {}).n || null]);
+  if (does('R')) cols.push(['Pass Avg', x => { const R = x.R || {}; if (!R.n) return null; const pv = passAvg(R.ev, R.n); return `<span class="${pac(pv)}">${pv.toFixed(2)}</span>`; }],
+                          ['Passes', x => (x.R || {}).n || null]);
+  if (does('S')) cols.push(['Ace%', x => { const S = x.S || {}; return S.n ? pct(S.ev['#'] || 0, S.n) : null; }],
+                          ['Srv Err%', x => { const S = x.S || {}; return S.n ? pct(S.ev['='] || 0, S.n) : null; }],
+                          ['Serves', x => (x.S || {}).n || null]);
+  if (!cols.length) return '';
+  const rows = ms.map(m => { const cells = cols.map(([, f]) => f(AG.months[m])); if (cells.every(c => c === null)) return '';
+    return `<tr><td>${MN[+m.slice(5)]} ${m.slice(0, 4)}</td>${cells.map(c => `<td class="n">${c === null ? '-' : c}</td>`).join('')}</tr>`; }).join('');
+  if (!rows) return '';
+  return card('Trend by Month', tbl('<th>Month</th>' + cols.map(([h]) => `<th class="n">${h}</th>`).join(''), rows));
 }
 function tabAdv() { return cardPA() + cardEOE() + cardSetterAdj() + cardPassHit() + cardTrend(); }
 
