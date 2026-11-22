@@ -1332,12 +1332,13 @@ def compute_match_competition(session, ls):
                 if a.get('team_side') == ls and a.get('player_num'):
                     touched.add(str(a['player_num']))
         share = {p: c / total for p, c in on.items()} if total else {}
+        libero = set()
         for p in touched:
             if p not in share:        # touched the ball but never in the lineup = he was the libero in that set
-                share[p] = 1.0
+                share[p] = 1.0; libero.add(p)
         for p, f in share.items():
-            if f > 0:
-                out[p][str(sn)] = [round(f, 3), 0] if won else [0, round(f, 3)]
+            if f > 0:   # [won share, lost share, 1 = he played the set as the libero]
+                out[p][str(sn)] = ([round(f, 3), 0] if won else [0, round(f, 3)]) + [1 if p in libero else 0]
     return out
 
 
@@ -2868,6 +2869,17 @@ def main(raw_path, out_path):
         for pn, sets in compute_match_competition(raw_s, loyola_side_for_session(raw_s)).items():
             if pn in roster_se and not roster_se[pn].get('virtual'):
                 cm[x['season']][pn][x['id']] = sets
+    # Coach-only virtual players (Jake Read 2.0 = #7 as a libero): the sets #7 played AS THE LIBERO, and his
+    # practice 6v6 competition (same player, same practices; earned with the outsides on the 6v6 sheet)
+    for v in VIRTUAL_PLAYERS:
+        se, src, num = v['season'], v['src'], v['num']
+        for sid, sets in (cm.get(se, {}).get(src) or {}).items():
+            lib = {sn: r for sn, r in sets.items() if len(r) > 2 and r[2]}
+            if lib:
+                cm[se][num][sid] = lib
+        six = (output['competition_6v6'].get(se) or {}).get('players') or {}
+        if src in six:
+            six[num] = dict(six[src], copy_of=src)
     output['competition_match'] = {se: dict(v) for se, v in cm.items()}
     add_virtual_players(output, sets_out)
 

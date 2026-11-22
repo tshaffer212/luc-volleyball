@@ -5275,7 +5275,7 @@ function renderPointsAdded() {
     if (!wt) return `<td class="num" style="color:var(--text-dim)" title="0% for ${r.group.toLowerCase()}">,</td>`;
     const six = r.comp && r.comp.six;
     const mt = (r.comp.mw || r.comp.ml) ? `matches ${r.comp.mw.toFixed(1)}-${r.comp.ml.toFixed(1)} in sets played` : '';
-    const tip = c === 'Competition' ? [six && r.comp.inView ? `practice 6v6: ${six.pts} pts${six.exc ? ` scaled to ${six.adj.toFixed(1)} (${six.att} of ${six.tot} practices)` : ''}, ${six.grp} average ${six.avg.toFixed(1)}` : (r.comp.w || r.comp.l ? `${r.comp.w}-${r.comp.l} in drills` : ''),
+    const tip = c === 'Competition' ? [six && r.comp.inView ? `practice 6v6${six.copy_of ? ' (#' + six.copy_of + ', same player)' : ''}: ${six.pts} pts${six.exc ? ` scaled to ${six.adj.toFixed(1)} (${six.att} of ${six.tot} practices)` : ''}, ${six.grp} average ${six.avg.toFixed(1)}` : (r.comp.w || r.comp.l ? `${r.comp.w}-${r.comp.l} in drills` : ''),
       mt, `${f(rawOf(r, c))} raw by ${Math.round(wt*100)}%`].filter(Boolean).join('; ') : `${f(rawOf(r, c))} raw points by ${Math.round(wt*100)}%`;
     return `<td class="num" style="color:${clr(v)}" title="${tip}">${Math.abs(v) < 0.005 ? '-' : f(v)}</td>`; };
   const body = rows.length ? rows.map(r => {
@@ -6687,8 +6687,8 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
       <div style="position:absolute;top:0;bottom:0;${v >= 0 ? 'left:50%' : 'right:50%'};width:${Math.abs(v) / mx * 50}%;background:${v >= 0 ? 'var(--green)' : 'var(--red)'};border-radius:2px"></div></div>
       <b style="text-align:right;color:${Math.abs(v) < 0.005 ? 'var(--text-muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</b></div>`; }).join('') + (() => {
       const cp = myPA.comp || {}, six = cp.six, parts = [];
-      if (six) parts.push(`practice ${six.pts} 6v6 points${six.exc ? `, scaled to ${six.adj.toFixed(1)} because he was at ${six.att} of ${six.tot} practices` : ''}, vs the ${six.grp.toLowerCase()} average of ${six.avg.toFixed(1)}: (points - average) / 2 = ${six.comp >= 0 ? '+' : ''}${six.comp.toFixed(2)} for the season`);
-      if (cp.mw || cp.ml) parts.push(`matches ${cp.mw.toFixed(1)}-${cp.ml.toFixed(1)} in the sets he played (by share of rallies): (won - lost) / 2 = ${((cp.mw - cp.ml) / 2 >= 0 ? '+' : '')}${((cp.mw - cp.ml) / 2).toFixed(2)}`);
+      if (six) parts.push(`practice ${six.pts} 6v6 points${six.copy_of ? ` (#${six.copy_of}'s, same player)` : ''}${six.exc ? `, scaled to ${six.adj.toFixed(1)} because he was at ${six.att} of ${six.tot} practices` : ''}, vs the ${six.grp.toLowerCase()} average of ${six.avg.toFixed(1)}: (points - average) / 2 = ${six.comp >= 0 ? '+' : ''}${six.comp.toFixed(2)} for the season`);
+      if (cp.mw || cp.ml) parts.push(`matches ${cp.mw.toFixed(1)}-${cp.ml.toFixed(1)} in the sets he played${isVirt(num) ? ' as the libero' : ' (by share of rallies)'}: (won - lost) / 2 = ${((cp.mw - cp.ml) / 2 >= 0 ? '+' : '')}${((cp.mw - cp.ml) / 2).toFixed(2)}`);
       return parts.length ? `<div class="pl-muted" style="font-size:11px;margin-top:6px">Competition: ${parts.join('; ')}${parts.length > 1 ? ' (added together)' : ''}.</div>` : ''; })(); })() : '<div class="pl-muted">No Points Added data.</div>';
 
   // -- Auto insights --

@@ -110,6 +110,8 @@ git-ignored) → (W − L) / 2, counted on dates of the sessions in view. Report
   never in the lineup (the libero) gets the whole set. Match Competition = (sets won - sets lost) / 2 (50%
   baseline) over the match sessions / set in view. Practice + match Competition are ADDED when both are in view
   (`paCompetition(pn, season, dates, sids, setN)`; portal: `payload.compm`).
+  Set rows are [won, lost, 1 if he played that set as the libero]. Virtual players (Jake Read 2.0 = 7L) get the
+  sets #7 played as the libero and a copy of #7's practice 6v6 competition (`copy_of`).
 
 ### Scouting (opponent files)
 `resolve_opp_sides()` in aggregate.py decides which side of each scout file is the scouted team: roster
