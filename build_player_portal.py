@@ -389,6 +389,10 @@ def main():
         payload['pa_grp'] = grp
         payload['comp'] = {se: (d.get('competition') or {}).get(se, {}).get(n_) for se, n_ in nums.items()
                            if (d.get('competition') or {}).get(se, {}).get(n_)}
+        # 6 v 6 competition (his own row only; the group average is the only team number in it)
+        c6 = d.get('competition_6v6') or {}
+        payload['comp6'] = {se: {k: v for k, v in c6[se]['players'][n_].items()}
+                            for se, n_ in nums.items() if se in c6 and n_ in c6[se].get('players', {})}
         payload['scout_key'] = scout_key            # opens player_data/scouting.json (same for everyone)
         fid = pid(name)
         (OUT / f'{fid}.json').write_text(json.dumps(encrypt(payload, pw[name]), separators=(',', ':')))

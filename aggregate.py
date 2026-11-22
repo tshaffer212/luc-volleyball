@@ -1154,6 +1154,150 @@ def load_competition(path, sessions_index, players_by_season):
         print(f"  ⚠  competition.csv: skipped {skipped} row(s) (bad date/number or unknown player)", file=sys.stderr)
     return out
 
+# ── Competition from the coaches' Wins Leaderboard (6 v 6 tab) ─────────────────
+# private/wins_leaderboard.xlsx (git-ignored), tab "6 v 6": season points per player by position
+# (POINTS = # of 6v6 wins + bonus). Competition (Points Added) = (his points - his position's average) / 2.
+# Exceptions (missed a lot of practice): points scaled to a full practice schedule (points x practices held /
+# practices he was at) and left out of the position averages. Practices attended = practice files he is in.
+COMP_6V6 = {
+    'season': 'Fall 2027',
+    'xlsx': os.path.join('private', 'wins_leaderboard.xlsx'),
+    'sheet': '6 v 6',
+    'scale': ['2', '13'],            # Ben Winokur, Thomas Vesty: missed practices this semester
+    # names / nicknames used on the sheet -> roster name
+    'aliases': {'matt': 'Matt Kelly', 'owen': 'Owen Smith', 'jake': 'Jake Read', 'nicola': 'Nicola Konstantinov',
+                'ayden': 'Ayden DesLauriers', 'tyler': 'Tyler Howard', 'chacinksi': 'Stanislaw Chacinski',
+                'chacinski': 'Stanislaw Chacinski', 'van buren': 'Caden Van Buren', 'sosa': 'Aleksandar Sosa',
+                'lukas': 'Lukas Anderson', 'luka': 'Luka Lojic', 'sergej': 'Serguei Jokanovic',
+                'smits': 'Alex Smits Van Oyen', 'vesty': 'Thomas Vesty', 'ak': 'Aidan Klein', 'hatch': 'Will Hatch',
+                'gob': "Gavin O'Brien", 'winokur': 'Ben Winokur'},
+}
+
+
+def read_xlsx_sheet(path, sheet_name):
+    """Rows (lists of cell values) of one sheet, stdlib only (zipfile + XML). Sheet name match ignores case/spaces."""
+    import zipfile, xml.etree.ElementTree as ET
+    M = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+    R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+    z = zipfile.ZipFile(path)
+    wb = ET.fromstring(z.read('xl/workbook.xml'))
+    rid = next((sh.get(R + 'id') for sh in wb.iter(M + 'sheet')
+                if (sh.get('name') or '').strip().lower() == sheet_name.strip().lower()), None)
+    if not rid:
+        return None
+    rels = ET.fromstring(z.read('xl/_rels/workbook.xml.rels'))
+    target = next(r.get('Target') for r in rels if r.get('Id') == rid)
+    target = target.lstrip('/')
+    target = target if target.startswith('xl/') else 'xl/' + target
+    shared = []
+    if 'xl/sharedStrings.xml' in z.namelist():
+        for si in ET.fromstring(z.read('xl/sharedStrings.xml')).iter(M + 'si'):
+            shared.append(''.join(t.text or '' for t in si.iter(M + 't')))
+    rows = []
+    for row in ET.fromstring(z.read(target)).iter(M + 'row'):
+        vals = {}
+        for c in row.iter(M + 'c'):
+            ref = c.get('r') or ''
+            col = 0
+            for ch in ref:
+                if ch.isalpha():
+                    col = col * 26 + (ord(ch.upper()) - 64)
+            v = c.find(M + 'v')
+            t = c.get('t')
+            if t == 's' and v is not None:
+                val = shared[int(v.text)]
+            elif t == 'inlineStr':
+                val = ''.join(x.text or '' for x in c.iter(M + 't'))
+            elif v is not None:
+                try:
+                    val = float(v.text)
+                except (TypeError, ValueError):
+                    val = v.text
+            else:
+                val = None
+            vals[col - 1] = val
+        if vals:
+            rows.append([vals.get(i) for i in range(max(vals) + 1)])
+    return rows
+
+
+def load_competition_6v6(base_dir, output):
+    """-> {season: {'players': {pnum: {...}}, 'groups': {group: avg}, 'note': str}} or {}."""
+    cfg = COMP_6V6
+    path = os.path.join(base_dir, cfg['xlsx'])
+    if not os.path.exists(path):
+        return {}
+    rows = read_xlsx_sheet(path, cfg['sheet'])
+    if not rows:
+        print(f"  ⚠  {cfg['xlsx']}: tab '{cfg['sheet']}' not found", file=sys.stderr)
+        return {}
+    se = cfg['season']
+    roster = {n: p for n, p in (output['players_by_season'].get(se) or {}).items() if not p.get('virtual')}
+    by_name = {p['name'].lower(): n for n, p in roster.items()}
+    def to_num(raw):
+        k = str(raw or '').strip().lower()
+        if not k:
+            return None
+        full = cfg['aliases'].get(k, k)
+        if full.lower() in by_name:
+            return by_name[full.lower()]
+        hits = [n for n, p in roster.items() if k in p['name'].lower().split()]
+        return hits[0] if len(hits) == 1 else None
+    # header row: position names in the even columns, 'Points' next to each
+    hi = next((i for i, r in enumerate(rows) if any(str(x or '').strip().lower() == 'points' for x in r)), None)
+    if hi is None:
+        return {}
+    head = rows[hi]
+    groups = [(c, str(head[c]).strip()) for c in range(len(head) - 1)
+              if head[c] and str(head[c + 1] or '').strip().lower() == 'points']
+    pts, grp_of, unknown = {}, {}, []
+    for r in rows[hi + 1:]:
+        for c, g in groups:
+            name = r[c] if c < len(r) else None
+            val = r[c + 1] if c + 1 < len(r) else None
+            if name is None or not isinstance(val, (int, float)):
+                continue
+            pn = to_num(name)
+            if not pn:
+                unknown.append(str(name)); continue
+            pts[pn], grp_of[pn] = float(val), g
+    if unknown:
+        print(f"  ⚠  6v6 tab: no roster match for {', '.join(unknown)} (add them to COMP_6V6 aliases)", file=sys.stderr)
+    # practices held / attended this season (attended = he is in that practice file)
+    prac = {x['id']: x['date'] for x in output['sessions'] if x.get('season') == se and x.get('type') == 'practice' and x.get('date')}
+    held = sorted(set(prac.values()))
+    att = defaultdict(set)
+    for key in output['player_session']:
+        pn, sid = key.split('|', 1)
+        if sid in prac:
+            att[pn].add(prac[sid])
+    scale = set(cfg['scale'])
+    out = {}
+    for pn, v in pts.items():
+        a = len(att[pn])
+        adj = v * len(held) / a if (pn in scale and a) else v
+        out[pn] = {'pts': v, 'adj': round(adj, 2), 'grp': grp_of[pn], 'att': a, 'tot': len(held),
+                   'exc': pn in scale, 'dates': sorted(att[pn])}
+    avgs = {}
+    for g in {x['grp'] for x in out.values()}:
+        xs = [x['pts'] for pn, x in out.items() if x['grp'] == g and pn not in scale]
+        xs = xs or [x['adj'] for x in out.values() if x['grp'] == g]
+        avgs[g] = round(sum(xs) / len(xs), 2)
+    for pn, x in out.items():
+        x['avg'] = avgs[x['grp']]
+        x['comp'] = round((x['adj'] - x['avg']) / 2, 2)
+    exc_txt = '; '.join(f"{roster[pn]['name']} ({out[pn]['att']} of {len(held)} practices): {out[pn]['pts']:.0f} -> {out[pn]['adj']:.1f}"
+                        for pn in cfg['scale'] if pn in out)
+    note = (f"{se} competition = 6 v 6 wins from the coaches' Wins Leaderboard (6 v 6 tab), compared with the "
+            f"average of the player's position group on that sheet: (points - group average) / 2. "
+            f"Players who missed a lot of practice had their points scaled to a full schedule of {len(held)} practices "
+            f"(points x {len(held)} / practices attended) and are left out of the group averages: {exc_txt}. "
+            f"Practices attended = practice files the player appears in. It counts on the practice dates he attended "
+            f"that are in view.")
+    print(f"  6v6 competition {se}: {len(out)} players, groups " + ', '.join(f"{g} {a:.1f}" for g, a in sorted(avgs.items())), file=sys.stderr)
+    return {se: {'players': out, 'groups': avgs, 'note': note}}
+
+
 # ── Coach-only virtual players ────────────────────────────────────────────────
 # A second, position-specific copy of a real player, shown on the COACH dashboard
 # only (build_player_portal.py skips them). Only the listed skills are copied, and
@@ -2667,6 +2811,7 @@ def main(raw_path, out_path):
     output['competition'] = load_competition(
         os.path.join(os.path.dirname(os.path.abspath(out_path)), COMPETITION_CSV),
         output['sessions'], output['players_by_season'])
+    output['competition_6v6'] = load_competition_6v6(os.path.dirname(os.path.abspath(out_path)), output)
     add_virtual_players(output, sets_out)
 
     # Player portal only (kept out of dashboard.html): practice setter -> hitter -> pass-quality buckets

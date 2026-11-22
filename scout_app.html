@@ -5171,8 +5171,15 @@ function _paValue(T, key, n, out) {
   if (PA_SKILL[sk]) out[PA_SKILL[sk]] += n * T.basic(sk, ev);
 }
 function paWeightsFor(group) { return (DATA.pa_weights || {})[group] || {}; }
-// Competition = practice drill results (competition.csv): wins above .500 = (W - L) / 2
+// Competition = practice drill results. Seasons with the coaches' Wins Leaderboard (DATA.competition_6v6, from
+// aggregate.py load_competition_6v6): (6v6 points - position group average) / 2, spread over the practice dates
+// he attended, counted on those dates that are in view. Otherwise competition.csv: wins above .500 = (W - L) / 2.
 function paCompetition(pn, season, dates) {
+  const six = ((DATA.competition_6v6 || {})[season] || {}).players?.[pn];
+  if (six) {
+    const inView = dates ? six.dates.filter(d => dates.has(d)).length : six.dates.length;
+    return { pts: six.dates.length ? six.comp * inView / six.dates.length : 0, w: 0, l: 0, six, inView };
+  }
   const c = ((DATA.competition || {})[season] || {})[pn]; let w = 0, l = 0;
   if (c) for (const [d, r] of Object.entries(c)) if (!dates || dates.has(d)) { w += r[0]; l += r[1]; }
   return { pts: (w - l) / 2, w, l };
@@ -5198,7 +5205,7 @@ function renderPointsAdded() {
     </div>`;
   const help = `<div id="pa-help" class="adj-help" style="display:${paHelpOpen?'block':'none'}">
       <p><b>What it measures.</b> Every touch changes our chance of winning the rally. A touch's <b>points</b> = how often we win the rally after that kind of touch minus how often we win after an average touch of the same skill (all sessions of the same type in the selected season). +1.0 about  one extra point for the team.</p>
-      <p><b>Categories.</b> Attacking, Serve Receive, Blocking, Serving, Defense (digs) come straight from his touches. <b>Setting</b> = the value of the attack result that came off each of his sets compared with the average attack off a set (kill = plus, error/blocked = minus; an average setter nets about 0), plus set errors. <b>Competition</b> = practice drill results from <code>private/competition.csv</code>: wins above .500 = (W - L) / 2.</p>
+      <p><b>Categories.</b> Attacking, Serve Receive, Blocking, Serving, Defense (digs) come straight from his touches. <b>Setting</b> = the value of the attack result that came off each of his sets compared with the average attack off a set (kill = plus, error/blocked = minus; an average setter nets about 0), plus set errors. <b>Competition</b> = practice drill results: this semester the coaches' 6 v 6 wins compared with the position group average, (points - group average) / 2 (see the note under the table); otherwise <code>private/competition.csv</code>, wins above .500 = (W - L) / 2.</p>
       <p><b>Score.</b> Each position has its own weights (each row adds to 100% - see "Show weights"). Score = sum of  weight by that category's points, so an outside's passing counts 25% while a middle's counts 0%. The category columns show the <b>weighted</b> points (they add up to the Score); hover a cell for the raw points. <b>Per set</b> = Score / sets he played in.</p>
       <p><b>Overall team</b> ranks everyone together (each with his own position's weights). <b>By position</b> shows one position group and its average.</p>
       <p style="opacity:.75"><b>Keep in mind:</b> small samples swing a lot; opponent strength isn't accounted for. Follows the season, sessions, Set and Players filters; Loyola only.</p>
@@ -5257,7 +5264,9 @@ function renderPointsAdded() {
   const rawOf = (r, c) => c === 'Competition' ? r.comp.pts : (r.v[c] || 0);
   const cell = (r, c) => { const wt = paWeightsFor(r.group)[c] || 0, v = r.w[c];
     if (!wt) return `<td class="num" style="color:var(--text-dim)" title="0% for ${r.group.toLowerCase()}">,</td>`;
-    const tip = c === 'Competition' ? `${r.comp.w}-${r.comp.l} in drills, ${f(rawOf(r, c))} raw by ${Math.round(wt*100)}%` : `${f(rawOf(r, c))} raw points by ${Math.round(wt*100)}%`;
+    const six = r.comp && r.comp.six;
+    const tip = c === 'Competition' ? (six ? `6v6: ${six.pts} pts${six.exc ? ` scaled to ${six.adj.toFixed(1)} (${six.att} of ${six.tot} practices)` : ''}, ${six.grp} average ${six.avg.toFixed(1)}; ${f(rawOf(r, c))} raw by ${Math.round(wt*100)}%`
+      : `${r.comp.w}-${r.comp.l} in drills, ${f(rawOf(r, c))} raw by ${Math.round(wt*100)}%`) : `${f(rawOf(r, c))} raw points by ${Math.round(wt*100)}%`;
     return `<td class="num" style="color:${clr(v)}" title="${tip}">${Math.abs(v) < 0.005 ? '-' : f(v)}</td>`; };
   const body = rows.length ? rows.map(r => {
     const per = r.total / Math.max(1, r.sets.size);
@@ -5298,7 +5307,10 @@ function renderPointsAdded() {
         const n = T.count('ev:' + sk + '|' + e); if (n < 5) return '<td class="num xlsx-dim">-</td>';
         const v = T.basic(sk, e); return `<td class="num" style="color:${clr(v)}" title="${n} touches, win ${(T.evWp(sk,e)*100).toFixed(0)}%">${(v>=0?'+':'')+v.toFixed(2)}</td>`; }).join('')}</tr>`; }).join('')}
     </tbody></table>`).join('');
-  const hasComp = Object.keys(DATA.competition || {}).length > 0;
+  const hasComp = Object.keys(DATA.competition || {}).length > 0 || Object.keys(DATA.competition_6v6 || {}).length > 0;
+  // How this semester's Competition numbers were made (shown only for seasons that have a note)
+  const compNotes = [...new Set(rows.map(r => ((DATA.competition_6v6 || {})[r.season] || {}).note).filter(Boolean))];
+  const compNote = compNotes.map(t => `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;padding:8px 10px;border-left:3px solid var(--maroon);background:var(--surface2)"><b>Competition, how it was figured:</b> ${t}</div>`).join('');
 
   el.innerHTML = head + help + `
     <div id="pa-weights" style="display:${paWeightsOpen?'block':'none'};margin-bottom:12px">${wTbl}</div>
@@ -5308,7 +5320,7 @@ function renderPointsAdded() {
         <th>#</th><th>Player</th><th>Pos</th><th class="num">Sets</th><th class="num" style="color:var(--gold)">Score</th><th class="num">Per set</th><th></th>
         ${PA_WCOLS.map(c => `<th class="num">${PA_WLBL[c]}${WP ? `<div style="font-size:10px;color:var(--gold);text-transform:none">${Math.round((WP[c]||0)*100)}%</div>` : ''}</th>`).join('')}
       </tr></thead><tbody>${body}${avgRow}</tbody></table></div>
-    <div style="font-size:10px;color:var(--text-dim);margin-top:6px">${paView==='pos' ? `${paPos.toLowerCase()} only, ${paPos.toLowerCase()} weights` : 'Everyone, each scored with his own position\'s weights'}, category columns are weighted points (hover for raw), values from all ${Object.keys(tables).map(t=>t==='match'?'matches':'practices').join(' / ')} in the selected season, players with 10+ touches, sorted by Score.${hasComp ? '' : ' <b>No competition results yet</b> - add practice drill wins to private/competition.csv.'}</div>`;
+    <div style="font-size:10px;color:var(--text-dim);margin-top:6px">${paView==='pos' ? `${paPos.toLowerCase()} only, ${paPos.toLowerCase()} weights` : 'Everyone, each scored with his own position\'s weights'}, category columns are weighted points (hover for raw), values from all ${Object.keys(tables).map(t=>t==='match'?'matches':'practices').join(' / ')} in the selected season, players with 10+ touches, sorted by Score.${hasComp ? '' : ' <b>No competition results yet</b> - add practice drill wins to private/competition.csv.'}</div>${compNote}`;
 }
 
 // -- Hitter efficiency adjusted for situation (bottom of Reports) -------------
@@ -6663,7 +6675,9 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
     return cols.map(c => { const v = myPA.w[c]; const raw = c === 'Competition' ? myPA.comp.pts : myPA.v[c];
       return `<div class="pl-pa-row" title="${(raw >= 0 ? '+' : '') + raw.toFixed(2)} raw by ${Math.round(W[c] * 100)}%"><span>${PA_WLBL[c]} <span class="pl-muted" style="font-size:10px">${Math.round(W[c] * 100)}%</span></span><div class="pl-pa-track"><div class="pl-pa-mid"></div>
       <div style="position:absolute;top:0;bottom:0;${v >= 0 ? 'left:50%' : 'right:50%'};width:${Math.abs(v) / mx * 50}%;background:${v >= 0 ? 'var(--green)' : 'var(--red)'};border-radius:2px"></div></div>
-      <b style="text-align:right;color:${Math.abs(v) < 0.005 ? 'var(--text-muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</b></div>`; }).join(''); })() : '<div class="pl-muted">No Points Added data.</div>';
+      <b style="text-align:right;color:${Math.abs(v) < 0.005 ? 'var(--text-muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</b></div>`; }).join('') + (() => {
+      const six = myPA.comp && myPA.comp.six; if (!six) return '';
+      return `<div class="pl-muted" style="font-size:11px;margin-top:6px">Competition: ${six.pts} 6v6 points${six.exc ? `, scaled to ${six.adj.toFixed(1)} because he was at ${six.att} of ${six.tot} practices` : ''}, vs the ${six.grp.toLowerCase()} average of ${six.avg.toFixed(1)}: (points - average) / 2 = ${six.comp >= 0 ? '+' : ''}${six.comp.toFixed(2)} for the season.</div>`; })(); })() : '<div class="pl-muted">No Points Added data.</div>';
 
   // -- Auto insights --
   const ins = [];

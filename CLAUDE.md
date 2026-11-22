@@ -94,6 +94,15 @@ attack result off his sets vs the average attack off a set (`T.setVal`) + set er
 Competition = practice drill results from `private/competition.csv` (Date, Number, Player, Wins, Losses;
 git-ignored) → (W − L) / 2, counted on dates of the sessions in view. Reports card: "Overall team" and
 "By position" views. Same scoring on the coach Player tab and the player portal.
+- Competition from the coaches' Wins Leaderboard (`COMP_6V6` / `load_competition_6v6()` in aggregate.py ->
+  `DATA.competition_6v6`): `private/wins_leaderboard.xlsx` (git-ignored, read with a stdlib xlsx reader), tab
+  "6 v 6" = season 6v6 points by position group. Competition = (points - group average) / 2, spread over the
+  practice dates he attended (practice files he appears in) and counted on those in view. Fall 2027 exception:
+  #2 Ben Winokur and #13 Thomas Vesty missed practices, so their points are scaled to a full schedule
+  (points x practices held / attended) and left out of the group averages (`COMP_6V6['scale']`). Sheet names /
+  nicknames map to the roster via `COMP_6V6['aliases']`. A note under the Reports Points Added table (and on
+  the Player tab / portal PA card) explains it for that season only; competition.csv is the fallback for
+  other seasons. Next season: update `COMP_6V6` (season, scale list) or switch to win % from "6 v 6 2.0".
 
 ### Scouting (opponent files)
 `resolve_opp_sides()` in aggregate.py decides which side of each scout file is the scouted team: roster
