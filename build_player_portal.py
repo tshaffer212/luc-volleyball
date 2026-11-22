@@ -393,6 +393,9 @@ def main():
         c6 = d.get('competition_6v6') or {}
         payload['comp6'] = {se: {k: v for k, v in c6[se]['players'][n_].items()}
                             for se, n_ in nums.items() if se in c6 and n_ in c6[se].get('players', {})}
+        # match competition: his own set shares {season: {session_id: {set: [won, lost]}}}
+        cmt = d.get('competition_match') or {}
+        payload['compm'] = {se: cmt[se][n_] for se, n_ in nums.items() if se in cmt and n_ in cmt[se]}
         payload['scout_key'] = scout_key            # opens player_data/scouting.json (same for everyone)
         fid = pid(name)
         (OUT / f'{fid}.json').write_text(json.dumps(encrypt(payload, pw[name]), separators=(',', ':')))

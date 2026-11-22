@@ -1293,9 +1293,52 @@ def load_competition_6v6(base_dir, output):
             f"Players who missed a lot of practice had their points scaled to a full schedule of {len(held)} practices "
             f"(points x {len(held)} / practices attended) and are left out of the group averages: {exc_txt}. "
             f"Practices attended = practice files the player appears in. It counts on the practice dates he attended "
-            f"that are in view.")
+            f"that are in view. Matches: his set record in the sets he played, each set counted by his share of its "
+            f"rallies (a libero gets the whole set if he played it; sets to 15 count as full sets): "
+            f"(sets won - sets lost) / 2. With practices and matches both selected, the two numbers are added.")
     print(f"  6v6 competition {se}: {len(out)} players, groups " + ', '.join(f"{g} {a:.1f}" for g, a in sorted(avgs.items())), file=sys.stderr)
     return {se: {'players': out, 'groups': avgs, 'note': note}}
+
+
+# ── Match competition: set record for the sets a player was on the court ────────
+# For every match set (final score = last point line of the set, parse_dvw set_scores; short sets to 15 count
+# as full sets) each player gets his SHARE of that set's rallies (rallies with him in Loyola's lineup / rallies
+# in the set); a libero (not in the lineup, incl. anyone playing libero that set) gets the whole set if he
+# touched the ball in it. Competition from
+# matches = (sets won - sets lost) / 2 using those shares (50% baseline). It is ADDED to the practice measure.
+def compute_match_competition(session, ls):
+    """{pnum: {set: [won_share, lost_share]}} for one match, or {} without set scores."""
+    scores = session.get('set_scores') or {}
+    if not scores or ls not in ('home', 'away'):
+        return {}
+    by_set = defaultdict(lambda: defaultdict(list))
+    for a in session.get('actions', []):
+        if isinstance(a.get('set_number'), int):
+            by_set[a['set_number']][a.get('rally_seq', 0)].append(a)
+    out = defaultdict(dict)
+    for sn, rallies in by_set.items():
+        sc = scores.get(str(sn))
+        if not sc or sc[0] == sc[1]:
+            continue
+        won = (sc[0] > sc[1]) if ls == 'home' else (sc[1] > sc[0])
+        on, total, touched = Counter(), 0, set()
+        for rs, acts in rallies.items():
+            lu = next((a.get('luc_lineup') for a in acts if a.get('luc_lineup')), None)
+            if lu:
+                total += 1
+                for p in set(str(x) for x in lu):
+                    on[p] += 1
+            for a in acts:
+                if a.get('team_side') == ls and a.get('player_num'):
+                    touched.add(str(a['player_num']))
+        share = {p: c / total for p, c in on.items()} if total else {}
+        for p in touched:
+            if p not in share:        # touched the ball but never in the lineup = he was the libero in that set
+                share[p] = 1.0
+        for p, f in share.items():
+            if f > 0:
+                out[p][str(sn)] = [round(f, 3), 0] if won else [0, round(f, 3)]
+    return out
 
 
 # ── Coach-only virtual players ────────────────────────────────────────────────
@@ -2812,6 +2855,20 @@ def main(raw_path, out_path):
         os.path.join(os.path.dirname(os.path.abspath(out_path)), COMPETITION_CSV),
         output['sessions'], output['players_by_season'])
     output['competition_6v6'] = load_competition_6v6(os.path.dirname(os.path.abspath(out_path)), output)
+    # match competition: {season: {pnum: {session_id: {set: [won_share, lost_share]}}}}
+    cm = defaultdict(lambda: defaultdict(dict))
+    sess_by_id = {f"{x['season']}|{x['file']}": x for x in sessions_raw}
+    for x in output['sessions']:
+        if x.get('type') != 'match':
+            continue
+        raw_s = sess_by_id.get(x['id'])
+        if not raw_s:
+            continue
+        roster_se = output['players_by_season'].get(x['season']) or {}
+        for pn, sets in compute_match_competition(raw_s, loyola_side_for_session(raw_s)).items():
+            if pn in roster_se and not roster_se[pn].get('virtual'):
+                cm[x['season']][pn][x['id']] = sets
+    output['competition_match'] = {se: dict(v) for se, v in cm.items()}
     add_virtual_players(output, sets_out)
 
     # Player portal only (kept out of dashboard.html): practice setter -> hitter -> pass-quality buckets

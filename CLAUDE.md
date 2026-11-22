@@ -103,6 +103,13 @@ git-ignored) → (W − L) / 2, counted on dates of the sessions in view. Report
   nicknames map to the roster via `COMP_6V6['aliases']`. A note under the Reports Points Added table (and on
   the Player tab / portal PA card) explains it for that season only; competition.csv is the fallback for
   other seasons. Next season: update `COMP_6V6` (season, scale list) or switch to win % from "6 v 6 2.0".
+- Match competition (`compute_match_competition()` -> `DATA.competition_match` = {season: {pnum: {session_id:
+  {set: [won_share, lost_share]}}}}): set winner from the final score of each set (`set_scores` = last point
+  line per set, parse_dvw; match sessions backfilled; short sets to 15 count as full sets); each player gets his
+  share of the set's rallies (in Loyola's lineup on that rally); someone who touched the ball in a set but was
+  never in the lineup (the libero) gets the whole set. Match Competition = (sets won - sets lost) / 2 (50%
+  baseline) over the match sessions / set in view. Practice + match Competition are ADDED when both are in view
+  (`paCompetition(pn, season, dates, sids, setN)`; portal: `payload.compm`).
 
 ### Scouting (opponent files)
 `resolve_opp_sides()` in aggregate.py decides which side of each scout file is the scouted team: roster

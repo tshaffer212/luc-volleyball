@@ -553,6 +553,7 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
     # Score BEFORE each rally (home, away), from the point lines '*p08:05' / 'ap08:05' (= score after
     # that rally, home:away). Reset to 0:0 whenever the set number changes.
     cur_score, cur_score_set = (0, 0), None
+    set_scores = {}          # final score of each set (home, away) = the last point line seen in that set
 
     for idx, line in enumerate(scout_lines):
         if not line or line[0] not in ('*', 'a'):
@@ -586,6 +587,8 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
                 cur_score = (int(h_[:2]), int(a_[:2]))
                 if len(fields) > 8 and fields[8].strip().isdigit():
                     cur_score_set = int(fields[8].strip())
+                if cur_score_set is not None:
+                    set_scores[str(cur_score_set)] = list(cur_score)
             except Exception:
                 pass
             continue
@@ -813,6 +816,7 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         'luc_side':        luc_side,        # 'home' or 'away'
         # Per-set starting lineups for both teams (list of 6 jersey ints, ordered by position 1-6)
         'home_set_lineups': home_set_lineups,  # {set_num: [pos1..pos6]}
+        'set_scores':      set_scores,          # {set: [home, away]} final score from the point lines
         'away_set_lineups': away_set_lineups,
         # Counts
         'player_count':    len(players),
