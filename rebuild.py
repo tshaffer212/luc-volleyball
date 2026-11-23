@@ -34,19 +34,34 @@ import time
 from pathlib import Path
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-# Absolute path to the DVW source folders
-DVW_ROOT = Path(__file__).resolve().parent.parent.parent / "Volleyball DVW Files"
+# Absolute path to the DVW source folders (LUC_DVW_ROOT overrides it, e.g. for testing)
+DVW_ROOT = Path(os.environ.get('LUC_DVW_ROOT') or (Path(__file__).resolve().parent.parent.parent / "Volleyball DVW Files"))
 
 # Folder name → (season label, session type, is_scout)
+# Read from seasons.json (the upload page adds new season folders there); this list is the fallback.
 FOLDER_MAP = {
     "Fall 2025":        ("Fall 2025",   "practice", False),
     "Spring 2025":      ("Spring 2025", "practice", False),
     "Fall 2026":        ("Fall 2026",   "practice", False),
     "Spring 2026":      ("Spring 2026", "practice", False),
-    "Spring 2026 Scout":("Spring 2026 Scout", "scout", True),
+    "Spring 2026 Scout":("Spring 2026", "scout", True),
     "Fall 2027":        ("Fall 2027",   "practice", False),
-    # Add new seasons here, e.g.:
 }
+
+def load_folder_map(path=Path(__file__).parent / "seasons.json"):
+    """seasons.json -> {folder: (season label, session type, is_scout)}, in file order."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            rows = json.load(f).get('folders', [])
+        out = {r['folder']: (r['season'], r.get('type', 'practice'), bool(r.get('scout'))) for r in rows if r.get('folder')}
+        return out or None
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        print(f"  ⚠   Could not read seasons.json ({e}); using the built-in folder list")
+        return None
+
+FOLDER_MAP = load_folder_map() or FOLDER_MAP
 
 # Files in this script's directory
 HERE         = Path(__file__).parent
@@ -188,7 +203,12 @@ def main():
                     'scout_app.html',
                     'player_data',
                     'build_player_portal.py',
+                    'seasons.json',
+                    'upload.py',
+                    'upload_page.html',
+                    'Upload DVW.command',
                 ]
+                files_to_commit = [f for f in files_to_commit if (HERE / f).exists()]
                 subprocess.run(['git', 'add'] + files_to_commit, cwd=HERE, check=True)
                 # Only commit if there are staged changes
                 diff = subprocess.run(

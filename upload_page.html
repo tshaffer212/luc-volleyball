@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LUC Volleyball - Add DVW files</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#f5f2eb;--card:#fffdf8;--ink:#1d1b18;--muted:#6b665d;--dim:#9a948a;--rule:#d8d2c5;--maroon:#7a1f2b;--maroon2:#5e1620;--hi:#2e6b3a;--lo:#a8322d;--warnbg:#fbefed;--okbg:#eef4ee;--serif:'Source Serif 4',Georgia,'Times New Roman',serif;--sans:'IBM Plex Sans',-apple-system,'Helvetica Neue',Arial,sans-serif;--mono:'IBM Plex Mono',Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--sans)}
+.mast{max-width:1100px;margin:0 auto;padding:34px 28px 18px;border-bottom:3px double var(--ink)}
+.kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--maroon);font-weight:600}
+h1{font-family:var(--serif);font-size:40px;line-height:1.1;margin:6px 0 8px;font-weight:700}
+.dek{margin:0;color:var(--muted);max-width:780px}
+.dek b{color:var(--ink);font-weight:500}
+main{max-width:1100px;margin:0 auto;padding:22px 28px 60px}
+h2{font-family:var(--serif);font-size:22px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--ink)}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:18px 20px}
+#drop{border:2px dashed #bfb6a5;text-align:center;padding:42px 20px;cursor:pointer;transition:background .15s,border-color .15s}
+#drop.over{background:#f3e9e6;border-color:var(--maroon)}
+.dz-big{font-family:var(--serif);font-size:24px;font-weight:600}
+.dz-small{color:var(--muted);margin-top:4px}
+button{font:inherit;font-size:14px;border:1px solid var(--ink);background:var(--card);color:var(--ink);padding:8px 16px;border-radius:3px;cursor:pointer}
+button:hover{background:#efe9de}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--maroon);border-color:var(--maroon);color:#fff;font-weight:600}
+button.primary:hover{background:var(--maroon2)}
+button.link{border:none;background:none;color:var(--maroon);text-decoration:underline;padding:0;font-size:inherit}
+button.x{border:none;background:none;color:var(--dim);font-size:13px;padding:2px 6px}
+button.x:hover{color:var(--lo);background:none}
+table{border-collapse:collapse;width:100%}
+.tablewrap{overflow-x:auto}
+table.files{min-width:860px;table-layout:fixed}
+table.files col.c1{width:21%}table.files col.c2{width:20%}table.files col.c3{width:22%}table.files col.c4{width:30%}table.files col.c5{width:7%}
+select.fsel{width:100%}
+table.files th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;font-weight:600;padding:6px 10px;border-bottom:1px solid var(--ink)}
+table.files td{padding:10px;border-bottom:1px solid var(--rule);vertical-align:top}
+.fname{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere}
+.sub{color:var(--muted);font-size:13px}
+.what b{font-weight:600}
+select,input[type=text]{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #b9b2a4;border-radius:3px;background:#fff;color:var(--ink);max-width:100%}
+.msgs div{font-size:13px;margin-bottom:4px}
+.w{color:var(--lo)}
+.n{color:var(--muted)}
+.ok{color:var(--hi);font-weight:600}
+.bad{color:var(--lo);font-weight:600}
+tr.warn td{background:var(--warnbg)}
+tr.skip td{opacity:.6}
+.nf{margin-top:14px;border-color:var(--maroon)}
+.nf h3{font-family:var(--serif);margin:0 0 10px;font-size:18px}
+.nf .grid{display:grid;grid-template-columns:160px 1fr;gap:10px 14px;align-items:center;max-width:640px}
+.nf .kinds label{display:block;margin-bottom:4px}
+.actions{margin-top:22px;display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px}
+.actions .btns{display:flex;gap:10px;margin-left:auto}
+.chk{display:flex;gap:8px;align-items:center}
+.hint{color:var(--muted);font-size:13px}
+#steps{list-style:none;padding:0;margin:0 0 12px}
+#steps li{padding:5px 0 5px 26px;position:relative;color:var(--muted)}
+#steps li:before{content:'';position:absolute;left:4px;top:11px;width:10px;height:10px;border-radius:50%;background:var(--hi)}
+#steps li.cur{color:var(--ink);font-weight:600}
+#steps li.cur:before{background:var(--maroon);animation:pulse 1s infinite alternate}
+#steps li.err:before{background:var(--lo)}
+@keyframes pulse{from{opacity:1}to{opacity:.25}}
+#result .card{margin-bottom:12px}
+#result table td{padding:6px 10px;border-bottom:1px solid var(--rule);font-size:14px}
+pre#log{background:#1f1d1a;color:#e9e4d8;font:12px/1.45 var(--mono);padding:14px;border-radius:4px;max-height:420px;overflow:auto;white-space:pre-wrap}
+details summary{cursor:pointer;color:var(--maroon);font-weight:500;margin:6px 0}
+.foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--ink);display:flex;flex-wrap:wrap;gap:14px 28px;align-items:flex-start}
+.foot a{color:var(--maroon)}
+.foot details{flex:1 1 380px}
+#folders td{padding:4px 10px;border-bottom:1px solid var(--rule);font-size:13.5px}
+#folders th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:left;padding:4px 10px;border-bottom:1px solid var(--ink)}
+.num{text-align:right}
+.banner{padding:10px 14px;border-radius:3px;margin-bottom:12px}
+.banner.good{background:var(--okbg);color:var(--hi)}
+.banner.bad{background:var(--warnbg);color:var(--lo)}
+</style>
+</head>
+<body>
+<header class="mast">
+  <div class="kicker">LUC Volleyball</div>
+  <h1>Add DVW files</h1>
+  <p class="dek">Drop match, practice or scouting files below. Each file is checked, saved into <b id="root">Volleyball DVW Files</b>, and then the dashboard is rebuilt and (if ticked) pushed to GitHub.</p>
+</header>
+<main>
+  <section class="card" id="drop" tabindex="0">
+    <input type="file" id="pick" accept=".dvw" multiple hidden>
+    <div class="dz-big">Drop .dvw files here</div>
+    <div class="dz-small">or click to choose files</div>
+  </section>
+
+  <section id="filesSec" hidden>
+    <h2>Files to add</h2>
+    <div class="tablewrap"><table class="files">
+      <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col class="c5"></colgroup>
+      <thead><tr><th>File</th><th>What it is</th><th>Save to folder</th><th>Check</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div id="nfBox" class="card nf" hidden>
+      <h3>New season folder</h3>
+      <div class="grid">
+        <label for="nfName">Folder name</label><input type="text" id="nfName" placeholder="Spring 2028">
+        <label for="nfSeason">Season label</label><div><input type="text" id="nfSeason" placeholder="Spring 2028"> <span class="hint">shown in the dashboard's Season filter</span></div>
+        <span>Kind of files</span>
+        <div class="kinds">
+          <label><input type="radio" name="nfKind" value="luc" checked> Loyola practices and matches</label>
+          <label><input type="radio" name="nfKind" value="scout"> Opponent scouting</label>
+        </div>
+      </div>
+      <p class="hint">The folder is created inside Volleyball DVW Files and added to seasons.json, so every rebuild reads it.</p>
+      <button class="primary" id="nfAdd">Use this folder</button> <button id="nfCancel">Cancel</button>
+    </div>
+  </section>
+
+  <section class="card actions">
+    <label class="chk"><input type="checkbox" id="push" checked> Push to GitHub when done (coaches and players see the update right away)</label>
+    <div class="btns">
+      <button id="rebuildOnly" title="Rebuild from the files already in the folders">Rebuild only</button>
+      <button class="primary" id="go" disabled>Save and rebuild</button>
+    </div>
+    <div class="hint" id="goHint" style="flex-basis:100%"></div>
+  </section>
+
+  <section id="progSec" hidden>
+    <h2>Progress</h2>
+    <ol id="steps"></ol>
+    <div id="result"></div>
+    <details id="logBox"><summary>Full log</summary><pre id="log"></pre></details>
+  </section>
+
+  <section class="foot">
+    <div>
+      <div><a href="/preview/dashboard.html" target="_blank" rel="noopener">Open the dashboard on this computer</a></div>
+      <div id="liveLink" style="margin-top:4px"></div>
+    </div>
+    <details>
+      <summary>Season folders read by every rebuild</summary>
+      <table id="folders"></table>
+      <p class="hint" id="unmapped"></p>
+    </details>
+    <button id="stop">Stop the upload page</button>
+  </section>
+</main>
+
+<script>
+const T = '__TOKEN__';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let ST = { folders: [], unmapped: [] };
+const ROWS = [];            // {key, name, id, res, folder, newCfg, action, busy, error}
+const NEWF = {};            // pending new folders: name -> {folder, season, scout}
+let nfFor = null, jobBusy = false, uploading = 0;
+
+async function api(path, opts) {
+  opts = opts || {};
+  const headers = Object.assign({ 'X-Upload-Token': T }, opts.headers || {});
+  const r = await fetch(path, Object.assign({}, opts, { headers }));
+  let j = null; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((j && j.error) || ('Request failed (' + r.status + ')'));
+  return j;
+}
+const post = (path, data) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+async function loadState() {
+  ST = await api('/api/state');
+  $('root').textContent = ST.dvwRoot.split('/').slice(-1)[0] || 'Volleyball DVW Files';
+  $('liveLink').innerHTML = ST.pages ? `<a href="${esc(ST.pages)}dashboard.html" target="_blank" rel="noopener">Open the live dashboard</a>` : '';
+  $('folders').innerHTML = '<tr><th>Folder</th><th>Season label</th><th>Kind</th><th class="num">DVW files</th></tr>' +
+    ST.folders.map(f => `<tr><td>${esc(f.folder)}</td><td>${esc(f.season)}</td><td>${f.scout ? 'Scouting' : 'Loyola'}</td><td class="num">${f.exists ? f.files : 'not created yet'}</td></tr>`).join('');
+  $('unmapped').textContent = ST.unmapped.length ? 'Folders that are not read: ' + ST.unmapped.join(', ') + '.' : '';
+  if (ST.busy && !jobBusy) { jobBusy = true; $('progSec').hidden = false; poll(0); }
+  render();
+}
+
+// ---------------------------------------------------------------- adding files
+function addFiles(list) {
+  for (const f of list) {
+    const row = { key: Math.random().toString(36).slice(2), name: f.name, busy: true };
+    ROWS.push(row);
+    if (!/\.dvw$/i.test(f.name)) { row.busy = false; row.error = 'Only .dvw files can be added.'; continue; }
+    uploading++;
+    api('/api/stage', { method: 'POST', headers: { 'X-File-Name': encodeURIComponent(f.name) }, body: f })
+      .then(res => {
+        row.id = res.id; row.name = res.name; row.res = res;
+        if (res.error) row.error = res.error;
+        else if (res.suggest) row.folder = res.suggest;
+        else if (res.suggest_new) { const n = res.suggest_new; NEWF[n.folder] = NEWF[n.folder] || { folder: n.folder, season: n.season, scout: n.scout }; row.folder = n.folder; }
+      })
+      .catch(e => { row.error = e.message; })
+      .finally(() => { row.busy = false; uploading--; render(); });
+  }
+  render();
+}
+
+async function reinspect(row) {
+  if (!row.id) return;
+  row.busy = true; render();
+  try {
+    const mapped = ST.folders.find(f => f.folder === row.folder);
+    const body = { id: row.id, folder: row.folder };
+    if (!mapped && NEWF[row.folder]) body.newFolder = NEWF[row.folder];
+    row.res = await post('/api/inspect', body);
+    row.error = row.res.error || null;
+  } catch (e) { row.error = e.message; }
+  row.busy = false; render();
+}
+
+function removeRow(row) {
+  const i = ROWS.indexOf(row); if (i >= 0) ROWS.splice(i, 1);
+  if (row.id) post('/api/remove', { id: row.id }).catch(() => {});
+  render();
+}
+
+// ---------------------------------------------------------------- table
+const fmtDate = d => { if (!d) return 'date unknown'; const t = new Date(d + 'T12:00:00'); return isNaN(t) ? d : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+const isLuc = t => /loyola|luc/i.test(t || '');
+
+function whatCell(r) {
+  const x = r.res;
+  if (!x || x.error) return '';
+  const kind = x.type === 'match' ? 'Match' : x.type === 'scout' ? 'Scouting file' : 'Practice';
+  let teams = '';
+  if (x.home && x.away && !(isLuc(x.home) && isLuc(x.away))) teams = `${x.home} vs ${x.away}`;
+  return `<div class="what"><b>${kind}</b>, ${esc(fmtDate(x.date))}</div><div class="sub">${esc(teams)}</div><div class="sub">${(x.actions || 0).toLocaleString()} actions</div>`;
+}
+
+function folderSelect(r) {
+  const opts = [];
+  const pick = r.folder;
+  opts.push('<option value="">Choose a folder...</option>');
+  ST.folders.forEach(f => opts.push(`<option value="${esc(f.folder)}"${f.folder === pick ? ' selected' : ''}>${esc(f.folder)} - ${f.scout ? 'scouting' : 'Loyola'}${f.season !== f.folder ? ' (' + esc(f.season) + ')' : ''}</option>`));
+  Object.values(NEWF).filter(n => !ST.folders.some(f => f.folder === n.folder)).forEach(n =>
+    opts.push(`<option value="${esc(n.folder)}"${n.folder === pick ? ' selected' : ''}>${esc(n.folder)} - new folder (${n.scout ? 'scouting' : 'Loyola'})</option>`));
+  ST.unmapped.forEach(u => opts.push(`<option value="__setup__${esc(u)}">${esc(u)} - not read yet, set it up...</option>`));
+  opts.push('<option value="__new__">New season folder...</option>');
+  return `<select data-k="${r.key}" class="fsel">${opts.join('')}</select>`;
+}
+
+function checkCell(r) {
+  if (r.busy) return '<span class="n">Reading...</span>';
+  if (r.error) return `<div class="msgs"><div class="bad">${esc(r.error)}</div></div>`;
+  const x = r.res; if (!x) return '';
+  if (!r.folder) return '<div class="msgs"><div class="w">Pick a folder for this file.</div></div>';
+  let h = '';
+  (x.warnings || []).forEach(w => h += `<div class="w">${esc(w)}</div>`);
+  (x.notes || []).forEach(n => h += `<div class="n">${esc(n)}</div>`);
+  if (NEWF[r.folder] && !ST.folders.some(f => f.folder === r.folder)) h += `<div class="n">A new folder "${esc(r.folder)}" will be created.</div>`;
+  if (x.state === 'replace' && (x.warnings || []).some(w => /different version/.test(w)))
+    h += `<div><select data-k="${r.key}" class="asel"><option value="replace"${r.action !== 'skip' ? ' selected' : ''}>Replace the old version</option><option value="skip"${r.action === 'skip' ? ' selected' : ''}>Keep the old version (skip)</option></select></div>`;
+  if (x.state === 'identical') return `<div class="msgs">${h}</div>`;
+  if (!(x.warnings || []).length) h = '<div class="ok">Ready</div>' + h;
+  return `<div class="msgs">${h}</div>`;
+}
+
+function included(r) { return !r.busy && !r.error && r.id && r.folder && r.res && r.res.state !== 'identical' && r.action !== 'skip'; }
+
+function render() {
+  $('filesSec').hidden = !ROWS.length;
+  $('rows').innerHTML = ROWS.map(r => {
+    const cls = r.error || (r.res && (r.res.warnings || []).length) ? 'warn' : (r.res && r.res.state === 'identical') || r.action === 'skip' ? 'skip' : '';
+    return `<tr class="${cls}"><td><div class="fname">${esc(r.name)}</div>${r.res && r.res.size ? `<div class="sub">${Math.max(1, Math.round(r.res.size / 1024))} KB</div>` : ''}</td>`
+      + `<td>${whatCell(r)}</td><td>${r.error && !r.id ? '' : folderSelect(r)}</td><td>${checkCell(r)}</td>`
+      + `<td><button class="x" data-rm="${r.key}" title="Remove from the list">Remove</button></td></tr>`;
+  }).join('');
+  const n = ROWS.filter(included).length;
+  const warn = ROWS.filter(r => included(r) && (r.res.warnings || []).length).length;
+  $('go').disabled = jobBusy || uploading > 0 || n === 0;
+  $('rebuildOnly').disabled = jobBusy;
+  $('go').textContent = n ? `Save ${n} file${n > 1 ? 's' : ''} and rebuild` : 'Save and rebuild';
+  $('goHint').textContent = jobBusy ? 'A rebuild is running...' : uploading ? 'Reading files...' :
+    ROWS.length && !n ? 'Nothing new to add from the files above.' : warn ? `${warn} file${warn > 1 ? 's have' : ' has'} a warning - check the red notes before saving.` : '';
+}
+
+$('rows').addEventListener('change', e => {
+  const t = e.target, row = ROWS.find(r => r.key === t.dataset.k); if (!row) return;
+  if (t.classList.contains('asel')) { row.action = t.value; render(); return; }
+  if (!t.classList.contains('fsel')) return;
+  if (t.value === '__new__' || t.value.startsWith('__setup__')) {
+    const pre = t.value.startsWith('__setup__') ? t.value.slice(9) : (row.res && row.res.suggest_new ? row.res.suggest_new.folder : (row.res && row.res.season_guess) || '');
+    openNewFolder(row, pre);
+    t.value = row.folder || '';
+    return;
+  }
+  row.folder = t.value; row.action = null; reinspect(row);
+});
+$('rows').addEventListener('click', e => {
+  const k = e.target.dataset && e.target.dataset.rm; if (!k) return;
+  const row = ROWS.find(r => r.key === k); if (row) removeRow(row);
+});
+
+// ---------------------------------------------------------------- new folder box
+function openNewFolder(row, name) {
+  nfFor = row;
+  $('nfName').value = name || '';
+  const scout = /scout/i.test(name || '') || (row.res && row.res.luc === false);
+  const base = (name || '').replace(/\s*scout\s*$/i, '');
+  $('nfSeason').value = base ? (/^(spring|fall)\s+\d{2}$/i.test(base) ? base.replace(/(\d{2})$/, '20$1') : base) : '';
+  document.querySelector(`input[name=nfKind][value=${scout ? 'scout' : 'luc'}]`).checked = true;
+  $('nfBox').hidden = false; $('nfName').focus();
+}
+$('nfCancel').onclick = () => { $('nfBox').hidden = true; nfFor = null; };
+$('nfAdd').onclick = () => {
+  const folder = $('nfName').value.trim(), season = $('nfSeason').value.trim() || folder;
+  if (!folder || /^[._]/.test(folder) || /[\/:]/.test(folder)) { alert('Give the folder a name (no / or : and not starting with . or _).'); return; }
+  const scout = document.querySelector('input[name=nfKind]:checked').value === 'scout';
+  const mapped = ST.folders.find(f => f.folder === folder);
+  if (!mapped) NEWF[folder] = { folder, season, scout };
+  $('nfBox').hidden = true;
+  if (nfFor) { nfFor.folder = folder; nfFor.action = null; reinspect(nfFor); }
+  nfFor = null; render();
+};
+
+// ---------------------------------------------------------------- save + rebuild
+async function commit(withFiles) {
+  const rows = withFiles ? ROWS.filter(included) : [];
+  if (withFiles && rows.some(r => (r.res.warnings || []).length) &&
+      !confirm('Some files have warnings (in red). Save and rebuild anyway?')) return;
+  const used = new Set(rows.map(r => r.folder));
+  const newFolders = Object.values(NEWF).filter(n => used.has(n.folder) && !ST.folders.some(f => f.folder === n.folder));
+  const files = rows.map(r => ({ id: r.id, folder: r.folder, action: r.action || 'replace' }));
+  try {
+    await post('/api/commit', { files, newFolders, push: $('push').checked });
+  } catch (e) { alert(e.message); return; }
+  jobBusy = true; render();
+  $('progSec').hidden = false; $('steps').innerHTML = ''; $('result').innerHTML = ''; $('log').textContent = '';
+  $('progSec').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  poll(0);
+}
+$('go').onclick = () => commit(true);
+$('rebuildOnly').onclick = () => commit(false);
+
+async function poll(since) {
+  let j;
+  try { j = await api('/api/job?since=' + since); }
+  catch (e) { setTimeout(() => poll(since), 2000); return; }
+  if (j.lines.length) { const pre = $('log'); pre.textContent += j.lines.join('\n') + '\n'; pre.scrollTop = pre.scrollHeight; }
+  const failed = j.result && !j.result.ok;
+  $('steps').innerHTML = j.steps.map((s, i) => {
+    const last = i === j.steps.length - 1;
+    const cls = last && j.running ? 'cur' : last && failed ? 'err' : '';
+    return `<li class="${cls}">${esc(s.replace(/[^\x20-\x7e]/g, ''))}</li>`;
+  }).join('');
+  if (j.running) { setTimeout(() => poll(j.next), 900); return; }
+  jobBusy = false;
+  showResult(j.result);
+  await loadState().catch(() => {});
+}
+
+function showResult(res) {
+  if (!res) { render(); return; }
+  const lab = { added: '<span class="ok">Added</span>', already: '<span class="n">Already on the dashboard</span>', skipped: '<span class="n">Skipped</span>', error: '<span class="bad">Problem</span>', unknown: '<span class="bad">Not added</span>' };
+  const pushMsg = {
+    pushed: 'Pushed to GitHub. The live dashboard and player portal update within a minute or two.',
+    nothing: 'Nothing changed on the website, so there was nothing to push.',
+    failed: 'The push to GitHub did not go through. Open Terminal in this folder and run: git push (the log below shows why).',
+    nogit: 'Git is not set up in this folder, so nothing was pushed.',
+    off: 'Not pushed (the box was unticked). The dashboard on this computer is updated. Push from Terminal when ready, or press Rebuild only with the box ticked.'
+  }[res.push] || '';
+  let h = res.ok ? `<div class="banner good"><b>Done.</b> ${esc(pushMsg)}</div>` : `<div class="banner bad"><b>Something went wrong.</b> ${esc(res.error || '')} ${esc(pushMsg)}</div>`;
+  if (res.files && res.files.length) {
+    h += '<div class="card"><table>' + res.files.map(f => `<tr><td class="fname">${esc(f.name)}</td><td>${esc(f.folder)}</td><td>${lab[f.outcome] || ''}</td><td class="sub">${esc(f.detail || '')}</td></tr>`).join('') + '</table></div>';
+  }
+  $('result').innerHTML = h;
+  if (res.ok) {
+    // drop finished rows from the list
+    const done = new Set((res.files || []).filter(f => f.outcome === 'added' || f.outcome === 'already' || f.outcome === 'skipped').map(f => f.name));
+    for (let i = ROWS.length - 1; i >= 0; i--) if (done.has(ROWS[i].name)) ROWS.splice(i, 1);
+    Object.keys(NEWF).forEach(k => delete NEWF[k]);
+  }
+  render();
+}
+
+// ---------------------------------------------------------------- drop zone + misc
+const dz = $('drop');
+['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('over'); }));
+dz.addEventListener('drop', e => addFiles(Array.from(e.dataTransfer.files || [])));
+['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => e.preventDefault()));
+dz.addEventListener('click', () => $('pick').click());
+dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('pick').click(); } });
+$('pick').addEventListener('change', e => { addFiles(Array.from(e.target.files || [])); e.target.value = ''; });
+$('stop').onclick = async () => {
+  if (!confirm('Stop the upload page? (Double-click "Upload DVW.command" to start it again.)')) return;
+  try { await post('/api/quit', {}); document.body.innerHTML = '<main><h1 style="margin-top:60px">The upload page is stopped.</h1><p class="dek">You can close this tab. Double-click "Upload DVW.command" to start it again.</p></main>'; }
+  catch (e) { alert(e.message); }
+};
+window.addEventListener('beforeunload', e => { if (jobBusy) { e.preventDefault(); e.returnValue = ''; } });
+loadState().catch(e => { $('goHint').textContent = 'Could not reach the upload page server: ' + e.message; });
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+{
+  "_note": "Which folders inside 'Volleyball DVW Files' get read, and how. folder = folder name, season = season label shown on the dashboard, type = practice / match (match files are also detected from their file names), scout = true for opponent scouting folders. rebuild.py reads this; the upload page (upload.py) adds new folders here. Scouting folders use the plain season label (e.g. \"Spring 2026\") so the scouting Season filter has one entry per season.",
+  "folders": [
+    {
+      "folder": "Fall 2025",
+      "season": "Fall 2025",
+      "type": "practice",
+      "scout": false
+    },
+    {
+      "folder": "Spring 2025",
+      "season": "Spring 2025",
+      "type": "practice",
+      "scout": false
+    },
+    {
+      "folder": "Fall 2026",
+      "season": "Fall 2026",
+      "type": "practice",
+      "scout": false
+    },
+    {
+      "folder": "Spring 2026",
+      "season": "Spring 2026",
+      "type": "practice",
+      "scout": false
+    },
+    {
+      "folder": "Spring 2026 Scout",
+      "season": "Spring 2026",
+      "type": "scout",
+      "scout": true
+    },
+    {
+      "folder": "Fall 2027",
+      "season": "Fall 2027",
+      "type": "practice",
+      "scout": false
+    },
+    {
+      "folder": "Spring 27",
+      "season": "Spring 2027",
+      "type": "practice",
+      "scout": false
+    },
+    {
+      "folder": "Spring 2027 Scout",
+      "season": "Spring 2027",
+      "type": "scout",
+      "scout": true
+    }
+  ]
+}

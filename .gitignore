@@ -1,5 +1,6 @@
 # Large data files — never commit these
 volleyball_data.json
+volleyball_data.backup.json
 dashboard_data.json
 portal_extra.json
 

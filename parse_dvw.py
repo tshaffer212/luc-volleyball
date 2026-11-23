@@ -862,6 +862,15 @@ def merge_session(dataset, session, is_scout=False):
     target_list = dataset['scout_sessions'] if is_scout else dataset['sessions']
 
     if is_scout:
+        # Same file from the same folder already in the dataset -> skip. Needed because a date written like
+        # 01/11/2026 can read as Jan 11 or Nov 1 (parse_date prefers the reading that isn't in the future), so
+        # the same file can get a different date later on and slip past the opponent + date check below.
+        def _folder_file(s):
+            return (os.path.basename(os.path.dirname(s.get('filepath') or '')), s.get('file'))
+        fk = _folder_file(session)
+        if fk[1] and any(_folder_file(s) == fk for s in target_list):
+            print(f"  [skip] {session['file']} ({fk[0]}) already in dataset", file=sys.stderr)
+            return False
         # Dedup by opponent + date
         key = (session.get('opponent', ''), session.get('date', ''))
         existing_keys = {

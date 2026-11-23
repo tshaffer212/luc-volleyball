@@ -68,6 +68,43 @@ open('dashboard.html','w').write(t.replace('__DASHBOARD_DATA__', data))
 "
 ```
 
+### Season folders (`seasons.json`) and the upload page (`upload.py`)
+- `seasons.json` = which folders in `Volleyball DVW Files` get read: `{folder, season (label), type, scout}`.
+  `rebuild.py` reads it (its built-in `FOLDER_MAP` is only the fallback). "Spring 27" -> season "Spring 2027" and
+  "Spring 2027 Scout" were added Nov 23, 2026. `LUC_DVW_ROOT` env var overrides the DVW folder (used for tests).
+- Upload page: double-click `Upload DVW.command` (runs `python3 upload.py`) -> http://127.0.0.1:8765 opens. The page
+  is `upload_page.html` (token placeholder `__TOKEN__`). Stdlib only, listens on 127.0.0.1, every API call needs the
+  random per-start token + Host/Origin checks; `/preview/` serves only dashboard.html, dashboard_sets.json,
+  players.html, scout_app.html, player_data/*.json (never private/).
+- Flow: drop .dvw -> staged in a temp dir -> `inspect()` parses it with `parse_dvw.parse_dvw` (teams, date, type,
+  suggested folder via `season_from_date()`: Jan-Jul = Spring YYYY, Aug - Dec 19 = Fall YYYY+1, Dec 20+ = Spring
+  YYYY+1) and `check()` flags: Loyola file in a scout folder / opponent file in a Loyola folder, date vs folder
+  season, a match whose file name doesn't say "vs" / VM (would count as a practice), same file already in the folder
+  (identical = nothing to add; different = replace or skip), same match already on the dashboard (same date + loosely
+  matched opponent, `same_team()`, read from dashboard_data.json `sessions` / `scout_index`), same-date practice.
+- Save: new folders appended to seasons.json; files copied in; a replaced file's old copy goes to
+  `Volleyball DVW Files/_replaced/<stamp>/<folder>/` and its old session is removed from volleyball_data.json
+  (`drop_sessions()`, copy in `volleyball_data.backup.json`, git-ignored) because the parser skips files already in
+  the dataset (Loyola key = season + file, scout = opponent + date). Then `rebuild.py` runs (with `--no-push` if the
+  box is unticked), log streamed to the page; per-file outcome read from the parse lines (`Parsing X ...`,
+  `[skip] X`). Stale `.git/*.lock` files older than 10 s are removed before a push.
+- Duplicates removed Nov 23, 2026 (found by identical serve order = same match, even when coded twice):
+  16 Loyola sessions + 8 scout sessions taken out of volleyball_data.json (pre-cleanup copy:
+  `volleyball_data.backup.json`). Kept the VolleyMetrics "&date id TEAM-TEAM(VM)" version each time. Removed:
+  Spring 2026 `LMV vs UH(1).dvw` + `LMV vs UCLA.dvw` (in-house copies of the Jan 9 UH / Jan 19 UCLA VM files; their
+  files were already gone), Spring 2025 `...LUC-LU(VM)-2.dvw` + `1-8-25.mp4.dvw`, Fall 2026 `Lewis1.dvw`, 11 "Unknown
+  Season" copies (Jan10PSU, PSU, PFW, quincy, the PEPP/OSU/QU VM copies, `& 2025-03-26 LMV-LMV`, 6233, `OSU Vs.
+  Loyola`, `BSU vs Loyola (2)`), and scout copies `STA vs LEW` (x2), Quincy, UCSD5, LW4, MCK4, MCK5, and the second
+  Pepp2 (re-added with a flipped date). Their files in read folders were moved to `Volleyball DVW Files/_duplicates/`
+  (MISC is not read, left alone). 27 unique "Unknown Season" sessions remain (2024 VM matches, fall 2024 exhibitions,
+  old MISC files).
+- Scout dedup (parse_dvw `merge_session`) now also skips a file already read from the same folder (folder + file
+  name from `filepath`): `parse_date` picks the non-future reading of an ambiguous date like 01/11/2026, so the
+  same file could get a new date (Nov 1 once that passed) and slip past the opponent + date check.
+- Scouting folders now carry the plain season label ("Spring 2026 Scout" folder -> season "Spring 2026") so the
+  scouting Season filter has one entry per season (the old "Spring 2026 Scout" label only existed on duplicates).
+- Known, not fixed: all 71 Spring 2025 sessions are typed "match", including 44 Loyola-vs-Loyola practice files.
+
 ### Design: editorial "sports page" (live since Nov 18, 2026)
 `dashboard_template.html` / `dashboard.html` and `players.html` use the editorial design: light paper
 background, ink text, maroon accent, Source Serif 4 + IBM Plex Sans (Google Fonts, system fallbacks),
