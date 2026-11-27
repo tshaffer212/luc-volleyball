@@ -54,6 +54,7 @@ DATASET_BACKUP = HERE / 'volleyball_data.backup.json'
 DASH_DATA = HERE / 'dashboard_data.json'
 REBUILD = HERE / 'rebuild.py'
 REPLACED_DIR = DVW_ROOT / '_replaced'
+REBUILD_LOCK = HERE / '.rebuild.lock'   # one save + rebuild at a time (upload page and Downloads watcher)
 PORT0 = int(os.environ.get('LUC_UPLOAD_PORT') or 8765)
 MAX_BYTES = 50 * 1024 * 1024
 TOKEN = uuid.uuid4().hex
@@ -413,7 +414,48 @@ def clear_git_locks():
             pass
 
 
+@contextlib.contextmanager
+def rebuild_lock(wait=900):
+    """One save + rebuild at a time, shared by the upload page and watch_downloads.py (a lock file, so it works
+    across programs). A lock older than 30 minutes is treated as left over from a crash."""
+    t0 = time.time()
+    while True:
+        try:
+            fd = os.open(str(REBUILD_LOCK), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - REBUILD_LOCK.stat().st_mtime > 1800:
+                    REBUILD_LOCK.unlink()
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.time() - t0 > wait:
+                raise RuntimeError('Another rebuild is still running (.rebuild.lock). Try again in a minute.')
+            set_step('Waiting for another rebuild to finish')
+            time.sleep(2)
+    try:
+        yield
+    finally:
+        try:
+            REBUILD_LOCK.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def run_job(files, new_folders, push):
+    """Save files + rebuild, holding the shared rebuild lock."""
+    try:
+        with rebuild_lock():
+            _run_job(files, new_folders, push)
+    except RuntimeError as e:
+        JOB['result'] = {'ok': False, 'files': [], 'push': None, 'error': str(e)}
+        JOB['running'] = False
+
+
+def _run_job(files, new_folders, push):
     res = {'ok': False, 'files': [], 'push': None, 'error': None}
     try:
         set_step('Saving files')

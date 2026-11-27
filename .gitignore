@@ -1,6 +1,11 @@
 # Large data files — never commit these
 volleyball_data.json
 volleyball_data.backup.json
+
+# Downloads watcher state / log and the shared rebuild lock (local only)
+.rebuild.lock
+.watch_downloads.json
+watch_downloads.log
 dashboard_data.json
 portal_extra.json
 
