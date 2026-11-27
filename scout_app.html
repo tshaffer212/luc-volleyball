@@ -6698,9 +6698,66 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
 
   // -- Which sections apply --
   const has = { att: A.A.att >= 5, set: !!SE && SE.n >= 10, pass: A.R.att >= 5, srv: A.S.att >= 5, def: (A.B.att + A.D.att) >= 5 };
-  const nav = [['pl-sec-overview','Overview', true], ['pl-sec-attack','Attacking', has.att], ['pl-sec-setting','Setting', has.set], ['pl-sec-passing','Passing', has.pass],
+  const nav = [['pl-sec-overview','Overview', true], ['pl-sec-rank','Rankings', true], ['pl-sec-attack','Attacking', has.att], ['pl-sec-setting','Setting', has.set], ['pl-sec-passing','Passing', has.pass],
                ['pl-sec-serving','Serving', has.srv], ['pl-sec-defense','Block & Defense', has.def], ['pl-sec-trends','Trends', true]]
     .filter(x => x[2]).map(([id, l]) => `<button onclick="plScrollTo('${id}')">${l}</button>`).join('');
+
+  // -- Skill rankings: his rank at his position in each skill he is scored on (standard stats), with #1's number
+  //    and the position average. Numbers only, never names. Same sessions / Set / pass scale as the rest of the tab.
+  const rankSec = (() => {
+    const W = paWeightsFor(group), plural = PL_GROUP_PLURAL[group] || 'players', short = PL_POSS[group] || 'pos';
+    const pool = [...new Set([...mates, num])];
+    const agg = {}; pool.forEach(pn => { agg[pn] = pn === num ? A : plAggregate(pn, sids, setN); });
+    const real = pool.filter(pn => !isVirt(pn));                          // averages never include coach-only copies
+    const ev = (x, c) => x.ev[c] || 0;
+    const blk = x => ev(x.B, '#') + 0.5 * (ev(x.B, '+') + ev(x.B, '!') + ev(x.B, '-'));
+    const digs = x => x.D.att - ev(x.D, '=');
+    const SEv = {}; const sev = pn => (pn in SEv) ? SEv[pn] : (SEv[pn] = plSetterEval(pn, sids, setN));
+    const sgn = (v, d) => (v > 0 ? '+' : '') + v.toFixed(d);
+    const SK = {
+      Attack: { lbl: 'Attacking', how: 'attack eff (K - E - BLK) / Att', val: pn => agg[pn].A.att ? _plEffOf(agg[pn].A) : null, fmt: v => fmtEff3(v),
+        avg: L => { const a = L.reduce((t, p) => t + agg[p].A.att, 0); return a ? L.reduce((t, p) => t + ev(agg[p].A, '#') - ev(agg[p].A, '=') - ev(agg[p].A, '/'), 0) / a : null; } },
+      Pass: { lbl: 'Passing', how: `pass average (${rcvPassScale}-pt scale)`, val: pn => agg[pn].R.att ? passAvgFromEvals(agg[pn].R.ev, agg[pn].R.att) : null, fmt: v => v.toFixed(2),
+        avg: L => { const e = {}; let a = 0; L.forEach(p => { _plAddEv(e, agg[p].R.ev); a += agg[p].R.att; }); return a ? passAvgFromEvals(e, a) : null; } },
+      Serve: { lbl: 'Serving', how: 'ace % minus error %', val: pn => agg[pn].S.att ? (ev(agg[pn].S, '#') - ev(agg[pn].S, '=')) / agg[pn].S.att * 100 : null, fmt: v => sgn(v, 1),
+        avg: L => { const a = L.reduce((t, p) => t + agg[p].S.att, 0); return a ? L.reduce((t, p) => t + ev(agg[p].S, '#') - ev(agg[p].S, '='), 0) / a * 100 : null; } },
+      Block: { lbl: 'Blocking', how: 'block points per set (stuff 1, touch 0.5)', val: pn => agg[pn].sets.size ? blk(agg[pn]) / agg[pn].sets.size : null, fmt: v => v.toFixed(2),
+        avg: L => { const s = L.reduce((t, p) => t + agg[p].sets.size, 0); return s ? L.reduce((t, p) => t + blk(agg[p]), 0) / s : null; } },
+      Dig: { lbl: 'Defense', how: 'digs per set (dig errors not counted)', val: pn => agg[pn].sets.size ? digs(agg[pn]) / agg[pn].sets.size : null, fmt: v => v.toFixed(2),
+        avg: L => { const s = L.reduce((t, p) => t + agg[p].sets.size, 0); return s ? L.reduce((t, p) => t + digs(agg[p]), 0) / s : null; } },
+      Set: { lbl: 'Setting', how: 'attack eff off his sets', val: pn => sev(pn)?.raw ?? null, fmt: v => fmtEff3(v),
+        avg: L => { let n = 0, t = 0; L.forEach(p => { const s = sev(p); if (s && s.raw !== null) { n += s.n; t += s.raw * s.n; } }); return n ? t / n : null; } },
+      Competition: { lbl: 'Competition', how: 'competition points (6v6 practice + match sets)', val: pn => PA[pn] ? PA[pn].comp.pts : null, fmt: v => sgn(v, 2),
+        avg: L => { const v = L.map(p => PA[p] ? PA[p].comp.pts : null).filter(x => x !== null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; } },
+    };
+    const rankOf = (vals, mine) => 1 + vals.filter(v => v > mine + 1e-9).length;    // ties share a rank
+    const tone = (r, n) => !r || n < 3 ? '' : r === 1 ? 'color:var(--hi);' : r === n ? 'color:var(--lo);' : '';
+    const row = (lbl, wt, r, n, mine, top, avg, fmt, none = 'no attempts') => `<tr><td><b>${lbl}</b>${wt ? ` <span class="pl-muted" style="font-size:10px">${wt}</span>` : ''}</td>`
+      + `<td class="num" style="${tone(r, n)}font-weight:700">${r ? `#${r} <span class="pl-muted" style="font-weight:400">of ${n}</span>` : `<span class="pl-muted" style="font-weight:400">${none}</span>`}</td>`
+      + `<td class="num" style="font-weight:700">${mine !== null && mine !== undefined ? fmt(mine) : '-'}</td><td class="num">${top !== null && top !== undefined ? fmt(top) : '-'}</td><td class="num">${avg !== null && avg !== undefined ? fmt(avg) : '-'}</td></tr>`;
+    const rows = [];
+    // Overall = the Points Added rank in the header (same players, same order)
+    const paArr = Object.entries(PA).filter(([, o]) => o.touches >= 10).sort((a, b) => b[1].total - a[1].total);
+    const paRealVals = paArr.filter(([p]) => !isVirt(p)).map(([, o]) => o.total);
+    const oi = paArr.findIndex(([p]) => p === num);
+    rows.push(row('Overall', 'Points Added', oi >= 0 ? oi + 1 : null, paArr.length, myPA ? myPA.total : null, paArr.length ? paArr[0][1].total : null,
+      paRealVals.length ? paRealVals.reduce((a, b) => a + b, 0) / paRealVals.length : null, v => sgn(v, 1), 'under 10 touches'));
+    const cats = PA_WCOLS.filter(c => (W[c] || 0) >= 0.05 && SK[c]).sort((a, b) => (W[b] || 0) - (W[a] || 0));
+    const used = [];
+    for (const c of cats) {
+      const k = SK[c];
+      const vals = pool.map(pn => ({ pn, v: k.val(pn) })).filter(o => o.v !== null && o.v !== undefined && isFinite(o.v));
+      const mine = k.val(num);
+      const has = mine !== null && mine !== undefined && isFinite(mine);
+      const top = vals.length ? Math.max(...vals.map(o => o.v)) : null;
+      const avg = k.avg(real.filter(pn => vals.some(o => o.pn === pn)));
+      rows.push(row(k.lbl, Math.round(W[c] * 100) + '%', has ? rankOf(vals.map(o => o.v), mine) : null, vals.length, has ? mine : null, top, avg, k.fmt));
+      used.push(`${k.lbl} = ${k.how}`);
+    }
+    return `<div class="card pl-card" id="pl-sec-rank"><h3 class="pl-h">Skill rankings <span class="pl-muted">vs the ${plural}, sessions in view</span></h3>
+      <table class="pl-tbl"><tr><th>Skill <span class="pl-muted" style="text-transform:none">(share of his score)</span></th><th class="num">Rank</th><th class="num">His</th><th class="num">#1</th><th class="num">${short} avg</th></tr>${rows.join('')}</table>
+      <div class="pl-muted" style="font-size:11px;margin-top:6px">Ranked against the ${plural} with attempts in the sessions in view; ties share a rank. #1 and the average are numbers only (no names). ${used.join('; ')}. Overall = Points Added (weighted for ${plural}, 10+ touches).</div></div>`;
+  })();
 
   // -- Overview tiles (by position) --
   const T = {
@@ -6858,7 +6915,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
       <div><div class="pl-muted" style="font-size:11px">Ace %</div>${_plSpark(tr.map(x => ({ ...x, v: x.sAtt >= 3 ? x.ace : null })), v => (v * 100).toFixed(0) + '%', '#3b8fd9')}</div>
     </div><div class="pl-muted" style="font-size:11px;margin-top:6px">Sessions with fewer than 3 attempts in a skill are skipped for that line.</div></div>`;
 
-  container.innerHTML = header + `<div class="pl-nav">${nav}</div>` + overview + attack + setting + passing +
+  container.innerHTML = header + `<div class="pl-nav">${nav}</div>` + overview + rankSec + attack + setting + passing +
     (serving || defense ? `<div class="pl-g2">${serving}${defense}</div>` : '') + trends;
 }
 

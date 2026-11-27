@@ -305,6 +305,18 @@ shows "X of N matches, Y of M practices selected"; the Set filter lists sets fro
 PDF filter line lists the sessions. The same change is in the Volley App engine template (keep them in sync).
 Harness view `player_<n>_sessmix` checks a mixed selection.
 
+### Player tab skill rankings (coach dashboard only, Nov 27, 2026)
+Section "Skill rankings" (`rankSec` in renderPlayerDetail, id `pl-sec-rank`, nav "Rankings", right after Overview;
+in the player PDF it's one more block on the single page). Rows: Overall = the header's Points Added rank (same
+list: teammates at his position with 10+ touches), then every skill with a Points Added weight of 5%+ for his
+position (`paWeightsFor(group)`), ordered by weight: Attacking = eff (K-E-BLK)/Att, Passing = pass avg on the current
+pass scale, Serving = ace % minus error %, Blocking = block pts per set (stuff 1, touch 0.5, same as the tile),
+Defense = digs per set (D attempts minus dig errors / sets played), Setting = eff of attacks off his sets
+(`plSetterEval().raw`), Competition = Points Added competition points. Columns: Rank ("#2 of 6", ties share a rank,
+#1 green / last red when 3+), His, #1 (number only), position average (pooled over real teammates; virtual players
+like 7L are ranked but never in averages). Everyone with attempts in the sessions in view is ranked (no minimum, user's
+choice). Never shows who is above / below. NOT in the player portal (players.html). Same patch in the engine template.
+
 ### Coach-only virtual players (Jake Read 2.0)
 `VIRTUAL_PLAYERS` in `aggregate.py` adds `7L` = "Jake Read 2.0", a libero-only copy of #7 (Fall 2027 only):
 only R/RM/RQ/D/F/E skills (and R/D/E/X Points Added touches) are copied, he's in the LIBEROS group, and
