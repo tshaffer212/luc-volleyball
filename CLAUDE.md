@@ -239,6 +239,16 @@ It uses the same rotation the pages show: match files = coded setter zone (lineu
 `fix_right_side_typos()`), scout files = setter's lineup position. Fixes are listed in `combo_fixes`
 and printed when aggregate.py runs. Rotation boxes are labeled "Rotation 1" ... "Rotation 6".
 
+### Player tab session checklist
+The Player tab's session filter is a checklist (Nov 27, 2026), not a single-session dropdown: `plSessions` = null
+(all sessions in view) or a Set of session ids; `plSessList` = the player's sessions for the Matches / Practices /
+Both chip. Panel `#pl-sess-panel` (reuses the Reports player picker's `.pp-*` styles): All / None, a Matches and a
+Practices group (group checkbox + "only"), one checkbox per session. Ticking every session goes back to null. The
+whole header redraws on each tick, so `plSessOpen` / `plSessScroll` keep the panel open and scrolled. Header line
+shows "X of N matches, Y of M practices selected"; the Set filter lists sets from the selected matches; the player
+PDF filter line lists the sessions. The same change is in the Volley App engine template (keep them in sync).
+Harness view `player_<n>_sessmix` checks a mixed selection.
+
 ### Coach-only virtual players (Jake Read 2.0)
 `VIRTUAL_PLAYERS` in `aggregate.py` adds `7L` = "Jake Read 2.0", a libero-only copy of #7 (Fall 2027 only):
 only R/RM/RQ/D/F/E skills (and R/D/E/X Points Added touches) are copied, he's in the LIBEROS group, and

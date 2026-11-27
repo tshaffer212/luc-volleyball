@@ -281,6 +281,11 @@
   .pl-chip { padding:4px 11px; border-radius:14px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:12px; cursor:pointer; }
   .pl-chip.on { background:var(--maroon); border-color:var(--maroon); color:#fff; }
   .pl-sep { width:1px; height:18px; background:var(--border); margin:0 4px; }
+  #pl-sess-wrap { position:relative; }
+  #pl-sess-wrap .pp-btn { margin-top:0; padding:4px 10px; font-size:12px; }
+  #pl-sess-panel { width:300px; max-height:420px; }
+  #pl-sess-panel .pp-row { padding-left:10px; }
+  .pl-sess-sub { color:var(--text-muted); font-size:11px; margin-left:auto; }
   .pl-nav { display:flex; gap:6px; position:sticky; top:0; z-index:5; background:var(--bg, #0f0f0f); padding:8px 0; margin-bottom:6px; flex-wrap:wrap; }
   .pl-nav button { padding:6px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; cursor:pointer; }
   .pl-nav button:hover { border-color:var(--gold); color:var(--gold); }
@@ -6319,12 +6324,36 @@ function selectPlayer(num, season) {
 // (setters only), passing, serving, block & defense and session trends.
 // Filters: Matches / Practices / Both, a single session, Set (matches), pass
 // scale, Points Added mode, and compare-to (position or team average).
-let plType = null, plSession = 'all', plSet = 'all', plCompare = 'pos';
+let plType = null, plSessions = null, plSet = 'all', plCompare = 'pos';   // plSessions: null = all, else Set of session ids
+let plSessOpen = false, plSessScroll = 0;
 let plCtx = { num: null, season: 'all', name: null };
 
 function plRerender() { if (plCtx.num) renderPlayerDetail(plCtx.num, plCtx.season, plCtx.name); }
-function plSetType(t)   { plType = t; plSession = 'all'; plSet = 'all'; plRerender(); }
-function plSetSession(v){ plSession = v; plRerender(); }
+function plSetType(t)   { plType = t; plSessions = null; plSet = 'all'; plRerender(); }
+// Session checklist: any mix of the matches / practices in view. Ticking every session = back to "All".
+let plSessList = [];                       // sessions in the list right now (set by renderPlayerDetail)
+function _plSessApply(set) {
+  const p = document.getElementById('pl-sess-panel'); if (p) plSessScroll = p.scrollTop;
+  plSessions = (set && set.size === plSessList.length) ? null : set;
+  plSessOpen = true; plRerender();
+  const q = document.getElementById('pl-sess-panel'); if (q) q.scrollTop = plSessScroll;   // the header is redrawn on every tick
+}
+function _plSessCur() { return new Set(plSessions || plSessList.map(s => s.id)); }
+function plSessAll()  { _plSessApply(null); }
+function plSessNone() { _plSessApply(new Set()); }
+function plSessOne(i, on) { const x = plSessList[i]; if (!x) return; const s = _plSessCur(); on ? s.add(x.id) : s.delete(x.id); _plSessApply(s); }
+function plSessType(t, on) { const s = _plSessCur(); plSessList.filter(x => x.type === t).forEach(x => on ? s.add(x.id) : s.delete(x.id)); _plSessApply(s); }
+function plSessOnly(t) { _plSessApply(new Set(plSessList.filter(x => x.type === t).map(x => x.id))); }
+function plSessToggle(ev) {
+  ev?.stopPropagation();
+  plSessOpen = !plSessOpen;
+  const p = document.getElementById('pl-sess-panel'); if (p) p.style.display = plSessOpen ? 'block' : 'none';
+}
+document.addEventListener('click', e => {
+  const w = document.getElementById('pl-sess-wrap'), p = document.getElementById('pl-sess-panel');
+  if (plSessOpen && p && w && !w.contains(e.target)) { plSessOpen = false; p.style.display = 'none'; }
+});
+function plSessLabel(s) { return `${s.date || ''} ${s.type === 'match' ? 'vs ' + (s.opponent || '?') : '(Practice)'}`; }
 function plSetSetN(v)   {
   plSet = v;
   if (v !== 'all' && !SETS_DATA) {
@@ -6565,7 +6594,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
     const same = seasons.filter(s => DATA.players_by_season?.[s]?.[num]?.name === name);
     if (same.length) seasons = same;
   }
-  if (plCtx.num !== num || plCtx.season !== detailSeason || plCtx.name !== name) { plType = null; plSession = 'all'; plSet = 'all'; }
+  if (plCtx.num !== num || plCtx.season !== detailSeason || plCtx.name !== name) { plType = null; plSessions = null; plSet = 'all'; plSessOpen = false; }
   plCtx = { num, season: detailSeason, name };
   const container = document.getElementById('player-detail');
   const lookSeason = seasons[seasons.length - 1];
@@ -6582,7 +6611,9 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
   const typeOk = s => plType === 'both' || s.type === plType;
   const pool = DATA.sessions.filter(s => seasons.includes(s.season) && s.type !== 'scout' && typeOk(s));   // everyone, for baselines
   let sids = pool.map(s => s.id);
-  if (plSession !== 'all') sids = sids.filter(id => id === plSession);
+  plSessList = mine.filter(typeOk);
+  if (plSessions) { for (const id of [...plSessions]) if (!plSessList.some(s => s.id === id)) plSessions.delete(id); }
+  if (plSessions) sids = sids.filter(id => plSessions.has(id));
   const setN = plSet;
 
   const A = plAggregate(num, sids, setN);
@@ -6616,15 +6647,26 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
 
   // -- Header + filters --
   const chip = (on, lbl, fn) => `<button class="pl-chip${on ? ' on' : ''}" onclick="${fn}">${lbl}</button>`;
-  const sessOpts = mine.filter(typeOk).map(s => `<option value="${s.id}" ${plSession === s.id ? 'selected' : ''}>${s.date || ''} ${s.type === 'match' ? 'vs ' + (s.opponent || '?') : '(Practice)'}</option>`).join('');
-  const setsAvail = [...new Set(mine.filter(s => s.type === 'match' && (plSession === 'all' || s.id === plSession)).flatMap(s => s.sets || []))].sort((a, b) => a - b);
+  const sessOn = s => !plSessions || plSessions.has(s.id);
+  const sessBtnLbl = !plSessions ? `All sessions (${plSessList.length})` : !plSessions.size ? 'No sessions selected'
+    : plSessions.size === 1 ? plSessLabel(plSessList.find(s => plSessions.has(s.id)) || {}) : `${plSessions.size} of ${plSessList.length} sessions`;
+  const sessGroups = [['match', 'Matches'], ['practice', 'Practices']].map(([t, lbl]) => {
+    const ss = plSessList.filter(s => s.type === t); if (!ss.length) return '';
+    const allOn = ss.every(sessOn), nOn = ss.filter(sessOn).length;
+    return `<div class="pp-group"><label class="pp-ghead"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="plSessType('${t}', this.checked)"> ${lbl} (${nOn}/${ss.length})</label>`
+      + `<button class="pp-only" onclick="plSessOnly('${t}')">only</button></div>`
+      + ss.map(s => `<label class="pp-row"><input type="checkbox" ${sessOn(s) ? 'checked' : ''} onchange="plSessOne(${plSessList.indexOf(s)}, this.checked)"> ${s.date || ''} <span class="pl-sess-sub">${s.type === 'match' ? 'vs ' + (s.opponent || '?') : 'Practice'}</span></label>`).join('');
+  }).join('');
+  const sessPicker = `<div id="pl-sess-wrap"><button id="pl-sess-btn" class="pp-btn${plSessions ? ' pp-active' : ''}" onclick="plSessToggle(event)">${sessBtnLbl}</button>`
+    + `<div id="pl-sess-panel" class="pp-panel" style="display:${plSessOpen ? 'block' : 'none'}"><div class="pp-top"><button onclick="plSessAll()">All</button><button onclick="plSessNone()">None</button></div>${sessGroups}</div></div>`;
+  const setsAvail = [...new Set(mine.filter(s => s.type === 'match' && sessOn(s)).flatMap(s => s.sets || []))].sort((a, b) => a - b);
   const header = `
     <div class="card pl-card">
       <div class="detail-header" style="margin-bottom:10px">
         <div class="detail-num">#${num}</div>
         <div class="detail-info">
           <h2>${p.name} ${p.is_libero ? '<span class="libero-badge">Libero</span>' : ''}</h2>
-          <p>${PL_POS[group] || POS_NAMES[p.position_code] || ''}, ${detailSeason === 'all' ? (seasons.length > 1 ? `${seasons[0]} - ${seasons[seasons.length - 1]}` : seasons[0]) : detailSeason}, ${nM} matches, ${nP} practices${A.sets.size ? `, ${A.sets.size} sets in view` : ''}</p>
+          <p>${PL_POS[group] || POS_NAMES[p.position_code] || ''}, ${detailSeason === 'all' ? (seasons.length > 1 ? `${seasons[0]} - ${seasons[seasons.length - 1]}` : seasons[0]) : detailSeason}, ${plSessions ? `${plSessList.filter(x => x.type === 'match' && plSessions.has(x.id)).length} of ${nM} matches, ${plSessList.filter(x => x.type === 'practice' && plSessions.has(x.id)).length} of ${nP} practices selected` : `${nM} matches, ${nP} practices`}${A.sets.size ? `, ${A.sets.size} sets in view` : ''}</p>
         </div>
         ${myPA ? `<div style="margin-left:auto;text-align:right">
           <div class="pl-muted" style="font-size:11px">Points Added (weighted)</div>
@@ -6633,7 +6675,7 @@ function renderPlayerDetail(num, detailSeason, nameHint) {
       </div>
       <div class="pl-filters">
         ${chip(plType === 'match', 'Matches', "plSetType('match')")}${chip(plType === 'practice', 'Practices', "plSetType('practice')")}${chip(plType === 'both', 'Both', "plSetType('both')")}
-        <select onchange="plSetSession(this.value)"><option value="all">All sessions (${mine.filter(typeOk).length})</option>${sessOpts}</select>
+        ${sessPicker}
         ${plType === 'match' && setsAvail.length ? `<select onchange="plSetSetN(this.value)"><option value="all">All sets</option>${setsAvail.map(n => `<option value="${n}" ${String(plSet) === String(n) ? 'selected' : ''}>Set ${n}</option>`).join('')}</select><span id="pl-set-note" class="pl-muted" style="font-size:11px"></span>` : ''}
         <span class="pl-sep"></span>
         <span class="pl-muted" style="font-size:11px">Pass scale</span>${chip(rcvPassScale === '4', '4-pt', "setRcvPassScale('4')")}${chip(rcvPassScale === '3', '3-pt', "setRcvPassScale('3')")}
@@ -7042,7 +7084,7 @@ function exportPlayerPDF() {
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const typeLbl = { match:'Matches', practice:'Practices', both:'Matches + Practices' }[plType] || '';
   const f = [['Season', plCtx.season === 'all' ? 'All seasons' : plCtx.season], ['Type', typeLbl],
-             ['Session', plSession === 'all' ? 'All' : (DATA.sessions.find(s => s.id === plSession)?.date || '')], ['Set', plSet === 'all' ? 'All sets' : `Set ${plSet}`],
+             ['Sessions', !plSessions ? 'All' : plSessions.size <= 4 ? plSessList.filter(s => plSessions.has(s.id)).map(plSessLabel).join(', ') || 'None' : `${plSessions.size} of ${plSessList.length}`], ['Set', plSet === 'all' ? 'All sets' : `Set ${plSet}`],
              ['Pass scale', rcvPassScale + '-point'], ['Compare to', plCompare === 'pos' ? 'Position average' : 'Team average']];
   const filters = f.map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(v)}</span>`).join('');
   const win = window.open('', '_blank', 'width=900,height=1000');
