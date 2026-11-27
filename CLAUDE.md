@@ -244,6 +244,20 @@ then maps it through `SETTER_ZONE_TO_ROT`. Sanity check: D-balls (X8/V8) land in
   their own score (`scRZsub`). Applies to Team report, Player scouting, Setter locations and all PDFs; set starts
   and set-to-set changes are set-level, so they are not filtered (noted on the cards).
 
+### Scouting match checklist (Nov 27, 2026)
+"Matches" picker in the scouting detail header (`scFilesPicker()`, next to the Team report / Player scouting /
+Setter locations switch): checklist of the opponent's files in the Season filter, grouped by season (All / None,
+season checkbox + "only"), labeled "1/14 vs Roosevelt University" (vs = they were home, at = away). State `scFiles` =
+null (all) or a Set of file indexes in `setting.files` order; reset when another opponent is opened; `scFilesOpen` /
+`scFilesScroll` keep the panel open while ticking. `scFileOk(fi, files)` (season AND checklist) replaced every
+section's season check (set starts, setting breakdown, Pass & Hit, player scouting, setter locations, combos chart).
+Team strip, rotation cards, setters table and the team PDF use `scAgg(name)`: precomputed totals when nothing is
+filtered, otherwise summed from per-file raw counts `opp_rotation_stats[opp].pf` / `pf_rz` (aggregate.py `_pf_raw()`;
+percentages worked out on the page like compute_scout_rotation_stats does). So the Season filter now also changes the
+team strip / rotation cards (before, those always showed every season). `setting.files` entries carry `side` and
+`vs`. PDFs list the matches used. Harness: 'scout files consistency' (all files summed == precomputed, normal + red
+zone) and views scout_UCSD_files2 / _players / _setmap / _none, pdf_scout_team_files2. Same in the engine template.
+
 ### Scouting player tab ("Player scouting" view)
 The scouting detail has a "Team report | Player scouting" switch (`scoutView`, `setScoutView()`). Player
 scouting = a checklist of the opponent's players (`scoutPF.checked`), filters (rotation, set type, first ball /

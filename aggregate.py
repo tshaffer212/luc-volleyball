@@ -2622,8 +2622,9 @@ def main(raw_path, out_path):
         """
         files, names, rows, ph = [], {}, [], {}
         for fi, session in enumerate(sessions_for_opp):
-            files.append({'file': session.get('file'), 'season': session.get('season'), 'date': session.get('date')})
             opp_side = opp_side_for_session(session)
+            files.append({'file': session.get('file'), 'season': session.get('season'), 'date': session.get('date'),
+                          'side': opp_side, 'vs': session.get(('home' if opp_side == 'away' else 'away') + '_team') or ''})
             for n_, pinfo in (session.get(f'{opp_side}_players') or {}).items():
                 if pinfo.get('name'):
                     names[str(n_)] = pinfo['name']
@@ -2764,6 +2765,26 @@ def main(raw_path, out_path):
     for os_ in opponent_stats.values():
         derive(os_['skills'])
 
+    def _pf_raw(st, with_setters=True):
+        """Raw counts of one file's compute_scout_rotation_stats (percentages are worked out on the page)."""
+        T = st['team']
+        t = {k: T[k] for k in ('att', 'k', 'e', 'bk', 'so_rallies', 'so_kills', 'fbso_rallies', 'fbso_kills', 'rcv_att', 'rcv_in_sys')}
+        t['by'] = {g: {k: b[k] for k in ('rcv_att', 'rcv_in_sys', 'fbso_rallies', 'fbso_kills', 'so_rallies', 'so_kills')}
+                   for g, b in (T.get('by') or {}).items()}
+        rots = {}
+        for rk, rv in st['rotations'].items():
+            a, r, se = rv['atk'], rv['rcv'], rv['set']
+            if not (a['att'] or r['att'] or se['att']):
+                continue
+            rots[rk] = {'atk': dict({k: a[k] for k in ('att', 'k', 'e', 'bk')}, by_zone={z: n for z, n in a['by_zone'].items() if n}),
+                        'rcv': {'att': r['att'], 'in_sys': r['in_sys'], 'fbso_rallies': r['fbso_rallies'], 'fbso_kills': r['fbso_kills'],
+                                'by': {g: {k: b[k] for k in ('att', 'in_sys', 'fbso_kills')} for g, b in r['by'].items()}},
+                        'set': {'att': se['att'], 'by_zone': {z: n for z, n in se['by_zone'].items() if n}}}
+        out = {'team': t, 'rotations': rots}
+        if with_setters:
+            out['setters'] = {p: {'name': sv['name'], 'sets': sv['sets'], 'rot_count': sv['rot_count']} for p, sv in st['setters'].items()}
+        return out
+
     # Compute rotation-level stats for each opponent
     print("Computing scout rotation stats ...", file=sys.stderr)
     opp_rotation_stats = {}
@@ -2777,6 +2798,9 @@ def main(raw_path, out_path):
         opp_rotation_stats[opp]['players'] = compute_scout_players(sess_list)
         _rz = compute_scout_rotation_stats(sess_list, rz_only=True)       # same numbers, red-zone rallies only
         opp_rotation_stats[opp]['rz'] = {'team': _rz['team'], 'rotations': _rz['rotations']}
+        # per file (same order as setting.files): raw counts only, so the page can add up any set of matches
+        opp_rotation_stats[opp]['pf'] = [_pf_raw(compute_scout_rotation_stats([s_])) for s_ in sess_list]
+        opp_rotation_stats[opp]['pf_rz'] = [_pf_raw(compute_scout_rotation_stats([s_], rz_only=True), False) for s_ in sess_list]
 
     # ── Output ────────────────────────────────────────────────────────────────
     total_loyola_actions = sum(v['actions'] for v in season_stats.values())

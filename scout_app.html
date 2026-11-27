@@ -281,6 +281,10 @@
   .pl-chip { padding:4px 11px; border-radius:14px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:12px; cursor:pointer; }
   .pl-chip.on { background:var(--maroon); border-color:var(--maroon); color:#fff; }
   .pl-sep { width:1px; height:18px; background:var(--border); margin:0 4px; }
+  #sc-files-wrap { position:relative; }
+  #sc-files-wrap .pp-btn { margin-top:0; padding:7px 14px; font-size:14px; }
+  #sc-files-panel { width:340px; max-height:460px; }
+  #sc-files-panel .pp-row { padding-left:10px; }
   #pl-sess-wrap { position:relative; }
   #pl-sess-wrap .pp-btn { margin-top:0; padding:4px 10px; font-size:12px; }
   #pl-sess-panel { width:300px; max-height:420px; }
@@ -7185,7 +7189,7 @@ function buildScoutStarts(name) {
   const st = rs?.starts, setting = rs?.setting;
   if (!st || !st.sets?.length) return '<div class="empty">No set start data for this opponent.</div>';
   const season = document.getElementById('scout-season-filter')?.value || 'all';
-  const fileOk = fi => season === 'all' || setting?.files?.[fi]?.season === season;
+  const fileOk = fi => scFileOk(fi, setting?.files);
   const names = setting?.names || {};
   const nm = n => names[n] ? `#${n} ${names[n]}` : `#${n}`;
   // Position = best guess from what each player does (aggregate.py compute_scout_positions)
@@ -7315,6 +7319,120 @@ const scCombo = c => (c && VALID_COMBOS.has(c)) ? c : 'Other';
 // (x -> 100-x, y down the page) so their side is on top and Loyola's side is at the bottom, with
 // left / right still correct.
 let scoutView = 'team';
+// -- Scouting: which matches are included (checklist) -------------------------------------------------------
+// scFiles = null (every match in the Season filter) or a Set of file indexes (setting.files order) for the
+// opponent on screen. Every scouting section (team strip, rotations, setters, set starts, setting breakdown,
+// player scouting, setter locations, PDFs) uses scFileOk(); team / rotation / setter numbers are added up from
+// the per-file counts (opp_rotation_stats[opp].pf / pf_rz) whenever a filter is on.
+let scFiles = null, scFilesOpen = false, scFilesScroll = 0;
+function scSeason() { return document.getElementById('scout-season-filter')?.value || 'all'; }
+function scFileOk(fi, files) {
+  const f = files?.[fi], se = scSeason();
+  return (se === 'all' || f?.season === se) && (!scFiles || scFiles.has(fi));
+}
+function scFiltered() { return !!scFiles || scSeason() !== 'all'; }
+function scFileList(name) {          // files of this opponent in the Season filter: [{fi, ...file}]
+  const files = DATA.opp_rotation_stats?.[name]?.setting?.files || [], se = scSeason();
+  return files.map((f, fi) => Object.assign({ fi }, f)).filter(f => se === 'all' || f.season === se);
+}
+function scTeamShort(t) { return String(t || '?').replace(/\((?:wo)?men'?s\)|\b(?:wo)?men'?s(?: volleyball)?\b/gi, '').replace(/\s+/g, ' ').trim(); }
+function scFileLabel(f) {
+  const d = f.date ? (+f.date.slice(5, 7)) + '/' + (+f.date.slice(8, 10)) : '?';
+  return `${d} ${f.side === 'home' ? 'vs' : 'at'} ${scTeamShort(f.vs)}`;
+}
+function scFilesLabel(name) {
+  const L = scFileList(name), n = L.length;
+  if (!scFiles) return `All matches (${n})`;
+  const sel = L.filter(f => scFiles.has(f.fi));
+  if (!sel.length) return 'No matches selected';
+  if (sel.length === 1) return scFileLabel(sel[0]);
+  return `${sel.length} of ${n} matches`;
+}
+function _scFilesApply(set) {
+  const p = document.getElementById('sc-files-panel'); if (p) scFilesScroll = p.scrollTop;
+  const n = scFileList(selectedOpp).length;
+  scFiles = (set && set.size === n && [...set].every(fi => scFileList(selectedOpp).some(f => f.fi === fi))) ? null : set;
+  scFilesOpen = true;
+  if (selectedOpp) renderScoutDetail(selectedOpp);
+  const q = document.getElementById('sc-files-panel'); if (q) q.scrollTop = scFilesScroll;
+}
+function _scFilesCur() { return new Set(scFiles ? [...scFiles] : scFileList(selectedOpp).map(f => f.fi)); }
+function scFilesAll()  { _scFilesApply(null); }
+function scFilesNone() { _scFilesApply(new Set()); }
+function scFilesOne(fi, on) { const s = _scFilesCur(); on ? s.add(fi) : s.delete(fi); _scFilesApply(s); }
+function scFilesSeason(se, on) { const s = _scFilesCur(); scFileList(selectedOpp).filter(f => f.season === se).forEach(f => on ? s.add(f.fi) : s.delete(f.fi)); _scFilesApply(s); }
+function scFilesOnly(se) { _scFilesApply(new Set(scFileList(selectedOpp).filter(f => f.season === se).map(f => f.fi))); }
+function scFilesToggle(ev) {
+  ev?.stopPropagation();
+  scFilesOpen = !scFilesOpen;
+  const p = document.getElementById('sc-files-panel'); if (p) p.style.display = scFilesOpen ? 'block' : 'none';
+}
+document.addEventListener('click', e => {
+  const w = document.getElementById('sc-files-wrap'), p = document.getElementById('sc-files-panel');
+  if (scFilesOpen && p && w && !w.contains(e.target)) { scFilesOpen = false; p.style.display = 'none'; }
+});
+function scFilesPicker(name) {
+  const L = scFileList(name), on = f => !scFiles || scFiles.has(f.fi);
+  const seasons = [...new Set(L.map(f => f.season))];
+  const rows = ss => ss.map(f => `<label class="pp-row"><input type="checkbox" ${on(f) ? 'checked' : ''} onchange="scFilesOne(${f.fi}, this.checked)"> ${scFileLabel(f)}</label>`).join('');
+  const body = seasons.map(se => {
+    const ss = L.filter(f => f.season === se).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const allOn = ss.every(on), nOn = ss.filter(on).length;
+    return `<div class="pp-group"><label class="pp-ghead"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="scFilesSeason('${se}', this.checked)"> ${se || 'No season'} (${nOn}/${ss.length})</label>`
+      + (seasons.length > 1 ? `<button class="pp-only" onclick="scFilesOnly('${se}')">only</button>` : '') + `</div>` + rows(ss);
+  }).join('');
+  return `<div id="sc-files-wrap"><button id="sc-files-btn" class="pp-btn${scFiles ? ' pp-active' : ''}" onclick="scFilesToggle(event)" title="Choose which matches are included in every section below and in the PDFs">${scFilesLabel(name)}</button>`
+    + `<div id="sc-files-panel" class="pp-panel" style="display:${scFilesOpen ? 'block' : 'none'}"><div class="pp-top"><button onclick="scFilesAll()">All</button><button onclick="scFilesNone()">None</button></div>${body || '<div class="pp-empty">No matches in this season.</div>'}</div></div>`;
+}
+// Team strip / rotation cards / setters for the matches in view (precomputed totals when nothing is filtered)
+function scAgg(name) {
+  const rs = DATA.opp_rotation_stats?.[name] || {}, rz = scRZ();
+  const pf = rz ? rs.pf_rz : rs.pf;
+  if (!scFiltered() || !pf) return { team: (rz ? rs.rz?.team : rs.team) || null, rotations: (rz ? rs.rz?.rotations : rs.rotations) || {}, setters: rs.setters || {} };
+  const files = rs.setting?.files || [];
+  const r1 = x => Math.round(x * 10) / 10, r3 = x => Math.round(x * 1000) / 1000;
+  const T = { att: 0, k: 0, e: 0, bk: 0, so_rallies: 0, so_kills: 0, fbso_rallies: 0, fbso_kills: 0, rcv_att: 0, rcv_in_sys: 0 };
+  const TB = {}, R = {}, S = {};
+  const Z0 = () => ({ Left: 0, Quick: 0, Right: 0, Dball: 0, BIC: 0 });
+  for (let r = 1; r <= 6; r++) R[r] = { atk: { att: 0, k: 0, e: 0, bk: 0, by_zone: Object.assign(Z0(), { Dump: 0 }) },
+    rcv: { att: 0, in_sys: 0, fbso_rallies: 0, fbso_kills: 0, by: {} }, set: { att: 0, by_zone: Z0() } };
+  const add = (o, src) => { for (const [k, v] of Object.entries(src || {})) if (typeof v === 'number') o[k] = (o[k] || 0) + v; };
+  pf.forEach((f, fi) => {
+    if (!f || !scFileOk(fi, files)) return;
+    add(T, f.team);
+    for (const [g, b] of Object.entries(f.team.by || {})) add(TB[g] = TB[g] || {}, b);
+    for (const [rk, rv] of Object.entries(f.rotations || {})) {
+      const D = R[rk]; if (!D) continue;
+      add(D.atk, rv.atk); add(D.atk.by_zone, rv.atk.by_zone);
+      add(D.rcv, rv.rcv); for (const [g, b] of Object.entries(rv.rcv.by || {})) add(D.rcv.by[g] = D.rcv.by[g] || {}, b);
+      add(D.set, rv.set); add(D.set.by_zone, rv.set.by_zone);
+    }
+  });
+  (rs.pf || []).forEach((f, fi) => {
+    if (!f || !scFileOk(fi, files)) return;
+    for (const [p, sv] of Object.entries(f.setters || {})) {
+      const o = S[p] = S[p] || { name: sv.name, sets: 0, rot_count: {} };
+      o.sets += sv.sets; add(o.rot_count, sv.rot_count);
+    }
+  });
+  T.eff = T.att ? r3((T.k - T.e - T.bk) / T.att) : 0; T.k_pct = T.att ? r1(T.k / T.att * 100) : 0;
+  T.fbso_pct = T.fbso_rallies ? r1(T.fbso_kills / T.fbso_rallies * 100) : 0; T.so_pct = T.so_rallies ? r1(T.so_kills / T.so_rallies * 100) : 0;
+  T.in_sys_pct = T.rcv_att ? r1(T.rcv_in_sys / T.rcv_att * 100) : 0;
+  for (const b of Object.values(TB)) {
+    b.fbso_pct = b.fbso_rallies ? r1(b.fbso_kills / b.fbso_rallies * 100) : null; b.so_pct = b.so_rallies ? r1(b.so_kills / b.so_rallies * 100) : null;
+    b.in_sys_pct = b.rcv_att ? r1(b.rcv_in_sys / b.rcv_att * 100) : null;
+  }
+  T.by = TB;
+  for (const D of Object.values(R)) {
+    const a = D.atk, c = D.rcv;
+    a.eff = a.att ? r3((a.k - a.e - a.bk) / a.att) : 0; a.k_pct = a.att ? r1(a.k / a.att * 100) : 0;
+    c.in_sys_pct = c.att ? r1(c.in_sys / c.att * 100) : 0; c.fbso_pct = c.fbso_rallies ? r1(c.fbso_kills / c.fbso_rallies * 100) : 0;
+    for (const b of Object.values(c.by)) { b.in_sys_pct = b.att ? r1(b.in_sys / b.att * 100) : null; b.fbso_pct = b.att ? r1(b.fbso_kills / b.att * 100) : null; }
+  }
+  for (const o of Object.values(S)) o.arot = o.sets ? r1(Object.entries(o.rot_count).reduce((t, [k, v]) => t + (+k) * v, 0) / o.sets) : 0;
+  return { team: T.att || T.rcv_att ? T : null, rotations: R, setters: S };
+}
+
 let scoutPF = { opp: null, checked: [], rot: 'all', set: 'all', ph: 'all', st: 'all' };
 const SP_ATK_RES = ev => ev === '#' ? 'kill' : ev === '/' ? 'blocked' : ev === '=' ? 'error' : 'dug';
 const SP_SRV_RES = ev => ev === '#' ? 'ace' : ev === '=' ? 'error' : (ev === '+' || ev === '/') ? 'tough' : 'passed';
@@ -7340,7 +7458,7 @@ function spBase(name) {
   if (!P) return null;
   const season = document.getElementById('scout-season-filter')?.value || 'all';
   const files = setting?.files || [];
-  const ok = r => season === 'all' || files[r[0]]?.season === season;
+  const ok = r => scFileOk(r[0], files);
   const rz = scRZ();
   return { atk: P.atk.filter(r => ok(r) && (!rz || r[14])), srv: P.srv.filter(r => ok(r) && (!rz || r[9])), oth: P.oth.filter(r => ok(r) && (!rz || r[8])), names: setting?.names || {}, pos: rs?.starts?.pos || {}, files };
 }
@@ -7515,7 +7633,7 @@ function spSrvTable(st, small) {
 
 function spFilterLine() {
   const F = scoutPF;
-  return [...(scRZ() ? ['RED ZONE ONLY'] : []), F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot, F.set === 'all' ? 'all set types' : (F.set === 'Other' ? 'other set codes' : F.set + ' ' + (COMBO_NAMES[F.set] || '')),
+  return [...(scRZ() ? ['RED ZONE ONLY'] : []), ...(scFiles ? [scFilesLabel(selectedOpp)] : []), F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot, F.set === 'all' ? 'all set types' : (F.set === 'Other' ? 'other set codes' : F.set + ' ' + (COMBO_NAMES[F.set] || '')),
     F.ph === 'all' ? 'all attacks' : F.ph === 'F' ? 'first ball only' : 'transition only', F.st === 'all' ? 'all serves' : (SP_STYPE[F.st] || F.st) + ' serves'].join(', ');
 }
 
@@ -7707,7 +7825,7 @@ function smBase(name) {
   const st = DATA.opp_rotation_stats?.[name]?.setting;
   if (!st || !st.sets?.length) return null;
   const season = document.getElementById('scout-season-filter')?.value || 'all';
-  const rows = st.sets.filter(r => (season === 'all' || st.files[r[0]]?.season === season) && (!scRZ() || r[13]));
+  const rows = st.sets.filter(r => scFileOk(r[0], st.files) && (!scRZ() || r[13]));
   const cnt = {}; rows.forEach(r => { if (r[2]) cnt[r[2]] = (cnt[r[2]] || 0) + 1; });
   const setters = Object.entries(cnt).sort((a, b) => b[1] - a[1]);
   return { st, rows, setters, names: st.names || {} };
@@ -7770,7 +7888,7 @@ function smGroups(B) {
 
 function smFilterLine() {
   const F = scoutMap;
-  return `${scRZ() ? 'RED ZONE ONLY, ' : ''}${F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot}, ${(SC_PASS.find(([v]) => v === F.pass) || [, 'All sets'])[1]}`;
+  return `${scRZ() ? 'RED ZONE ONLY, ' : ''}${scFiles ? scFilesLabel(selectedOpp) + ', ' : ''}${F.rot === 'all' ? 'All rotations' : 'Rotation ' + F.rot}, ${(SC_PASS.find(([v]) => v === F.pass) || [, 'All sets'])[1]}`;
 }
 
 function buildScoutSetterMap(name) {
@@ -7824,7 +7942,7 @@ function setSM(k, v) { scoutMap[k] = v; smRefresh(); }
 //   vs float / total)
 // It prints what the Team report shows, with its current filters (Season, setting breakdown filters).
 function _stRotTables(name) {
-  const rots = (scRZ() ? DATA.opp_rotation_stats?.[name]?.rz?.rotations : DATA.opp_rotation_stats?.[name]?.rotations) || {};
+  const rots = scAgg(name).rotations || {};
   const cats = ['Left', 'Quick', 'Right', 'Dball', 'BIC'];
   const sw = c => `<span style="display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:3px;background:${SC_CAT_CLR[c]}"></span>`;
   const pct = (n, d) => d ? Math.round(n / d * 100) + '%' : '-';
@@ -7854,7 +7972,7 @@ function exportScoutTeamPDF() {
   const name = selectedOpp; if (!name) return;
   const os = DATA.opponent_stats?.[name], rs = DATA.opp_rotation_stats?.[name];
   if (!os || !rs) return;
-  const team = (scRZ() ? rs.rz?.team : rs.team) || {};
+  const team = scAgg(name).team || {};
   const season = document.getElementById('scout-season-filter')?.value || 'all';
   const by = team.by || {};
   const sv = (k) => `vs Spin ${by.spin?.[k] ?? '-'}%, vs Float ${by.float?.[k] ?? '-'}%`;
@@ -7885,7 +8003,7 @@ function exportScoutTeamPDF() {
   sections.docTitle = `${name} - Team scouting report`;
   const passLbl = (SC_PASS.find(p => p[0] === scoutF.pass) || [])[1] || 'All sets';
   const setterLbl = scoutF.setter === 'all' ? 'All setters' : `#${scoutF.setter} ${rs.setting?.names?.[scoutF.setter] || ''}`;
-  const filters = `<span><b>Opponent:</b> ${name}</span><span><b>Season:</b> ${season === 'all' ? 'All seasons' : season}</span>${scRZ() ? '<span><b>Situation:</b> RED ZONE ONLY (leader at 20+, 10+ in set 5, within 3)</span>' : ''}<span><b>Files:</b> ${os.files}</span>`
+  const filters = `<span><b>Opponent:</b> ${name}</span><span><b>Season:</b> ${season === 'all' ? 'All seasons' : season}</span>${scRZ() ? '<span><b>Situation:</b> RED ZONE ONLY (leader at 20+, 10+ in set 5, within 3)</span>' : ''}<span><b>Matches:</b> ${scFiltered() ? scFileList(name).filter(f => !scFiles || scFiles.has(f.fi)).map(scFileLabel).join(', ') : 'all ' + os.files}</span>`
     + `<span><b>Setting breakdown:</b> ${setterLbl}, ${scoutF.rot === 'all' ? 'all rotations' : 'Rotation ' + scoutF.rot}, ${passLbl}</span>`;
   const win = window.open('', '_blank', 'width=1200,height=900');
   if (!win) { alert('Please allow pop-ups for this page to export the PDF.'); return; }
@@ -7938,7 +8056,7 @@ function buildScoutSetting(name, asParts) {   // asParts = return the pieces (te
   if (!st || !st.sets?.length) return '<div class="empty">No set to attack data for this opponent.</div>';
   if (scoutF.opp !== name) scoutF = { opp: name, setter: 'all', rot: 'all', pass: 'all' };
   const season = document.getElementById('scout-season-filter')?.value || 'all';
-  const fileOk = fi => season === 'all' || st.files[fi]?.season === season;
+  const fileOk = fi => scFileOk(fi, st.files);
   const nm = n => st.names[n] ? `#${n} ${st.names[n]}` : `#${n}`;
   const base = st.sets.filter(r => fileOk(r[0]) && (!scRZ() || r[13]));
 
@@ -8152,6 +8270,7 @@ function scoutLayout() {
   document.getElementById('scout-detail').style.display   = open ? '' : 'none';
 }
 function selectOpp(name) {
+  if (name !== selectedOpp) { scFiles = null; scFilesOpen = false; }
   selectedOpp = name;
   scoutLayout();
   renderScoutDetail(name);
@@ -8172,10 +8291,12 @@ function renderScoutDetail(name) {
 
   const A = os.skills?.A, S = os.skills?.S, R = os.skills?.R;
   // Attack Combinations chart: red zone = rebuilt from the red-zone attack rows
-  const combosSrc = scRZ() ? (() => { const c = {}, sf = document.getElementById('scout-season-filter')?.value || 'all', fl = rotData?.setting?.files || []; (rotData?.players?.atk || []).forEach(r => { if (!r[14] || (sf !== 'all' && fl[r[0]]?.season !== sf)) return; const k = r[3] || '(none)'; const o = c[k] || (c[k] = { attempts: 0, evals: {} }); o.attempts++; o.evals[r[4]] = (o.evals[r[4]] || 0) + 1; }); return c; })() : A?.combos;
-  const team = scRZ() ? rotData?.rz?.team : rotData?.team;
-  const rots = (scRZ() ? rotData?.rz?.rotations : rotData?.rotations) || {};
-  const setters = rotData?.setters || {};
+  const combosSrc = (scRZ() || scFiltered()) ? (() => { const c = {}, sf = document.getElementById('scout-season-filter')?.value || 'all', fl = rotData?.setting?.files || []; (rotData?.players?.atk || []).forEach(r => { if ((scRZ() && !r[14]) || !scFileOk(r[0], fl)) return; const k = r[3] || '(none)'; const o = c[k] || (c[k] = { attempts: 0, evals: {} }); o.attempts++; o.evals[r[4]] = (o.evals[r[4]] || 0) + 1; }); return c; })() : A?.combos;
+  const AG = scAgg(name);
+  const team = AG.team;
+  const rots = AG.rotations || {};
+  const setters = AG.setters || {};
+  const scSel = scFileList(name).filter(f => !scFiles || scFiles.has(f.fi));
 
   // -- helper: bar chart for set distribution -------------------------------
   function distBar(byZone) {
@@ -8274,7 +8395,7 @@ function renderScoutDetail(name) {
           <button class="scout-back" onclick="scoutBack()">Back to all opponents</button>
           <div>
           <h2 style="font-size:28px;font-weight:800;margin-bottom:4px">${name}</h2>
-          <p style="color:var(--text-muted);font-size:15px">${os.files} scouted file${os.files!==1?'s':''}, ${fmt(os.actions)} total actions</p>
+          <p style="color:var(--text-muted);font-size:15px">${scFiltered() ? `${scSel.length} of ${os.files} scouted matches in view` : `${os.files} scouted file${os.files!==1?'s':''}, ${fmt(os.actions)} total actions`}</p>
           </div>
         </div>
       </div>
@@ -8284,6 +8405,7 @@ function renderScoutDetail(name) {
       <div style="display:flex;gap:0;border:1px solid var(--text);border-radius:4px;overflow:hidden;width:max-content">
         ${[['team', 'Team report'], ['players', 'Player scouting'], ['setmap', 'Setter locations']].map(([v, l]) => `<button onclick="setScoutView('${v}')" style="padding:8px 18px;font-size:14px;font-weight:600;border:none;cursor:pointer;background:${scoutView === v ? 'var(--maroon)' : 'transparent'};color:${scoutView === v ? '#fff' : 'var(--text)'}">${l}</button>`).join('')}
       </div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;color:var(--text-muted)">Matches</span>${scFilesPicker(name)}</div>
       ${scoutView === 'team' ? `<button class="scout-back" onclick="exportScoutTeamPDF()" title="Team report as a PDF, with the filters shown on the page">Export team report to PDF</button>` : ''}
       </div>
       ${scRZ() ? `<div style="margin:-6px 0 16px;padding:10px 14px;border-left:4px solid var(--maroon);background:var(--surface2);font-size:14px"><b style="color:var(--maroon);letter-spacing:.5px">RED ZONE ONLY</b> - ${SC_RZ_NOTE.replace('Red zone only: ', '')} Every table, chart and PDF below uses only those rallies (set starts excepted).</div>` : ''}
@@ -8331,7 +8453,7 @@ function renderScoutDetail(name) {
       <div class="section-title">Scouted Files</div>
       <table class="data-table" style="font-size:12px">
         <thead><tr><th>File</th><th>Date</th><th>Season</th><th class="num">Actions</th></tr></thead>
-        <tbody>${files.map(f => `<tr>
+        <tbody>${files.filter(f => scSel.some(x => x.file === f.file && x.date === f.date)).map(f => `<tr>
           <td style="color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.file}</td>
           <td>${f.date||'-'}</td>
           <td>${f.season||'-'}</td>
