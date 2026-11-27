@@ -143,6 +143,45 @@ def infer_session_type(filename, is_scout=False):
     return 'practice'
 
 
+# Standard file name given by the upload page / Downloads watcher: "LOY vs UCLA (3-23).dvw", a second match
+# between the same teams on the same day gets " (2)". The teams and the year are read from the file itself.
+STD_NAME = re.compile(r'^(.+?) vs (.+?) \((\d{1,2})-(\d{1,2})\)(?: \((\d+)\))?$', re.IGNORECASE)
+
+
+def std_name_month_day(filename):
+    """(month, day) from a standard file name, or None."""
+    m = STD_NAME.match(os.path.splitext(os.path.basename(filename))[0].strip())
+    if not m:
+        return None
+    mo, d = int(m.group(3)), int(m.group(4))
+    return (mo, d) if 1 <= mo <= 12 and 1 <= d <= 31 else None
+
+
+def date_with_month_day(raw, month_day, season_label=None):
+    """The date inside the file read so that it matches the month/day in the file name (picks between
+    DD/MM/YYYY and MM/DD/YYYY); if neither fits, the name's month/day with the file's (or season's) year."""
+    years = []
+    for fmt in ('%d/%m/%Y', '%m/%d/%Y'):
+        try:
+            dt = datetime.strptime((raw or '').strip(), fmt)
+        except ValueError:
+            continue
+        if (dt.month, dt.day) == month_day:
+            return dt.strftime('%Y-%m-%d')
+        years.append(dt.year)
+    if not years and season_label:
+        y = re.search(r'(\d{4})', season_label)
+        if y:
+            yr = int(y.group(1))
+            years.append(yr - 1 if 'spring' in season_label.lower() and month_day[0] >= 8 else yr)
+    for yr in years:
+        try:
+            return datetime(yr, month_day[0], month_day[1]).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+    return None
+
+
 def infer_opponent_from_filename(filename):
     """
     Extract opponent team abbreviation from scout/match filenames.
@@ -458,7 +497,8 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
         inferred_type = session_type
 
     # ── Opponent (for match/scout files) ────────────────────────────────────
-    opponent = infer_opponent_from_filename(filename) if inferred_type in ('match', 'scout') else None
+    std_md = std_name_month_day(filename)     # standard name: opponent comes from the teams in the file
+    opponent = infer_opponent_from_filename(filename) if inferred_type in ('match', 'scout') and not std_md else None
     # If filename gave no opponent but we have team names, derive from teams section
     # (Volleymetrics filenames don't follow the "vs" convention)
 
@@ -505,6 +545,9 @@ def parse_dvw(filepath, season=None, session_type=None, is_scout=False):
     # ISO date from filename overrides ambiguous section date
     if filename_iso_date:
         match_date = filename_iso_date
+    elif std_md:
+        raw_d = match_lines[0].split(';')[0] if match_lines else ''
+        match_date = date_with_month_day(raw_d, std_md, season_label) or match_date
     elif not match_date:
         match_date = infer_date_from_filename(filename, season_label)
 

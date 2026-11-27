@@ -202,6 +202,7 @@ async function reinspect(row) {
     const body = { id: row.id, folder: row.folder };
     if (!mapped && NEWF[row.folder]) body.newFolder = NEWF[row.folder];
     row.res = await post('/api/inspect', body);
+    if (row.res && row.res.name) row.name = row.res.name;
     row.error = row.res.error || null;
   } catch (e) { row.error = e.message; }
   row.busy = false; render();
@@ -260,7 +261,7 @@ function render() {
   $('filesSec').hidden = !ROWS.length;
   $('rows').innerHTML = ROWS.map(r => {
     const cls = r.error || (r.res && (r.res.warnings || []).length) ? 'warn' : (r.res && r.res.state === 'identical') || r.action === 'skip' ? 'skip' : '';
-    return `<tr class="${cls}"><td><div class="fname">${esc(r.name)}</div>${r.res && r.res.size ? `<div class="sub">${Math.max(1, Math.round(r.res.size / 1024))} KB</div>` : ''}</td>`
+    return `<tr class="${cls}"><td><div class="fname">${esc(r.name)}</div>${r.res && r.res.original ? `<div class="sub">downloaded as ${esc(r.res.original)}</div>` : ''}${r.res && r.res.size ? `<div class="sub">${Math.max(1, Math.round(r.res.size / 1024))} KB</div>` : ''}</td>`
       + `<td>${whatCell(r)}</td><td>${r.error && !r.id ? '' : folderSelect(r)}</td><td>${checkCell(r)}</td>`
       + `<td><button class="x" data-rm="${r.key}" title="Remove from the list">Remove</button></td></tr>`;
   }).join('');

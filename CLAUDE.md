@@ -88,6 +88,48 @@ open('dashboard.html','w').write(t.replace('__DASHBOARD_DATA__', data))
   the dataset (Loyola key = season + file, scout = opponent + date). Then `rebuild.py` runs (with `--no-push` if the
   box is unticked), log streamed to the page; per-file outcome read from the parse lines (`Parsing X ...`,
   `[skip] X`). Stale `.git/*.lock` files older than 10 s are removed before a push.
+- Downloads watcher (Nov 27, 2026): double-click `Watch Downloads.command` (runs `python3 watch_downloads.py`). Polls
+  ~/Downloads every 3 s for finished .dvw files (size unchanged for a full check; .crdownload/.download/.part
+  ignored), waits 8 s after the last new one, then handles the batch with upload.py's own code: `stage_file()` +
+  `inspect()` (folder suggestion, warnings), and `run_job()` (save + rebuild, NO push unless `--push`). Clean files
+  are filed (copied into the season folder, then the Downloads copy is removed once the filed copy's sha matches =
+  a move; nothing is left in Downloads). Duplicates go to `Volleyball DVW Files/_duplicates/<folder>/`: an exact copy
+  of a filed file (state 'identical') or the same match already on the dashboard under another name (`res['dup_of']`
+  / `res['dup_msg']`, set by `check()`, and no other warning). A different version of a same-named file, errors and
+  other warnings stay in Downloads and are listed in `watch_downloads.log` + a Mac notification. (Before Nov 27 the
+  watcher moved filed downloads into `Downloads/DVW filed/`; that folder only holds copies and can be deleted.) Only files downloaded after the first start are handled (`.watch_downloads.json` keeps `since`,
+  `seen`, `done`; `--since-days N` for older ones; `--once` for tests; `--no-rebuild`). upload.py's `run_job()` now
+  holds a shared lock file `.rebuild.lock` (stale after 30 min) so the page and the watcher never rebuild at the same
+  time. Hudl's Acceptable Use Policy forbids bots / automated access to VolleyMetrics, so downloading stays a manual
+  click; everything after the download is automatic.
+- Standard file names (Nov 27, 2026): new match / scouting files coming through the upload page or the watcher are
+  saved as "LOY vs UCLA (3-23).dvw" (`STANDARD_NAMES` in upload.py; "/" can't be in a file name, so month-day).
+  `apply_standard_name()` runs in `inspect()`: our team first; in a scouting file a team we've played (from the
+  dashboard's match sessions) first, else the home team; abbreviations from `team_abbr.json` ("ours": "LOY", teams =
+  full name -> code, loose match; VolleyMetrics download names "&date id HOME-AWAY(VM)" add new codes automatically
+  via `learn_abbr()`; otherwise initials / first letters). Same name already in the folder: same match (same teams +
+  set scores) keeps the name (identical / different version as before); a different match that day gets " (2)".
+  The staged file is re-read under the new name and the original name is kept if date / type / teams (and, for
+  scouting, the opponent label) would change. Practices and files without two different teams keep their names.
+  Saved renames are logged in `Volleyball DVW Files/_file_names.csv` (saved_as, folder, original_name, saved_on) so
+  the VolleyMetrics match id isn't lost. parse_dvw.py reads standard names like VM names: `STD_NAME` /
+  `std_name_month_day()` -> opponent from the teams in the file (not the name), date = month/day from the name +
+  year from the file (`date_with_month_day()`, no DD/MM vs MM/DD ambiguity). No existing file matches the pattern,
+  so existing sessions are unchanged; files already filed are never renamed. Same parser change is in the Volley App
+  engine.
+- Scouting groups (Nov 27, 2026, aggregate.py scout block): every scout file is listed under EACH team in it that
+  Loyola has played in a match (teams from Loyola's match files; loose key `_team_key()` drops university / college /
+  men's / volleyball, so "Lewis", "Lewis Mens Volleyball" and "Lewis University (Men's)" are one team), as a shallow
+  copy with `opponent` = the school name (`_label`: a "University / College" name if any, then the most common) and
+  `_opp_side` fixed to that team's side (`_opp_fixed`, skipped by `resolve_opp_sides()`). A file with no team Loyola
+  has played keeps the old label (file name / away team) and side detection. `scout_index` has one entry per
+  (file, team). Old labels like LW / UCSD / Pepp / MCK merged into school names; teams Loyola never played (Central
+  State, Park, Ottawa, NJIT, ...) no longer get their own entry. Harness picks the UC San Diego group (`SC_OPP`).
+- On hold (user will bring it back): once Loyola posts its spring 2027 schedule, list every match (date, time CT,
+  opponent, site) for the user to confirm; then gather every opponent's schedule the same way (confirm too); only
+  then build a daily email ("matches to download" = opponents who played the day before). As of Nov 27, 2026 only the
+  fall dates (Oct 24 at PFW, Nov 1 and Nov 14 at Lewis) and Jan 16, 2027 vs UCLA in Anaheim (7 PM PT, from UCLA's
+  schedule) were confirmed. Use only schedule pages, never VolleyMetrics / Hudl.
 - Duplicates removed Nov 23, 2026 (found by identical serve order = same match, even when coded twice):
   16 Loyola sessions + 8 scout sessions taken out of volleyball_data.json (pre-cleanup copy:
   `volleyball_data.backup.json`). Kept the VolleyMetrics "&date id TEAM-TEAM(VM)" version each time. Removed:

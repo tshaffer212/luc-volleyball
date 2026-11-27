@@ -54,7 +54,11 @@ DATASET_BACKUP = HERE / 'volleyball_data.backup.json'
 DASH_DATA = HERE / 'dashboard_data.json'
 REBUILD = HERE / 'rebuild.py'
 REPLACED_DIR = DVW_ROOT / '_replaced'
-REBUILD_LOCK = HERE / '.rebuild.lock'   # one save + rebuild at a time (upload page and Downloads watcher)
+DUP_DIR = DVW_ROOT / '_duplicates'          # duplicate downloads go to _duplicates/<season folder>/
+REBUILD_LOCK = HERE / '.rebuild.lock'
+ABBR_FILE = HERE / 'team_abbr.json'          # team abbreviations for standard file names
+NAMES_LOG = DVW_ROOT / '_file_names.csv'      # standard name -> original download name
+STANDARD_NAMES = True                         # name new match / scouting files like "LOY vs UCLA (3-23).dvw"   # one save + rebuild at a time (upload page and Downloads watcher)
 PORT0 = int(os.environ.get('LUC_UPLOAD_PORT') or 8765)
 MAX_BYTES = 50 * 1024 * 1024
 TOKEN = uuid.uuid4().hex
@@ -250,6 +254,153 @@ def suggest_folder(date, luc, rows):
     return None, {'folder': want, 'season': guess, 'type': 'scout' if scout else 'practice', 'scout': scout}
 
 
+# ---------------------------------------------------------------- standard file names
+VM_NAME = re.compile(r'^&\s*\d{4}-\d{2}-\d{2}\s+(\d+)\s+([A-Za-z0-9]+)-([A-Za-z0-9]+)\(VM\)', re.I)
+_ABBR = {'doc': None, 'mtime': None}
+_STOP = {'university', 'college', 'of', 'the', 'at', 'and', 'mens', 'men'}
+
+
+def load_abbr():
+    try:
+        mt = ABBR_FILE.stat().st_mtime
+    except FileNotFoundError:
+        return {'ours': 'LOY', 'teams': {}}
+    if _ABBR['mtime'] != mt:
+        try:
+            _ABBR['doc'] = json.loads(ABBR_FILE.read_text('utf-8'))
+        except Exception:
+            _ABBR['doc'] = {'ours': 'LOY', 'teams': {}}
+        _ABBR['mtime'] = mt
+    return _ABBR['doc']
+
+
+def learn_abbr(original, home, away):
+    """A VolleyMetrics download name carries both teams' codes (home-away): remember any team we don't know yet."""
+    m = VM_NAME.match(original or '')
+    if not m or not home or not away:
+        return
+    doc = load_abbr()
+    teams = doc.setdefault('teams', {})
+    known = {_norm_team(k) for k in teams}
+    added = False
+    for team, code in ((home, m.group(2)), (away, m.group(3))):
+        if not is_luc(team) and _norm_team(team) not in known:
+            teams[team.strip()] = code.upper()
+            added = True
+    if added:
+        tmp = ABBR_FILE.with_name(ABBR_FILE.name + '.tmp')
+        tmp.write_text(json.dumps(doc, indent=1) + '\n', 'utf-8')
+        os.replace(str(tmp), str(ABBR_FILE))
+
+
+def team_abbr(team):
+    doc = load_abbr()
+    if is_luc(team):
+        return doc.get('ours') or 'LOY'
+    key = _norm_team(team)
+    for k, v in (doc.get('teams') or {}).items():
+        if _norm_team(k) == key:
+            return v
+    for k, v in (doc.get('teams') or {}).items():
+        if same_team(k, team):
+            return v
+    # not in the table: initials ("Brigham Young University" -> BYU), or the first letters of a one-word name
+    words = [w for w in re.sub(r"\(.*?\)|[^A-Za-z ]", ' ', team or '').split() if w]
+    core = [w for w in words if w.lower() not in _STOP]
+    if len(core) == 1:
+        return core[0][:4].upper()
+    init = ''.join(w[0] for w in words if w.lower() not in ('of', 'the', 'at', 'and', 'mens', 'men')).upper()
+    return init[:5] or 'TEAM'
+
+
+def our_opponents():
+    """Teams we have played in matches (from the dashboard's sessions)."""
+    idx = load_index()
+    return [opp_of(s['home_team'], s['away_team']) for s in idx['loyola'] if s.get('type') == 'match']
+
+
+def standard_base(res):
+    """"LOY vs UCLA (3-23).dvw" for a file with two different teams and a date, else None. Our team goes first;
+    in a scouting file, a team we play goes first (else the home team)."""
+    h, a, d = res.get('home'), res.get('away'), res.get('date') or ''
+    if not h or not a or not re.match(r'^\d{4}-\d{2}-\d{2}$', d) or (is_luc(h) and is_luc(a)) or same_team(h, a):
+        return None
+    first, second = h, a
+    if is_luc(a):
+        first, second = a, h
+    elif not is_luc(h):
+        opps = our_opponents()
+        played = lambda t: any(same_team(t, o) for o in opps if o)
+        if played(a) and not played(h):
+            first, second = a, h
+    name = '%s vs %s (%d-%d).dvw' % (team_abbr(first), team_abbr(second), int(d[5:7]), int(d[8:10]))
+    return re.sub(r'[\x00-\x1f/:]', '-', name)
+
+
+def _same_match(p1, p2, cfg):
+    """Same match coded twice / re-exported (same teams and set scores) vs a second match the same day."""
+    try:
+        a, b = parse_quiet(p1, cfg), parse_quiet(p2, cfg)
+    except Exception:
+        return True
+    pair = same_pair(a.get('home_team'), a.get('away_team'), b.get('home_team'), b.get('away_team'))
+    sa = sorted(tuple(sorted(v)) for v in (a.get('set_scores') or {}).values())
+    sb = sorted(tuple(sorted(v)) for v in (b.get('set_scores') or {}).values())
+    return pair and (sa == sb or not sa or not sb)
+
+
+def apply_standard_name(sid, res, cfg):
+    """Rename the staged file to its standard name for folder cfg. A file with that name already in the folder:
+    the same match -> keep the name (flagged as a different version / identical as usual); a different match
+    between the same teams that day -> "... (2).dvw". The new name must read exactly like the original (same date,
+    type and opponent), otherwise the original name is kept."""
+    st = STAGED[sid]
+    if 'std_base' not in st:
+        st['std_base'] = standard_base(res) if STANDARD_NAMES else None
+        if st['std_base']:
+            learn_abbr(st['name'], res.get('home'), res.get('away'))
+            st['std_base'] = standard_base(res)            # again, with any codes just learned
+    base = st.get('std_base')
+    if not base:
+        return
+    folder = DVW_ROOT / cfg['folder']
+    stem = base[:-4]
+    name, n = base, 1
+    while (folder / name).exists() and sha1(folder / name) != st['sha'] and not _same_match(folder / name, st['path'], cfg):
+        n += 1
+        name = '%s (%d).dvw' % (stem, n)
+    if name == st['name']:
+        return
+    before = parse_quiet(st['path'], cfg)
+    new_path = st['path'].with_name(name)
+    os.replace(str(st['path']), str(new_path))
+    after = parse_quiet(new_path, cfg)
+    keys = ('date', 'type', 'home_team', 'away_team', 'action_count') + (('opponent',) if cfg.get('scout') else ())
+    # (scouting files are grouped by their opponent label, so that must not change; a Loyola match may go from a
+    #  label typed in the old file name, like "NKU(2)", to the team's real name)
+    if any(before.get(k) != after.get(k) for k in keys):
+        os.replace(str(new_path), str(st['path']))           # reads differently: keep the original name
+        st['std_base'] = None
+        res['notes'].append('Kept the original file name (the standard name would read differently).')
+        return
+    st.setdefault('original', st['name'])
+    st['path'], st['name'] = new_path, name
+    res['name'] = name
+    res['original'] = st['original']
+
+
+def log_name(saved, folder, original):
+    new = not NAMES_LOG.exists()
+    try:
+        with open(NAMES_LOG, 'a', encoding='utf-8') as f:
+            if new:
+                f.write('saved_as,folder,original_name,saved_on\n')
+            q = lambda x: '"%s"' % str(x).replace('"', '""')
+            f.write(','.join(q(x) for x in (saved, folder, original, datetime.datetime.now().strftime('%Y-%m-%d %H:%M'))) + '\n')
+    except OSError:
+        pass
+
+
 def inspect(sid, cfg=None, rows=None):
     """Read a staged file (as it would be read in folder cfg) and list anything worth a look."""
     st = STAGED[sid]
@@ -284,6 +435,7 @@ def inspect(sid, cfg=None, rows=None):
                    season_guess=season_from_date(s2.get('date')))
     res['folder'] = cfg['folder']
     res['season'] = cfg['season']
+    apply_standard_name(sid, res, cfg)
     check(res, cfg)
     return res
 
@@ -335,6 +487,7 @@ def check(res, cfg):
             if same:
                 W.append('Looks like the same match as "%s", which is already in scouting. It would be skipped as a '
                          'duplicate (same team and date).' % same[0]['file'])
+                res['dup_of'], res['dup_msg'] = same[0]['file'], W[-1]
         elif res.get('type') == 'match':
             opp = opp_of(h, a)
             same = [s for s in idx['loyola'] if s['type'] == 'match' and s['date'] == res['date'] and not itself(s)
@@ -342,6 +495,7 @@ def check(res, cfg):
             if same:
                 W.append('Looks like the same match as "%s" (season "%s"), which is already on the dashboard. Adding '
                          'this one would count the match twice.' % (same[0]['file'], same[0]['season']))
+                res['dup_of'], res['dup_msg'] = same[0]['file'], W[-1]
         else:
             same = [s for s in idx['loyola'] if s['type'] == 'practice' and s['date'] == res['date']
                     and s['season'] == cfg['season'] and not itself(s)]
@@ -484,7 +638,8 @@ def _run_job(files, new_folders, push):
                 res['files'].append({'name': (st or {}).get('name', '?'), 'folder': it.get('folder'), 'outcome': 'error',
                                      'detail': 'File or folder not found - drop the file again.'})
                 continue
-            entry = {'name': st['name'], 'folder': cfg['folder'], 'season': cfg['season'], 'scout': cfg['scout']}
+            entry = {'name': st['name'], 'folder': cfg['folder'], 'season': cfg['season'], 'scout': cfg['scout'],
+                     'original': st.get('original')}
             dest_dir = DVW_ROOT / cfg['folder']
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / st['name']
@@ -511,6 +666,9 @@ def _run_job(files, new_folders, push):
                 jlog('Saved %s to "%s"' % (st['name'], cfg['folder']))
                 if in_dash:
                     drop.append((cfg['scout'], cfg['season'], st['name']))
+            if st.get('original') and entry.get('saved') in ('saved', 'replaced'):
+                log_name(st['name'], cfg['folder'], st['original'])
+                jlog('  (downloaded as %s)' % st['original'])
             res['files'].append(entry)
 
         drop_sessions(drop)

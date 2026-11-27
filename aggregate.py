@@ -2030,6 +2030,8 @@ def main(raw_path, out_path):
             return {(p.get('name') or '').lower() for p in (sess.get(f'{side}_players') or {}).values() if p.get('name')}
         for opp, sess_list in opp_groups.items():
             for s_ in sess_list:
+                if s_.get('_opp_fixed'):
+                    continue                                # side already known (a team we play)
                 sc = {sd: 0 for sd in ('home', 'away')}
                 if len(sess_list) >= 2:
                     others = [roster(o, 'home') | roster(o, 'away') for o in sess_list if o is not s_]
@@ -2689,7 +2691,46 @@ def main(raw_path, out_path):
     opp_sessions   = defaultdict(list)
 
     print("Aggregating scout sessions ...", file=sys.stderr)
+    # Scouting groups: every scout file is listed under each team in it that we have played in a match, with that
+    # team as the scouted side (a Lewis vs Ohio State file shows under both). Files with no team we've played keep
+    # the old label (file name / away team) and side detection. Copies share the actions list with the original.
+    import re as _re
+    _TK_STOP = {'university', 'college', 'of', 'the', 'at', 'mens', 'men', 's', 'volleyball', 'womens', 'women'}
+
+    def _team_key(t):
+        return ' '.join(w for w in _re.findall(r"[a-z0-9&]+", (t or '').lower()) if w not in _TK_STOP)
+
+    def _clean_team(t):
+        t = _re.sub(r"\((?:wo)?men'?s\)|\b(?:wo)?men'?s(?: volleyball)?\b", ' ', t or '', flags=_re.I)
+        return _re.sub(r'\s+', ' ', t).strip(' ,')
+
+    _played = {}
+    for _s in sessions_raw:
+        if _s.get('type') == 'match':
+            for _t in (_s.get('home_team'), _s.get('away_team')):
+                if _t and not is_loyola_team(_t) and _team_key(_t):
+                    _played.setdefault(_team_key(_t), Counter())
+    _names = defaultdict(Counter)
+    for _s in list(sessions_raw) + list(scouts_raw):
+        for _t in (_s.get('home_team'), _s.get('away_team')):
+            if _t and _team_key(_t) in _played and not is_loyola_team(_t):
+                _names[_team_key(_t)][_clean_team(_t)] += 1
+    # label = the full school name when one is used anywhere ("Roosevelt University" over "Roosevelt"), then the
+    # most common spelling
+    _label = {k: max(c.items(), key=lambda kv: (bool(_re.search(r'\b(university|college|institute)\b', kv[0], _re.I)), kv[1], len(kv[0])))[0]
+              for k, c in _names.items() if c}
+    scout_items = []
     for s in scouts_raw:
+        hits = [(sd, _team_key(s.get(sd + '_team'))) for sd in ('home', 'away')
+                if s.get(sd + '_team') and not is_loyola_team(s.get(sd + '_team')) and _team_key(s.get(sd + '_team')) in _label]
+        if not hits:
+            scout_items.append(s)
+            continue
+        for sd, k in hits:
+            c = dict(s)
+            c.update(opponent=_label[k], _opp_side=sd, _opp_fixed=True)
+            scout_items.append(c)
+    for s in scout_items:
         opp = s.get('opponent') or 'Unknown'
         scout_index.append({
             'file':         s['file'],
@@ -2704,13 +2745,13 @@ def main(raw_path, out_path):
 
     resolve_opp_sides(opp_sessions)
     scout_fix_total = Counter()
-    for s_ in scouts_raw:
+    for s_ in scout_items:
         side_ = opp_side_for_session(s_)
         for _side, f_, t_, n_ in swap_right_side(s_, [side_], (lambda sd, a: a.get('rot_h')) if side_ == 'home' else None):
             scout_fix_total[(f_, t_)] += n_
     if scout_fix_total:
         print("  Scout combo fixes: " + ", ".join(f"{f}->{t} x{n}" for (f, t), n in scout_fix_total.items()), file=sys.stderr)
-    for s in scouts_raw:
+    for s in scout_items:
         opp = s.get('opponent') or 'Unknown'
         side = opp_side_for_session(s)
         os_ = opponent_stats[opp]
